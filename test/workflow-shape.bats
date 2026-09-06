@@ -115,24 +115,37 @@ lane_step_count() {
   done
 }
 
-# Named explicitly, not just covered by the generic per-step rule above: these
-# seven are the only lane inputs that are secrets *because of what they are*
-# rather than because they authenticate anything, so it is easy to "simplify"
-# them into env-json - which is printed to the log.
-@test "fastlane-lane declares the App Review contact and demo-account secrets" {
-  f="$REPO_ROOT/.github/workflows/fastlane-lane.yml"
-  declared=$(yq -r '.on.workflow_call.secrets | keys | .[]' "$f")
-  for s in APP_REVIEW_CONTACT_EMAIL APP_REVIEW_CONTACT_FIRST_NAME \
-    APP_REVIEW_CONTACT_LAST_NAME APP_REVIEW_CONTACT_PHONE \
-    APP_REVIEW_DEMO_USER APP_REVIEW_DEMO_PASSWORD APP_REVIEW_NOTES; do
-    grep -qxF "$s" <<<"$declared" || fail "fastlane-lane.yml does not declare the secret $s"
-  done
+# The App Review contact and demo-account names are a cross-repo contract: the
+# consumer's Fastfile reads them straight out of ENV, so a rename on either side
+# silently stops populating the App Store review form - deliver and pilot simply
+# receive fewer keys, with no error. The names are therefore not hard-coded here
+# but read out of a committed copy of the template's shared.rb, and the two sets
+# are compared in both directions.
+#
+# They are secrets rather than build-env/env-json values because a reviewer demo
+# login is a real credential and both of those inputs are printed to the log.
+TEMPLATE_LANES="$FIXTURES/consumer-min/fastlane/lanes/shared.rb"
+
+@test "fastlane-lane's App Review secrets are exactly the names the template's lanes read" {
+  [ -f "$TEMPLATE_LANES" ] || fail "no template lanes fixture at $TEMPLATE_LANES"
+  wanted="$(grep -oE "ENV\['APP_REVIEW_[A-Z0-9_]*'\]" "$TEMPLATE_LANES" |
+    sed "s/ENV\['//; s/'\]//" | sort -u)"
+  [ "$(grep -c . <<<"$wanted")" -ge 7 ] \
+    || fail "read only '$wanted' from $TEMPLATE_LANES - has the fixture changed shape?"
+  declared="$(yq -r '.on.workflow_call.secrets | keys | .[]' "$REPO_ROOT/.github/workflows/fastlane-lane.yml" |
+    grep '^APP_REVIEW_' | sort -u)"
+  while read -r name; do
+    [ -n "$name" ] || continue
+    grep -qxF "$name" <<<"$declared" \
+      || fail "the template's lanes read $name but fastlane-lane.yml does not declare it"
+  done <<<"$wanted"
+  while read -r name; do
+    [ -n "$name" ] || continue
+    grep -qxF "$name" <<<"$wanted" \
+      || fail "fastlane-lane.yml declares $name but no lane in the template reads it"
+  done <<<"$declared"
 }
 
-# Callers have no other way to get a non-secret value (OTA_ENABLED,
-# EXPO_UPDATES_URL, EXPO_PUBLIC_*, ANDROID_UPLOAD_CERT_SHA256, ...) into
-# prebuild, the lanes or the notes generator, so every workflow that runs one of
-# those must accept build-env.
 @test "every workflow that runs prebuild, a lane or the notes generator accepts build-env" {
   for w in expo-prepare expo-build-ios expo-build-android fastlane-lane; do
     f="$REPO_ROOT/.github/workflows/$w.yml"

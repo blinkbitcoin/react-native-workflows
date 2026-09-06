@@ -437,11 +437,20 @@ uploads, promotions, staged rollouts, halts.
 
 No outputs. Secrets (all optional): `consumer-token`, the full iOS + Android
 credential set listed under the two build workflows, and the App Review set —
-`APP_REVIEW_CONTACT_EMAIL`, `APP_REVIEW_CONTACT_FIRST_NAME`,
-`APP_REVIEW_CONTACT_LAST_NAME`, `APP_REVIEW_CONTACT_PHONE`,
+`APP_REVIEW_EMAIL`, `APP_REVIEW_FIRST_NAME`,
+`APP_REVIEW_LAST_NAME`, `APP_REVIEW_PHONE`,
 `APP_REVIEW_DEMO_USER`, `APP_REVIEW_DEMO_PASSWORD`, `APP_REVIEW_NOTES`. Those
 seven are **secrets, not `build-env` or `env-json` values**: a reviewer demo
 login is a real credential, and both of those inputs are printed to the log.
+
+Their names are a cross-repo contract — the consumer's `fastlane/lanes/shared.rb`
+reads them straight out of `ENV` — so a rename on either side silently stops
+populating the App Store review form: `deliver` and `pilot` just receive fewer
+keys, with no error. `test/workflow-shape.bats` therefore derives the expected
+names from a committed copy of the template's `shared.rb`
+(`test/fixtures/consumer-min/fastlane/lanes/shared.rb`) and compares the two sets
+in both directions, so a rename on either side fails here instead of in a store
+submission.
 
 ### `github-release.yml`
 
@@ -903,6 +912,7 @@ each one lives so a future edit doesn't quietly regress it.
 | A bare `[[ ]]` assertion in a bats body cannot fail the test under macOS's bash 3.2, so a security control can silently stop checking | `test/test_helper.bash` (`fail`/`contains`/`not_contains`) and the `\|\| fail` form in every release test file |
 | A promoted release must ship the bytes that were tested, not a rebuild (a rebuild has a different signature and fingerprint) | `github-release.yml`'s `promote` + `from-tag` downloads the pre-release's assets and re-uploads them; `delete-source` runs only after the upload |
 | `github.sha` on a `release: published` event is the default-branch tip, not the tag's commit | `scripts/release/target-sha.sh` resolves `TAG^{commit}` and feeds it to the green-run gate and `build-info.json`; exposed as `expo-prepare`'s `sha` output |
+| A renamed App Review env name breaks the review form silently - deliver and pilot accept a smaller hash without erroring | `test/workflow-shape.bats` derives the names from a committed copy of the template's `fastlane/lanes/shared.rb` and compares both directions |
 | A non-secret value passed as a workflow input is public, so a credential smuggled through one leaks quietly | `scripts/lib/build-env.sh` refuses keys ending in `_KEY`/`_TOKEN`/`_PASSWORD`/`_SECRET`/… and logs key names only; `test/build-env.bats` |
 | An unset repo variable is `''`, which a `type: number` input rejects outright | The guide's `fromJSON(vars.X \|\| '1000')` idiom for `build-number-offset` and `rollout` |
 | No runner image ships bundletool, and the `android build` lane needs it to derive the universal APK | `expo-build-android.yml` installs the pinned jar via `scripts/ci/bundletool-install.sh` before the lane runs (version kept equal to `scripts/lib/versions.sh` by `check-versions.sh`) |

@@ -126,16 +126,16 @@ on:
       # App Review contact and demo-account details. These are secrets, not
       # `env-json` configuration: env-json values are printed to the log, and a
       # reviewer demo login is a real credential.
-      APP_REVIEW_CONTACT_EMAIL:
+      APP_REVIEW_EMAIL:
         description: App Review contact email
         required: false
-      APP_REVIEW_CONTACT_FIRST_NAME:
+      APP_REVIEW_FIRST_NAME:
         description: App Review contact first name
         required: false
-      APP_REVIEW_CONTACT_LAST_NAME:
+      APP_REVIEW_LAST_NAME:
         description: App Review contact last name
         required: false
-      APP_REVIEW_CONTACT_PHONE:
+      APP_REVIEW_PHONE:
         description: App Review contact phone number
         required: false
       APP_REVIEW_DEMO_USER:
@@ -228,10 +228,10 @@ jobs:
           ANDROID_UPLOAD_KEY_ALIAS: ${{ secrets.ANDROID_UPLOAD_KEY_ALIAS }}
           ANDROID_UPLOAD_KEY_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEY_PASSWORD }}
           PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
-          APP_REVIEW_CONTACT_EMAIL: ${{ secrets.APP_REVIEW_CONTACT_EMAIL }}
-          APP_REVIEW_CONTACT_FIRST_NAME: ${{ secrets.APP_REVIEW_CONTACT_FIRST_NAME }}
-          APP_REVIEW_CONTACT_LAST_NAME: ${{ secrets.APP_REVIEW_CONTACT_LAST_NAME }}
-          APP_REVIEW_CONTACT_PHONE: ${{ secrets.APP_REVIEW_CONTACT_PHONE }}
+          APP_REVIEW_EMAIL: ${{ secrets.APP_REVIEW_EMAIL }}
+          APP_REVIEW_FIRST_NAME: ${{ secrets.APP_REVIEW_FIRST_NAME }}
+          APP_REVIEW_LAST_NAME: ${{ secrets.APP_REVIEW_LAST_NAME }}
+          APP_REVIEW_PHONE: ${{ secrets.APP_REVIEW_PHONE }}
           APP_REVIEW_DEMO_USER: ${{ secrets.APP_REVIEW_DEMO_USER }}
           APP_REVIEW_DEMO_PASSWORD: ${{ secrets.APP_REVIEW_DEMO_PASSWORD }}
           APP_REVIEW_NOTES: ${{ secrets.APP_REVIEW_NOTES }}
