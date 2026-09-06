@@ -378,3 +378,27 @@ dirs=$(cd "$root" && for d in plugins modules patches; do [ -d "$d" ] && find "$
 - Spec coverage (Part A + Phase 2): tree (T1–T9), self-checkout mechanism (T5/T6), common inputs (T6–T8), checks/unit (T6), e2e with all esign lessons (T4/T7), web (T8), pr-closed/pr-title (T8), self-ci/smoke/release (T1/T9), cache keys (T5/T7 docs), consumer ci.yml (T10), gotchas table (docs T9). Release workflows (`expo-prepare`, `expo-build-*`, `fastlane-lane`, `github-release`, `expo-ota-publish`) are Phase 3.
 - Interface consistency: `RNW` env exported by `setup` and used by every `run:`; `native-key` outputs used by `e2e.yml`; `RNW_*` env contract shared by scripts and documented in the consumer guide; `docs-only` output name used by the template `ci.yml`.
 - Judgement calls the implementer may adjust against real tools: `expo config --json` key names for the Xcode scheme; `simctl recordVideo` flag names on the installed Xcode; `yq` expression syntax for pnpm-lock importers; actionlint's handling of `${{ job.workflow_sha }}` (supported since 1.7.x).
+
+## Rulings recorded during execution (2026-09-06)
+
+- No worktree: the repo was a fresh sole checkout, branch `phase-2-workflows`, merged fast-forward to `main` at 95ca7ea (tag `phase-2-complete`).
+- Android API level 34 (esign-proven AOSP default image) instead of the spec's tentative 35.
+- `run-script.sh` falls back to `pnpm exec <name>` when the consumer has no package script but a bin exists (the template cannot name a script `knip` because expo-doctor rejects bin-named scripts).
+- `changed-class.sh` classifies with three-dot `BASE...HEAD` (merge-base) and falls back to two-dot on shallow clones.
+- `consumer_root` keeps `pwd -P`; `e2e-env.sh` publishes `RNW_OUT`/`RNW_RUN_START` once via a file-based `gh_env_once` guard.
+- Self-checkout uses `job.workflow_repository`/`job.workflow_sha` (caller-scoped `github.workflow_sha` is wrong); actionlint ignores in `.github/actionlint.yaml`.
+- release-please runs in manifest mode only (`config-file` + `manifest-file`; inline `release-type` makes the action ignore both files).
+- Versioning starts at 0.1.0 with the moving `v0`/`v0.1` tags; no `v1` until 1.0.0; consumers pin `@v0`.
+- `docs-globs` is additive (`DOCS_GLOBS_EXTRA`); the `DOCS_GLOBS` env var keeps replacement semantics as an escape hatch.
+- `native-extra-globs` hashes matched file contents, non-recursively (bash 3.2 on macOS runners).
+- `web.yml` export args: `${{ github.event_name != 'release' && '--dev' || '' }}` (the `&& '' ||` form always yields the right-hand side).
+- Consumer-contract bats run against the committed fixture `test/fixtures/consumer-min/`; `RNW_CONSUMER_ROOT` points them at a live checkout.
+
+### Deferred minors (carry to Phase 4 polish)
+
+- `assert_clean_paths` is silently clean for a never-existing path.
+- Android local runner sets both `10.0.2.2` and `adb reverse` (redundant, harmless).
+- build-ios cache-hit path could skip `setup` by deriving the scheme from the built `.app`; the `xcode` input is not applied to the iOS device job.
+- Consumer-guide `Default` columns are not machine-verified against the YAML (only input presence is).
+- The consumer-guide script table can drift from the template; only `self-smoke.yml` catches it after push.
+- `maestro-install.sh` uses the official installer; the network path is unverified until CI runs.
