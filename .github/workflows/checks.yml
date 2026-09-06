@@ -113,24 +113,11 @@ jobs:
       # No setup here: changed-class.sh is pure git and doesn't need node/pnpm,
       # so this job skips it and reaches the script via the plain checkout path
       # (there's no $RNW yet -- that's exported by setup, which never runs).
-      # github.workflow_ref/workflow_sha (not the job context -- actionlint
-      # 1.7.12 has no job.workflow_repository/job.workflow_sha) identify this
-      # reusable workflow's own repo/commit even though every other `github.*`
-      # field in this job refers to the caller. workflow_ref is
-      # "owner/repo/.github/workflows/file.yml@ref"; this step is the one
-      # unavoidable exception to "every run: uses $RNW" -- .rnw isn't checked
-      # out yet, so there is nothing to call into.
-      - name: Resolve react-native-workflows checkout ref
-        id: rnw-ref
-        env:
-          WORKFLOW_REF: ${{ github.workflow_ref }}
-          WORKFLOW_SHA: ${{ github.workflow_sha }}
-        run: bash -c 'echo "repository=${WORKFLOW_REF%%/.github/workflows/*}" >> "$GITHUB_OUTPUT"; echo "sha=$WORKFLOW_SHA" >> "$GITHUB_OUTPUT"'
       - name: Checkout react-native-workflows
         uses: actions/checkout@v7
         with:
-          repository: ${{ steps.rnw-ref.outputs.repository }}
-          ref: ${{ steps.rnw-ref.outputs.sha }}
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
           path: .rnw
           persist-credentials: false
       - name: Classify changed files
@@ -149,24 +136,11 @@ jobs:
         with:
           repository: ${{ inputs.repository || github.repository }}
           ref: ${{ inputs.ref }}
-      # github.workflow_ref/workflow_sha (not the job context -- actionlint
-      # 1.7.12 has no job.workflow_repository/job.workflow_sha) identify this
-      # reusable workflow's own repo/commit even though every other `github.*`
-      # field in this job refers to the caller. workflow_ref is
-      # "owner/repo/.github/workflows/file.yml@ref"; this step is the one
-      # unavoidable exception to "every run: uses $RNW" -- .rnw isn't checked
-      # out yet, so there is nothing to call into.
-      - name: Resolve react-native-workflows checkout ref
-        id: rnw-ref
-        env:
-          WORKFLOW_REF: ${{ github.workflow_ref }}
-          WORKFLOW_SHA: ${{ github.workflow_sha }}
-        run: bash -c 'echo "repository=${WORKFLOW_REF%%/.github/workflows/*}" >> "$GITHUB_OUTPUT"; echo "sha=$WORKFLOW_SHA" >> "$GITHUB_OUTPUT"'
       - name: Checkout react-native-workflows
         uses: actions/checkout@v7
         with:
-          repository: ${{ steps.rnw-ref.outputs.repository }}
-          ref: ${{ steps.rnw-ref.outputs.sha }}
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
           path: .rnw
           persist-credentials: false
       - name: Setup
@@ -231,24 +205,11 @@ jobs:
           # fetch-depth: 0 so PR_COMMITS_RANGE below (base sha..head sha) can
           # resolve both endpoints when commitlint-commits is enabled.
           fetch-depth: 0
-      # github.workflow_ref/workflow_sha (not the job context -- actionlint
-      # 1.7.12 has no job.workflow_repository/job.workflow_sha) identify this
-      # reusable workflow's own repo/commit even though every other `github.*`
-      # field in this job refers to the caller. workflow_ref is
-      # "owner/repo/.github/workflows/file.yml@ref"; this step is the one
-      # unavoidable exception to "every run: uses $RNW" -- .rnw isn't checked
-      # out yet, so there is nothing to call into.
-      - name: Resolve react-native-workflows checkout ref
-        id: rnw-ref
-        env:
-          WORKFLOW_REF: ${{ github.workflow_ref }}
-          WORKFLOW_SHA: ${{ github.workflow_sha }}
-        run: bash -c 'echo "repository=${WORKFLOW_REF%%/.github/workflows/*}" >> "$GITHUB_OUTPUT"; echo "sha=$WORKFLOW_SHA" >> "$GITHUB_OUTPUT"'
       - name: Checkout react-native-workflows
         uses: actions/checkout@v7
         with:
-          repository: ${{ steps.rnw-ref.outputs.repository }}
-          ref: ${{ steps.rnw-ref.outputs.sha }}
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
           path: .rnw
           persist-credentials: false
       - name: Setup

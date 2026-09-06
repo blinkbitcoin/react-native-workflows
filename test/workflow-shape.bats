@@ -63,3 +63,18 @@ setup() {
     done
   done
 }
+
+@test "the .rnw checkout uses job.workflow_repository and job.workflow_sha (not github.* or any other form)" {
+  for w in "${WORKFLOWS[@]}"; do
+    job_names=$(yq -r '.jobs | keys | .[]' "$w")
+    for j in $job_names; do
+      rnw_step_count=$(yq -r "[.jobs.\"$j\".steps[]? | select(.uses? == \"actions/checkout@v7\") | select(.with.path? == \".rnw\")] | length" "$w")
+      if [ "$rnw_step_count" -gt 0 ]; then
+        repo=$(yq -r "[.jobs.\"$j\".steps[]? | select(.uses? == \"actions/checkout@v7\") | select(.with.path? == \".rnw\")][0].with.repository" "$w")
+        ref=$(yq -r "[.jobs.\"$j\".steps[]? | select(.uses? == \"actions/checkout@v7\") | select(.with.path? == \".rnw\")][0].with.ref" "$w")
+        [ "$repo" = '${{ job.workflow_repository }}' ]
+        [ "$ref" = '${{ job.workflow_sha }}' ]
+      fi
+    done
+  done
+}

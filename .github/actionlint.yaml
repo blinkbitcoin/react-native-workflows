@@ -1,0 +1,17 @@
+self-hosted-runner:
+  labels: []
+
+config-variables: null
+
+# actionlint 1.7.12 predates the job.workflow_repository / job.workflow_sha
+# context fields (GitHub announced 2026-04-23; see
+# https://docs.github.com/en/actions/learn-github-actions/contexts#job-context).
+# Its bundled job-context schema still only has check_run_id/container/
+# services/status, so it flags both properties as undefined even though they
+# are real, documented fields for jobs defined in a reusable workflow. Ignore
+# exactly these two messages rather than disabling type checking broadly.
+paths:
+  .github/workflows/**/*.yml:
+    ignore:
+      - 'property "workflow_repository" is not defined in object type'
+      - 'property "workflow_sha" is not defined in object type'
