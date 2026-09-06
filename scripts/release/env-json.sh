@@ -10,6 +10,9 @@
 set -euo pipefail
 source "$(dirname "$0")/../lib/common.sh"
 
+env_file="${RUNNER_TEMP:-/tmp}/rnw-env-json.env"
+trap 'rm -f "$env_file"' EXIT
+
 json="${RNW_ENV_JSON:-}"
 if [ -z "$json" ] || [ "$json" = '{}' ]; then
   log "RNW_ENV_JSON is empty - nothing to publish"
@@ -42,10 +45,10 @@ for (const [k, v] of Object.entries(obj)) {
   }
   process.stdout.write(`${k}=${v === null ? "" : String(v)}\n`);
 }
-' > "${RUNNER_TEMP:-/tmp}/rnw-env-json.env"
+' > "$env_file"
 
 while IFS= read -r line; do
   [ -n "$line" ] || continue
   log "env-json: ${line%%=*}"
   if [ -n "${GITHUB_ENV:-}" ]; then printf '%s\n' "$line" >> "$GITHUB_ENV"; fi
-done < "${RUNNER_TEMP:-/tmp}/rnw-env-json.env"
+done < "$env_file"

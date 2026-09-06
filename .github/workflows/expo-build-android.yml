@@ -31,21 +31,29 @@ on:
         type: string
         default: ''
       version:
-        description: App version to stamp into the build (from expo-prepare's `version` output)
+        description: App version to stamp into the build (wire it to expo-prepare's `version` output)
         type: string
-        default: ''
+        required: true
       build-number:
-        description: Build number to stamp into the build (from expo-prepare's `build-number` output)
+        description: Build number to stamp into the build (wire it to expo-prepare's `build-number` output)
         type: string
-        default: ''
+        required: true
       stage:
         description: Release stage the lanes build for (internal/beta/production)
         type: string
         default: 'internal'
       android-package:
-        description: Application id passed to the lanes as ANDROID_PACKAGE (empty lets the Fastfile resolve it from the Expo config)
+        description: Application id passed to the lanes as ANDROID_PACKAGE
         type: string
-        default: ''
+        required: true
+      ios-bundle-id:
+        description: Bundle identifier passed to the lanes as IOS_BUNDLE_ID. Required even on the Android build - the consumer's Fastfile asserts all five contract variables in `before_all`, for every lane on both platforms
+        type: string
+        required: true
+      ios-scheme:
+        description: Xcode scheme passed to the lanes as IOS_SCHEME. Required for the same reason as `ios-bundle-id`
+        type: string
+        required: true
       verify:
         description: Run the `android verify` lane after `android build`
         type: boolean
@@ -66,6 +74,18 @@ on:
         description: Artifact name for the R8/ProGuard mapping file
         type: string
         default: 'android-mapping'
+      mapping-path:
+        description: Consumer-relative glob for the R8/ProGuard mapping file; override it when the consumer uses a non-default variant output directory, or its Play crash reports stay unreadable
+        type: string
+        default: 'android/app/build/outputs/mapping/**/mapping.txt'
+      bundletool-version:
+        description: bundletool release the `android build` lane derives the universal APK with (kept equal to scripts/lib/versions.sh BUNDLETOOL_VERSION; enforced by scripts/self/check-versions.sh)
+        type: string
+        default: '1.17.2'
+      bundletool-sha256:
+        description: Expected sha256 of the bundletool jar; empty skips verification (Google publishes no checksum file, so this is opt-in)
+        type: string
+        default: ''
     secrets:
       consumer-token:
         description: PAT with read access to a private consumer repository; falls back to the caller's github.token (works for a public consumer)
@@ -98,6 +118,11 @@ jobs:
       APP_VERSION: ${{ inputs.version }}
       APP_BUILD_NUMBER: ${{ inputs.build-number }}
       ANDROID_PACKAGE: ${{ inputs.android-package }}
+      # The iOS ids on the Android build are not a copy/paste slip: the
+      # consumer's Fastfile runs require_env! over all five variables in
+      # before_all, for every lane on both platforms, and rejects empty ones.
+      IOS_BUNDLE_ID: ${{ inputs.ios-bundle-id }}
+      IOS_SCHEME: ${{ inputs.ios-scheme }}
     steps:
       - name: Checkout consumer
         uses: actions/checkout@v7
@@ -133,6 +158,15 @@ jobs:
         run: bash "$RNW/scripts/release/decode-secrets.sh"
       - name: Prebuild (android)
         run: bash "$RNW/scripts/native/prebuild.sh" android
+      # Before the lane, not inside it: the `android build` lane needs
+      # bundletool to derive the universal APK from the .aab, and no runner
+      # image ships it. Failing here costs seconds; failing inside the lane
+      # costs the whole Gradle build first.
+      - name: Install bundletool
+        env:
+          BUNDLETOOL_VERSION: ${{ inputs.bundletool-version }}
+          BUNDLETOOL_SHA256: ${{ inputs.bundletool-sha256 }}
+        run: bash "$RNW/scripts/ci/bundletool-install.sh"
       - name: Download release-meta
         uses: actions/download-artifact@v8
         with:
@@ -142,6 +176,11 @@ jobs:
         env:
           BUILD_INFO_FILE: ${{ env.RNW_RELEASE_META_DIR }}/build-info.json
           RELEASE_NOTES_STORE_FILE: ${{ env.RNW_RELEASE_META_DIR }}/notes-store.txt
+          STORE_NOTES_JSON: ${{ env.RNW_RELEASE_META_DIR }}/store-notes.json
+          # Passed alongside the decoded file (ANDROID_UPLOAD_KEYSTORE_PATH):
+          # a lane may read either form, and a lane that reads the base64 with
+          # ENV.fetch would raise on a missing key.
+          ANDROID_UPLOAD_KEYSTORE_BASE64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}
           ANDROID_UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_PASSWORD }}
           ANDROID_UPLOAD_KEY_ALIAS: ${{ secrets.ANDROID_UPLOAD_KEY_ALIAS }}
           ANDROID_UPLOAD_KEY_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEY_PASSWORD }}
@@ -151,6 +190,13 @@ jobs:
         if: ${{ inputs.verify }}
         env:
           BUILD_INFO_FILE: ${{ env.RNW_RELEASE_META_DIR }}/build-info.json
+          RELEASE_NOTES_STORE_FILE: ${{ env.RNW_RELEASE_META_DIR }}/notes-store.txt
+          STORE_NOTES_JSON: ${{ env.RNW_RELEASE_META_DIR }}/store-notes.json
+          ANDROID_UPLOAD_KEYSTORE_BASE64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}
+          ANDROID_UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_PASSWORD }}
+          ANDROID_UPLOAD_KEY_ALIAS: ${{ secrets.ANDROID_UPLOAD_KEY_ALIAS }}
+          ANDROID_UPLOAD_KEY_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEY_PASSWORD }}
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
         run: bash "$RNW/scripts/release/fastlane.sh" android verify
       - name: Upload android-aab
         uses: actions/upload-artifact@v7
@@ -181,7 +227,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: ${{ inputs.mapping-artifact }}
-          path: ${{ inputs.working-directory }}/android/app/build/outputs/mapping/**/mapping.txt
+          path: ${{ inputs.working-directory }}/${{ inputs.mapping-path }}
           retention-days: 30
           overwrite: true
           if-no-files-found: warn

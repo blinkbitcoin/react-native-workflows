@@ -26,7 +26,7 @@ dest="$RNW_RELEASE_META_DIR/build-info.json"
 BUILD_INFO_DEST="$dest" \
   BUILD_INFO_ROOT="$root" \
   BUILD_INFO_SHA="${GITHUB_SHA:-$(git -C "$root" rev-parse HEAD 2>/dev/null || echo unknown)}" \
-  BUILD_INFO_STAGE="${RNW_STAGE:-internal}" \
+  BUILD_INFO_STAGE="${RNW_STAGE:-development}" \
   node --input-type=module -e '
 import { writeFileSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -39,7 +39,14 @@ try {
   // A consumer without a readable package.json still gets a build-info.json;
   // the two version fields are simply null rather than failing the release.
 }
-const dep = (name) => pkg.dependencies?.[name] ?? pkg.devDependencies?.[name] ?? null;
+// The range operator is stripped so this file stays byte-comparable with the
+// one the template writes: "^54.0.0" and "54.0.0" describe the same installed
+// SDK, and a spurious diff between two producers of the same schema is worse
+// than the lost range information.
+const dep = (name) => {
+  const raw = pkg.dependencies?.[name] ?? pkg.devDependencies?.[name] ?? null;
+  return raw === null ? null : String(raw).replace(/^[\^~>=< ]+/, "");
+};
 
 const info = {
   sha: process.env.BUILD_INFO_SHA,

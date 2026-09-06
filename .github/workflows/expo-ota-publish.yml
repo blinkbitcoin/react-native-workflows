@@ -46,10 +46,10 @@ on:
         description: Exact eoas version to publish with; never leave this empty in a real caller (an unpinned CLI can change the update format between runs)
         type: string
         default: ''
-      channel-build-info-artifact:
-        description: Artifact carrying the build-info.json of the store build currently installed on this channel; its fingerprints gate the publish
+      baseline-tag:
+        description: Release tag whose `build-info.json` asset is the fingerprint baseline for this channel (the store build currently installed on it). Required whenever `ota-enabled` is true - a same-run artifact cannot serve, because it would compare the commit against itself
         type: string
-        default: 'release-meta'
+        default: ''
       manifest-url:
         description: Manifest URL fetched after publishing as a smoke check (empty skips the check)
         type: string
@@ -99,11 +99,16 @@ jobs:
         uses: ./.rnw/.github/actions/setup
         with:
           working-directory: ${{ inputs.working-directory }}
-      - name: Download channel build-info
-        uses: actions/download-artifact@v8
-        with:
-          name: ${{ inputs.channel-build-info-artifact }}
-          path: ${{ env.RNW_ASSETS_DIR }}
+      # The baseline comes from the channel's release assets, never from an
+      # artifact of this run: download-artifact only sees the current run, so a
+      # same-run artifact would compare the commit against itself and the gate
+      # would pass unconditionally.
+      - name: Fetch fingerprint baseline
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ inputs.repository || github.repository }}
+          BASELINE_TAG: ${{ inputs.baseline-tag }}
+        run: bash "$RNW/scripts/ota/baseline.sh" "$BASELINE_TAG"
       # Before the export, not after: computing a fingerprint is cheap and an
       # update that fails the gate must never reach the publish step.
       - name: Fingerprint gate

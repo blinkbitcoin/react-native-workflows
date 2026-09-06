@@ -16,8 +16,13 @@
 #   1. a `vX.Y.Z` tag pointing at HEAD (the tag build itself)
 #   2. a version inside $RELEASE_PR_TITLE (the release-please PR being built)
 #   3. a version inside the title of the open `autorelease: pending` PR (via gh)
-#   4. the newest `v*` tag with its patch component bumped by one
-#   5. $RNW_DEFAULT_VERSION (0.1.0) when the repo has no version tag at all
+#   4. the newest stable `vX.Y.Z` tag with its patch component bumped by one
+#   5. 0.0.1 when the repo has no stable version tag at all (0.0.0, bumped)
+#
+# Prerelease tags (`v1.2.3-rc.1`) are ignored *entirely*, at every step: they
+# never win at HEAD and never seed the patch bump. A repository that has only
+# ever cut release candidates therefore starts at 0.0.1 - which is what the
+# template's copy does, and keeping the two identical is the whole point.
 #
 # Build number: first-parent commit count + $BUILD_NUMBER_OFFSET (default 1000).
 # First-parent on purpose: a merge of a long-lived branch must not jump the
@@ -52,7 +57,10 @@ if [ -z "$version" ] && [ -n "${RELEASE_PR_TITLE:-}" ]; then
   [ -z "$version" ] || origin="RELEASE_PR_TITLE"
 fi
 
-if [ -z "$version" ] && command -v gh >/dev/null 2>&1; then
+# The GH_TOKEN gate matches the template's copy: without a token `gh pr list`
+# fails anyway, and on a self-hosted runner an unauthenticated call can block on
+# an interactive auth prompt instead of failing fast.
+if [ -z "$version" ] && [ -n "${GH_TOKEN:-}" ] && command -v gh >/dev/null 2>&1; then
   title="$(gh pr list --state open --label 'autorelease: pending' --json title --jq '.[0].title' 2>/dev/null || true)"
   version="$(extract_version "$title")"
   [ -z "$version" ] || origin="open 'autorelease: pending' PR title"
@@ -61,14 +69,21 @@ fi
 if [ -z "$version" ]; then
   last="$(git tag --list 'v*' --sort=-v:refname 2>/dev/null | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1 || true)"
   if [ -n "$last" ]; then
-    IFS=. read -r major minor patch <<< "${last#v}"
-    version="$major.$minor.$((patch + 1))"
-    origin="patch bump of the newest tag ($last)"
+    base="${last#v}"
+    origin="patch bump of the newest stable tag ($last)"
   else
-    version="${RNW_DEFAULT_VERSION:-0.1.0}"
-    origin="default (no v* tag in this repository)"
+    # 0.0.0 rather than a literal default, so the "no tags yet" case goes
+    # through the same bump and lands on 0.0.1.
+    base="0.0.0"
+    origin="patch bump of 0.0.0 (no stable v* tag in this repository)"
   fi
+  IFS=. read -r major minor patch <<< "$base"
+  version="$major.$minor.$((patch + 1))"
 fi
+
+# Belt and braces: every branch above assigns, so an empty version here means
+# one of them silently produced nothing rather than that no source matched.
+[ -n "$version" ] || die "could not resolve a version (no tag, no release PR title, no v* tag)"
 
 count="$(git rev-list --count --first-parent HEAD)"
 offset="${BUILD_NUMBER_OFFSET:-1000}"

@@ -23,6 +23,13 @@ mode="${1:?usage: release-assets.sh create-prerelease|promote|latest|append}"
 tag="${TAG:?release-assets.sh needs TAG}"
 assets_dir="${RNW_ASSETS_DIR:-$RNW_OUT/assets}"
 
+# The body scratch files sit in $RUNNER_TEMP and would die with the runner, but
+# a local run should not litter and a leftover body must never be picked up by
+# a later invocation.
+body_file="${RUNNER_TEMP:-/tmp}/rnw-release-body.md"
+stripped_file="$body_file.stripped"
+trap 'rm -f "$body_file" "$stripped_file"' EXIT
+
 # The fixed asset set, as basename globs. Anything else in the directory is
 # deliberately ignored rather than silently published.
 ASSET_GLOBS=(
@@ -47,9 +54,12 @@ collect_assets() {
     # Unquoted on purpose: $g is the glob pattern being expanded.
     # shellcheck disable=SC2086
     for f in "$assets_dir"/$g; do
-      [ -f "$f" ] && assets+=("$f")
+      if [ -f "$f" ]; then assets+=("$f"); fi
     done
   done
+  # Explicit: the loop's last `[ -f ]` is the function's exit status otherwise,
+  # and a non-matching final glob would abort the caller under errexit.
+  return 0
 }
 
 sha256_of() {
@@ -121,12 +131,27 @@ case "$mode" in
   append)
     release_exists || die "release $tag does not exist - nothing to append to"
     [ "${#notes_args[@]}" -eq 2 ] || die "append needs NOTES_FILE pointing at an existing section file"
-    body_file="${RUNNER_TEMP:-/tmp}/rnw-release-body.md"
+    heading="## ${APPEND_TITLE:-Update}"
+    # Re-running a failed job is the ordinary way an Actions failure is
+    # recovered (it is why the asset upload uses --clobber), so append has to be
+    # idempotent too: drop any existing section with this exact heading - from
+    # the heading line to the next `## ` or EOF - and re-add it. Two identical
+    # runs then produce the same body, byte for byte.
     gh release view "$tag" --json body --jq '.body' > "$body_file"
+    awk -v heading="$heading" '
+      $0 == heading { skipping = 1; next }
+      skipping && /^## / { skipping = 0 }
+      !skipping { print }
+    ' "$body_file" > "$stripped_file"
+    # Trailing blank lines would otherwise accumulate one pair per re-run.
     {
-      printf '\n\n## %s\n\n' "${APPEND_TITLE:-Update}"
+      awk 'BEGIN { blank = 0 }
+        /^[[:space:]]*$/ { blank++; next }
+        { while (blank-- > 0) print ""; blank = 0; print }
+      ' "$stripped_file"
+      printf '\n%s\n\n' "$heading"
       cat "$NOTES_FILE"
-    } >> "$body_file"
+    } > "$body_file"
     gh release edit "$tag" --notes-file "$body_file"
     upload_assets
     ;;

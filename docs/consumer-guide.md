@@ -351,7 +351,7 @@ writes `build-info.json` and the store notes, and uploads them as the
 | `notes-locales` | `en` | Locales handed to the consumer's `scripts/release/notes.mjs` |
 | `stage` | `internal` | Written to `build-info.json`'s `stage` |
 | `release-body-file` | `''` | Consumer-relative file holding a release body; switches note generation to `--from-body` |
-| `require-green-workflow` | `''` | Workflow file name (e.g. `release-internal.yml`) that must have concluded `success` for `github.sha` before preparing. Empty disables the gate |
+| `require-green-workflow` | `''` | Workflow file name (e.g. `release-internal.yml`) that must have concluded `success` for `github.sha` before preparing. Empty disables the gate. The gate step runs **before** `Setup` (so a red upstream fails before anything is installed), which means it uses the `gh` and `yq` from the runner image — true of GitHub-hosted `ubuntu-latest`, not necessarily of a self-hosted `linux-runner` |
 | `release-meta-artifact` | `release-meta` | Artifact name for `build-info.json`, `store-notes.json`, `notes-store.txt`, `notes.md` |
 
 Outputs: `version`, `build-number`, `fp-ios`, `fp-android`. Secrets:
@@ -370,9 +370,9 @@ Prebuild → pods → `fastlane ios build` → `fastlane ios verify`, on
 | `native-extra-globs` | `''` | Extra globs folded into the native dependency hash (see [`docs/cache-keys.md`](cache-keys.md)) |
 | `xcode` | `''` | Sets `DEVELOPER_DIR` to `/Applications/Xcode_<v>.app/Contents/Developer` and is folded into the Pods cache key |
 | `environment` | `''` | GitHub Environment gating the build (secrets + approvals); empty means none |
-| `version` / `build-number` | `''` | Passed to the lanes as `APP_VERSION` / `APP_BUILD_NUMBER` (wire them to `expo-prepare`'s outputs) |
+| `version` / `build-number` | **required** | `APP_VERSION` / `APP_BUILD_NUMBER`; wire them to `expo-prepare`'s outputs |
 | `stage` | `internal` | Passed through as `RNW_STAGE` |
-| `ios-bundle-id` / `ios-scheme` | `''` | `IOS_BUNDLE_ID` / `IOS_SCHEME`; empty lets the Fastfile resolve them from the Expo config |
+| `ios-bundle-id` / `ios-scheme` / `android-package` | **required** | `IOS_BUNDLE_ID` / `IOS_SCHEME` / `ANDROID_PACKAGE`. All three are required **on the iOS build too** — see [The five Fastfile contract variables](#the-five-fastfile-contract-variables) |
 | `verify` | `true` | Run the `ios verify` lane after `build` |
 | `release-meta-artifact` | `release-meta` | Artifact downloaded for `build-info.json` and the store notes |
 | `ipa-artifact` / `dsym-artifact` | `ios-ipa` / `ios-dsym` | Upload names |
@@ -390,12 +390,15 @@ Prebuild → `fastlane android build` → `fastlane android verify`, on
 | --- | --- | --- |
 | `repository`, `ref`, `working-directory`, `linux-runner`, `macos-runner`, `native-cache-version` | (as above) | — |
 | `environment` | `''` | GitHub Environment gating the build |
-| `version` / `build-number` | `''` | `APP_VERSION` / `APP_BUILD_NUMBER` |
+| `version` / `build-number` | **required** | `APP_VERSION` / `APP_BUILD_NUMBER` |
 | `stage` | `internal` | `RNW_STAGE` |
-| `android-package` | `''` | `ANDROID_PACKAGE`; empty lets the Fastfile resolve it from the Expo config |
+| `android-package` / `ios-bundle-id` / `ios-scheme` | **required** | `ANDROID_PACKAGE` / `IOS_BUNDLE_ID` / `IOS_SCHEME`. The two iOS ids are required **on the Android build too** — see [The five Fastfile contract variables](#the-five-fastfile-contract-variables) |
 | `verify` | `true` | Run the `android verify` lane after `build` |
 | `release-meta-artifact` | `release-meta` | Artifact downloaded for `build-info.json` and the store notes |
 | `aab-artifact` / `apk-artifact` / `mapping-artifact` | `android-aab` / `android-apk` / `android-mapping` | Upload names |
+| `mapping-path` | `android/app/build/outputs/mapping/**/mapping.txt` | Consumer-relative glob for the mapping file. Override it when the consumer uses a non-default variant output directory — the upload is `if-no-files-found: warn`, so a wrong path yields a green build and permanently unreadable Play crash reports |
+| `bundletool-version` | `1.17.2` | bundletool release downloaded before the lane runs (the `android build` lane derives the universal APK from the .aab with it, and no runner image ships it). Kept equal to `scripts/lib/versions.sh` by `scripts/self/check-versions.sh` |
+| `bundletool-sha256` | `''` | Expected sha256 of the jar; empty skips verification. Google publishes no checksum file alongside the release, so pinning the bytes is opt-in |
 
 No outputs. Secrets (all optional): `consumer-token`,
 `ANDROID_UPLOAD_KEYSTORE_BASE64`, `ANDROID_UPLOAD_KEYSTORE_PASSWORD`,
@@ -419,8 +422,8 @@ uploads, promotions, staged rollouts, halts.
 | `environment` | `''` | GitHub Environment gating the lane (this is where a production approval belongs) |
 | `env-json` | `{}` | Flat JSON object published into the lane's environment. **Configuration only** — the values are printed to the log; credentials belong in `secrets:` |
 | `artifacts` | `''` | Artifact name or glob pattern downloaded (merged) into `$RNW_ASSETS_DIR` before the lane runs |
-| `version` / `build-number` | `''` | `APP_VERSION` / `APP_BUILD_NUMBER` |
-| `ios-bundle-id` / `ios-scheme` / `android-package` | `''` | Passed straight through to the lane |
+| `version` / `build-number` | **required** | `APP_VERSION` / `APP_BUILD_NUMBER` |
+| `ios-bundle-id` / `ios-scheme` / `android-package` | **required** | All three on every lane, both platforms — see [The five Fastfile contract variables](#the-five-fastfile-contract-variables) |
 | `ruby` | `true` | Install Ruby (leave on unless the consumer has no Gemfile) |
 | `timeout-minutes` | `45` | Raise it for a lane that waits on App Store Connect processing |
 
@@ -469,7 +472,7 @@ Fingerprint gate → `expo export` → publish → manifest smoke check.
 | `rollout` | `0` | Rollout percentage 0–100 |
 | `environment` | `''` | GitHub Environment gating the publish |
 | `ota-cli-version` | `''` | Exact `eoas` version. Never leave this empty in a real caller: `scripts/ota/publish.sh` refuses to run unpinned |
-| `channel-build-info-artifact` | `release-meta` | Artifact carrying the `build-info.json` of the store build currently installed on this channel |
+| `baseline-tag` | `''` | **Required whenever `ota-enabled` is true.** Release tag whose `build-info.json` asset is the fingerprint baseline for this channel — see [The OTA fingerprint gate](#the-ota-fingerprint-gate) |
 | `manifest-url` | `''` | Manifest URL fetched after publishing as a smoke check; empty skips it |
 | `runtime-version` | `''` | Sent as the `expo-runtime-version` header in that check |
 
@@ -481,17 +484,66 @@ No outputs. Secrets: `consumer-token`, `OTA_PUBLISH_TOKEN` (both optional).
 > be checked against the CLI offline. Confirm them against
 > `npx eoas@<pinned version> publish --help` the first time `ota-cli-version`
 > is pinned in a real environment, and fix the script and this note together.
+> `OTA_PUBLISH_TOKEN` is on the same checklist: it is put in the publish step's
+> environment but `scripts/ota/publish.sh` never names it, so whether `eoas`
+> reads that exact variable is unverified — a wrong name fails as an auth error,
+> not as a flag error.
+
+### The five Fastfile contract variables
+
+The consumer's `Fastfile` asserts, in `before_all`, for **every lane on both
+platforms**:
+
+```ruby
+require_env!(%w[APP_VERSION APP_BUILD_NUMBER IOS_BUNDLE_ID IOS_SCHEME ANDROID_PACKAGE])
+```
+
+and it rejects a value that is empty after `strip`. So the iOS build must pass
+`ANDROID_PACKAGE` and the Android build must pass `IOS_BUNDLE_ID` /
+`IOS_SCHEME`, however odd that reads: a lane that never touches the other
+platform still fails in `before_all` before its body runs. That is why all five
+are **required inputs** on `expo-build-ios.yml`, `expo-build-android.yml` and
+`fastlane-lane.yml` — an empty default would look like "the Fastfile will work
+it out" and fail on the first real run instead.
+`test/workflow-shape.bats` asserts that every step calling `fastlane.sh`
+receives all five, from the job env or its own.
+
+Paths handed to a lane are made absolute by `scripts/release/fastlane.sh` before
+`bundle exec` — `RNW_OUTPUT_DIR`, `BUILD_INFO_FILE`, `RELEASE_NOTES_STORE_FILE`,
+`STORE_NOTES_JSON`, `ANDROID_UPLOAD_KEYSTORE_PATH`,
+`PLAY_SERVICE_ACCOUNT_JSON_PATH`, `ASC_KEY_P8_PATH`, `BUNDLETOOL_JAR`. fastlane
+runs a lane with its working directory set to `fastlane/`, not the project root,
+so a relative path silently resolves one directory too deep.
+
+Credentials reach the lane as **both** forms: `decode-secrets.sh` writes the
+file and exports its path, *and* the base64 secret itself is put in the lane
+step's environment. The template's `shared.rb` reads
+`ENV.fetch('ASC_KEY_P8_BASE64')` with `is_key_content_base64: true`, so passing
+only the decoded path would raise `KeyError` on the first App Store Connect
+lane. `test/workflow-shape.bats` asserts that every secret a lane workflow
+declares reaches a `fastlane.sh` step's `env:`.
 
 ### The OTA fingerprint gate
 
 `scripts/ota/fingerprint-gate.sh` compares the fingerprint of the commit being
 published against `fingerprint.ios` / `fingerprint.android` in the channel's
-`build-info.json`, per platform, and **dies on any mismatch**. This is the most
+baseline `build-info.json`, per platform, and **dies on any mismatch**. This is the most
 important guard in the release path: an update whose JS expects a native module
 the installed binary does not have does not fail loudly — it crashes on launch,
 for every user on the channel, and the only fix is a new store build. A
 `build-info.json` without a `fingerprint` block is treated as a failure, not a
 pass.
+
+**Where the baseline comes from.** `scripts/ota/baseline.sh` downloads the
+`build-info.json` **asset of the release named by `baseline-tag`**
+(`gh release download "$TAG" --pattern build-info.json`), not an artifact of the
+current run. This is not a stylistic choice: `actions/download-artifact` can
+only resolve artifacts produced by the run it executes in, so wiring the gate to
+a same-run artifact would compare the current commit's fingerprint against
+itself — the gate would pass unconditionally and stop guarding anything. A
+missing tag, a missing release, or a release with no `build-info.json` asset is
+fatal for the same reason; there is no silent pass. Point `baseline-tag` at the
+release of the store build **currently installed on that channel**.
 
 Fingerprints are computed with the consumer's own `@expo/fingerprint`
 devDependency: `npx --no fingerprint fingerprint:generate --platform <ios|android>`
@@ -542,7 +594,13 @@ The lanes themselves read: `APP_VERSION`, `APP_BUILD_NUMBER`,
 ```
 
 Written by `scripts/release/build-info.sh`. Adding a key is fine; renaming one
-is a breaking change for the OTA gate and the store lanes alike.
+is a breaking change for the OTA gate and the store lanes alike. `expoSdk` and
+`reactNative` have their range operator stripped (`^54.0.0` is written as
+`54.0.0`) so the file is byte-comparable with the one the template's own
+`build-info.sh` produces. `stage` falls back to `development` when `RNW_STAGE`
+is unset, matching the template; `expo-prepare.yml`'s `stage` input defaults to
+`internal` because a prepare run is by definition producing a build for at least
+the internal track.
 
 ### Consumer-side release scripts
 
@@ -557,7 +615,13 @@ The workflows call three things the **consumer** owns:
 A consumer may also ship its own `scripts/release/resolve-version.sh`; this
 repo ships an identical one (same contract: prints `APP_VERSION=` /
 `APP_BUILD_NUMBER=`, writes `version` / `build-number` to `$GITHUB_OUTPUT`) and
-`expo-prepare.yml` uses **this repo's copy**, so the two must never drift.
+`expo-prepare.yml` uses **this repo's copy**, so the two must never drift. The
+resolution order is: a stable `vX.Y.Z` tag on HEAD → a version in
+`$RELEASE_PR_TITLE` → the open `autorelease: pending` PR's title (only when
+`GH_TOKEN` is set) → the newest **stable** `vX.Y.Z` tag with its patch bumped →
+`0.0.1`. Prerelease tags (`v1.2.3-rc.1`) are ignored at every step: they never
+win at HEAD and never seed the bump, so a repository that has only ever cut
+release candidates starts at `0.0.1` rather than regressing from them.
 
 ## Script contract
 
@@ -727,3 +791,10 @@ each one lives so a future edit doesn't quietly regress it.
 | A decoded signing secret must never be world-readable, and a truncated one must not silently become an empty key file | `scripts/release/decode-secrets.sh` creates each file `600` inside a `700` directory *before* writing, and dies on a zero-byte decode; `test/decode-secrets.bats` |
 | A release created with `GITHUB_TOKEN` does not trigger the `release: published` workflows that depend on it | `github-release.yml` mints an `actions/create-github-app-token@v2` token when `RELEASE_TAGGER_APP_ID`/`RELEASE_TAGGER_APP_PRIVATE_KEY` are set |
 | An Android crash report is unreadable forever without that build's mapping file | `expo-build-android.yml` uploads `android-mapping` (and the apk) with `if: !cancelled()`, so a failed `verify` still yields them |
+| An OTA gate wired to a same-run artifact silently stops guarding, because `download-artifact` only sees the current run | `scripts/ota/baseline.sh` fetches the baseline `build-info.json` from the `baseline-tag` release's **assets** via `gh release download`; a missing tag or asset is fatal |
+| A lane fails in `before_all` when any of the five contract variables is empty — including the other platform's ids | All five are required inputs on the three lane-running workflows; `test/workflow-shape.bats` asserts every `fastlane.sh` step receives them |
+| fastlane runs a lane with cwd = `fastlane/`, so a relative path handed to a lane resolves one directory too deep | `scripts/release/fastlane.sh` absolutises every path variable before `bundle exec` |
+| A secret decoded to a file is not the same as a secret in the lane's environment — the template's lanes read `ENV.fetch('ASC_KEY_P8_BASE64')` | Both forms are passed; `test/workflow-shape.bats` asserts every declared secret reaches a `fastlane.sh` step's `env:` |
+| Re-running a failed release job must not duplicate the section it appended to the release body | `scripts/release/release-assets.sh` `append` strips any section with the same heading first; `test/release-assets.bats` asserts two runs give a byte-identical body |
+| A bare `[[ ]]` assertion in a bats body cannot fail the test under macOS's bash 3.2, so a security control can silently stop checking | `test/test_helper.bash` (`fail`/`contains`/`not_contains`) and the `\|\| fail` form in every release test file |
+| No runner image ships bundletool, and the `android build` lane needs it to derive the universal APK | `expo-build-android.yml` installs the pinned jar via `scripts/ci/bundletool-install.sh` before the lane runs (version kept equal to `scripts/lib/versions.sh` by `check-versions.sh`) |

@@ -24,6 +24,7 @@ require_cmd curl
 
 platform="${OTA_SMOKE_PLATFORM:-ios}"
 body="${RUNNER_TEMP:-/tmp}/rnw-ota-manifest"
+trap 'rm -f "$body"' EXIT
 
 # Built as an array so an unset runtime version contributes no argument at all
 # (an unquoted ${VAR:+-H "..."} would word-split the header on its space).

@@ -47,6 +47,53 @@ setup() {
   done
 }
 
+lane_step_count() {
+  yq -r '[.jobs[].steps[]? | select((.run? // "") | test("release/fastlane.sh"))] | length' "$1"
+}
+
+@test "every step that runs fastlane.sh receives the five Fastfile contract variables" {
+  # The consumer's Fastfile runs require_env! over these in before_all, for
+  # every lane on both platforms, and rejects values that are empty after
+  # strip - so the iOS build must still pass ANDROID_PACKAGE, and vice versa.
+  for w in "${WORKFLOWS[@]}"; do
+    job_names=$(yq -r '.jobs | keys | .[]' "$w")
+    for j in $job_names; do
+      n=$(yq -r "[.jobs.\"$j\".steps[]? | select((.run? // \"\") | test(\"release/fastlane.sh\"))] | length" "$w")
+      if [ "$n" -gt 0 ]; then
+        job_env=$(yq -r "(.jobs.\"$j\".env // {}) | keys | .[]" "$w")
+        i=0
+        while [ "$i" -lt "$n" ]; do
+          step_env=$(yq -r "[.jobs.\"$j\".steps[]? | select((.run? // \"\") | test(\"release/fastlane.sh\"))][$i] | (.env // {}) | keys | .[]" "$w")
+          for v in APP_VERSION APP_BUILD_NUMBER IOS_BUNDLE_ID IOS_SCHEME ANDROID_PACKAGE; do
+            printf '%s\n%s\n' "$job_env" "$step_env" | grep -qxF "$v" \
+              || fail "$(basename "$w"): job '$j' fastlane step #$i receives neither a job-level nor a step-level $v"
+          done
+          i=$((i + 1))
+        done
+      fi
+    done
+  done
+}
+
+@test "every credential secret a lane workflow declares reaches a fastlane step's env" {
+  # This is exactly what C1 was: ASC_KEY_P8_BASE64 was decoded to a 0600 file
+  # but never put in the lane's environment, and the lane reads the base64
+  # itself with ENV.fetch - so every store lane would have raised KeyError.
+  for w in "${WORKFLOWS[@]}"; do
+    if [ "$(lane_step_count "$w")" -gt 0 ]; then
+      declared=$(yq -r '(.on.workflow_call.secrets // {}) | keys | .[]' "$w")
+      lane_env=$(yq -r '[.jobs[].steps[]? | select((.run? // "") | test("release/fastlane.sh")) | (.env // {}) | keys] | flatten | .[]' "$w")
+      for s in $declared; do
+        case "$s" in
+          consumer-token) continue ;;
+        esac
+        grep -qxF "$s" <<<"$lane_env" \
+          || fail "$(basename "$w"): secret $s is declared but never reaches a fastlane step's env"
+      done
+    fi
+  done
+}
+
 @test "every workflow declares on.workflow_call" {
   for w in "${WORKFLOWS[@]}"; do
     has=$(yq -r 'has("on") and (.on | has("workflow_call"))' "$w")

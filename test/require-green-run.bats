@@ -1,4 +1,5 @@
 #!/usr/bin/env bats
+# Every assertion ends in `|| fail "..."` - see test_helper.bash.
 load test_helper
 
 # `gh` is stubbed with a script that emits the next line of a canned response
@@ -26,11 +27,13 @@ SH
   unset GITHUB_OUTPUT
 }
 
+green() { run bash "$REPO_ROOT/scripts/release/require-green-run.sh" release-internal.yml abc123; }
+
 @test "a completed successful run passes immediately" {
   printf '%s\n' '[{"conclusion":"success","status":"completed","databaseId":11}]' > "$RESPONSES"
-  run bash "$REPO_ROOT/scripts/release/require-green-run.sh" release-internal.yml abc123
-  [ "$status" -eq 0 ]
-  [[ "$output" == *"run 11 for abc123 succeeded"* ]]
+  green
+  [ "$status" -eq 0 ] || fail "exited $status: $output"
+  contains "$output" "run 11 for abc123 succeeded" || fail "unexpected message: $output"
 }
 
 @test "polls while the run is still going, then passes" {
@@ -39,55 +42,53 @@ SH
     printf '%s\n' '[{"conclusion":null,"status":"in_progress","databaseId":11}]'
     printf '%s\n' '[{"conclusion":"success","status":"completed","databaseId":11}]'
   } > "$RESPONSES"
-  run bash "$REPO_ROOT/scripts/release/require-green-run.sh" release-internal.yml abc123
-  [ "$status" -eq 0 ]
-  [[ "$output" == *"is queued"* ]]
-  [[ "$output" == *"is in_progress"* ]]
-  [[ "$output" == *"succeeded"* ]]
+  green
+  [ "$status" -eq 0 ] || fail "exited $status: $output"
+  contains "$output" "is queued" || fail "did not report the queued poll: $output"
+  contains "$output" "is in_progress" || fail "did not report the in_progress poll: $output"
+  contains "$output" "succeeded" || fail "did not report success: $output"
 }
 
 @test "a failed run is fatal" {
   printf '%s\n' '[{"conclusion":"failure","status":"completed","databaseId":12}]' > "$RESPONSES"
-  run bash "$REPO_ROOT/scripts/release/require-green-run.sh" release-internal.yml abc123
-  [ "$status" -ne 0 ]
-  [[ "$output" == *"concluded 'failure'"* ]]
+  green
+  [ "$status" -ne 0 ] || fail "passed on a failed run: $output"
+  contains "$output" "concluded 'failure'" || fail "unexpected message: $output"
 }
 
 @test "a cancelled run is fatal" {
   printf '%s\n' '[{"conclusion":"cancelled","status":"completed","databaseId":13}]' > "$RESPONSES"
-  run bash "$REPO_ROOT/scripts/release/require-green-run.sh" release-internal.yml abc123
-  [ "$status" -ne 0 ]
-  [[ "$output" == *"concluded 'cancelled'"* ]]
+  green
+  [ "$status" -ne 0 ] || fail "passed on a cancelled run: $output"
+  contains "$output" "concluded 'cancelled'" || fail "unexpected message: $output"
 }
 
 @test "a skipped run is fatal - nothing verified the commit" {
   printf '%s\n' '[{"conclusion":"skipped","status":"completed","databaseId":14}]' > "$RESPONSES"
-  run bash "$REPO_ROOT/scripts/release/require-green-run.sh" release-internal.yml abc123
-  [ "$status" -ne 0 ]
-  [[ "$output" == *"was skipped"* ]]
+  green
+  [ "$status" -ne 0 ] || fail "passed on a skipped run: $output"
+  contains "$output" "was skipped" || fail "unexpected message: $output"
 }
 
 @test "no run at all within the discovery window is fatal" {
   printf '%s\n' '[]' > "$RESPONSES"
-  RNW_GREEN_DISCOVERY_MINUTES=0 \
-    run bash "$REPO_ROOT/scripts/release/require-green-run.sh" release-internal.yml abc123
-  [ "$status" -ne 0 ]
-  [[ "$output" == *"no release-internal.yml run found for abc123"* ]]
+  RNW_GREEN_DISCOVERY_MINUTES=0 green
+  [ "$status" -ne 0 ] || fail "passed with no run at all: $output"
+  contains "$output" "no release-internal.yml run found for abc123" || fail "unexpected message: $output"
 }
 
 @test "an unfinished run past the overall timeout is fatal" {
   printf '%s\n' '[{"conclusion":null,"status":"in_progress","databaseId":15}]' > "$RESPONSES"
-  RNW_GREEN_TIMEOUT_MINUTES=0 \
-    run bash "$REPO_ROOT/scripts/release/require-green-run.sh" release-internal.yml abc123
-  [ "$status" -ne 0 ]
-  [[ "$output" == *"did not complete for abc123"* ]]
+  RNW_GREEN_TIMEOUT_MINUTES=0 green
+  [ "$status" -ne 0 ] || fail "passed past the timeout: $output"
+  contains "$output" "did not complete for abc123" || fail "unexpected message: $output"
 }
 
 @test "writes the run id to GITHUB_OUTPUT" {
   printf '%s\n' '[{"conclusion":"success","status":"completed","databaseId":99}]' > "$RESPONSES"
   out="$BATS_TEST_TMPDIR/gh_output"
   : > "$out"
-  GITHUB_OUTPUT="$out" run bash "$REPO_ROOT/scripts/release/require-green-run.sh" release-internal.yml abc123
-  [ "$status" -eq 0 ]
-  grep -q '^run-id=99$' "$out"
+  GITHUB_OUTPUT="$out" green
+  [ "$status" -eq 0 ] || fail "exited $status: $output"
+  grep -q '^run-id=99$' "$out" || fail "no run-id=99 in: $(cat "$out")"
 }

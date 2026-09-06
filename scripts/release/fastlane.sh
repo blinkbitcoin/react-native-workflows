@@ -14,10 +14,16 @@
 #   android build verify upload_internal promote_beta release_production rollout halt
 #
 # The lanes read their inputs from the environment - APP_VERSION,
-# APP_BUILD_NUMBER, RELEASE_NOTES_STORE_FILE, IOS_BUNDLE_ID, IOS_SCHEME,
-# ANDROID_PACKAGE, BUILD_INFO_FILE, RNW_OUTPUT_DIR plus the credentials
-# decode-secrets.sh materialised - so this wrapper only exports RNW_OUTPUT_DIR
-# and passes the key:value pairs through verbatim.
+# APP_BUILD_NUMBER, RELEASE_NOTES_STORE_FILE, STORE_NOTES_JSON, IOS_BUNDLE_ID,
+# IOS_SCHEME, ANDROID_PACKAGE, BUILD_INFO_FILE, RNW_OUTPUT_DIR plus the
+# credentials decode-secrets.sh materialised - so this wrapper only fixes up
+# the path-valued ones and passes the key:value pairs through verbatim.
+#
+# fastlane runs a lane with its working directory set to `fastlane/`, not to the
+# project root, so every path handed to a lane has to be absolute: a relative
+# one silently resolves one directory too deep and the lane reads (or writes)
+# the wrong file. Every path variable is absolutised here rather than at each
+# call site, so a caller cannot get it wrong.
 set -euo pipefail
 source "$(dirname "$0")/../lib/common.sh"
 source "$(dirname "$0")/../lib/release-env.sh"
@@ -36,8 +42,27 @@ set -- "${args[@]+"${args[@]}"}"
 
 root="$(consumer_root)"
 cd "$root"
+
+# absolutise VAR... - rewrite each set variable to an absolute path, resolving a
+# relative one against the consumer root.
+absolutise() {
+  local var value
+  for var in "$@"; do
+    value="${!var:-}"
+    [ -n "$value" ] || continue
+    case "$value" in
+      /*) ;;
+      *) value="$root/$value" ;;
+    esac
+    export "$var=$value"
+    log "$var=$value"
+  done
+}
+
 mkdir -p "$RNW_OUTPUT_DIR"
 export RNW_OUTPUT_DIR
+absolutise RNW_OUTPUT_DIR BUILD_INFO_FILE RELEASE_NOTES_STORE_FILE STORE_NOTES_JSON \
+  ANDROID_UPLOAD_KEYSTORE_PATH PLAY_SERVICE_ACCOUNT_JSON_PATH ASC_KEY_P8_PATH BUNDLETOOL_JAR
 
 group "fastlane $platform $lane"
 if [ -f "$root/Gemfile" ] && command -v bundle >/dev/null 2>&1; then

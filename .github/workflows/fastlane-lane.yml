@@ -57,23 +57,23 @@ on:
       version:
         description: App version passed to the lane as APP_VERSION
         type: string
-        default: ''
+        required: true
       build-number:
         description: Build number passed to the lane as APP_BUILD_NUMBER
         type: string
-        default: ''
+        required: true
       ios-bundle-id:
-        description: Bundle identifier passed to the lane as IOS_BUNDLE_ID
+        description: Bundle identifier passed to the lane as IOS_BUNDLE_ID (required on both platforms - see `android-package`)
         type: string
-        default: ''
+        required: true
       ios-scheme:
-        description: Xcode scheme passed to the lane as IOS_SCHEME
+        description: Xcode scheme passed to the lane as IOS_SCHEME (required on both platforms - see `android-package`)
         type: string
-        default: ''
+        required: true
       android-package:
-        description: Application id passed to the lane as ANDROID_PACKAGE
+        description: Application id passed to the lane as ANDROID_PACKAGE. All five contract variables are required on every lane - the consumer's Fastfile asserts them in `before_all`, for both platforms, and rejects empty ones
         type: string
-        default: ''
+        required: true
       ruby:
         description: Install Ruby via ruby/setup-ruby (leave on unless the consumer has no Gemfile)
         type: boolean
@@ -181,11 +181,17 @@ jobs:
           LANE_ARGS: ${{ inputs.lane-args }}
           BUILD_INFO_FILE: ${{ env.RNW_ASSETS_DIR }}/build-info.json
           RELEASE_NOTES_STORE_FILE: ${{ env.RNW_ASSETS_DIR }}/notes-store.txt
+          STORE_NOTES_JSON: ${{ env.RNW_ASSETS_DIR }}/store-notes.json
           MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
           MATCH_GIT_URL: ${{ secrets.MATCH_GIT_URL }}
           MATCH_GIT_BASIC_AUTHORIZATION: ${{ secrets.MATCH_GIT_BASIC_AUTHORIZATION }}
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          # The lanes read the base64 key directly (app_store_connect_api_key's
+          # key_content + is_key_content_base64), so passing only the decoded
+          # file path is not enough - the Fastfile's ENV.fetch would raise.
+          ASC_KEY_P8_BASE64: ${{ secrets.ASC_KEY_P8_BASE64 }}
+          ANDROID_UPLOAD_KEYSTORE_BASE64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}
           ANDROID_UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_PASSWORD }}
           ANDROID_UPLOAD_KEY_ALIAS: ${{ secrets.ANDROID_UPLOAD_KEY_ALIAS }}
           ANDROID_UPLOAD_KEY_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEY_PASSWORD }}
