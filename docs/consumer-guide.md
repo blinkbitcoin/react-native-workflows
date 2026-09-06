@@ -444,7 +444,7 @@ uploads, promotions, staged rollouts, halts.
 | `runner` | `ubuntu-latest` | An iOS lane that touches Xcode needs a macOS runner; a store-API-only lane does not |
 | `environment` | `''` | GitHub Environment gating the lane (this is where a production approval belongs) |
 | `env-json` | `{}` | Flat JSON object published into the lane's environment. **Configuration only** — the values are printed to the log; credentials belong in `secrets:` |
-| `artifacts` | `''` | Artifact name or glob pattern downloaded (merged) into `$RNW_ASSETS_DIR` before the lane runs |
+| `artifacts` | `''` | Artifact name or glob pattern downloaded (merged) into `$RNW_ASSETS_DIR` before the lane runs. The lane step then runs with **`RNW_OUTPUT_DIR` = `$RNW_ASSETS_DIR`**: the lanes read the binaries they upload out of `RNW_OUTPUT_DIR`, and this workflow builds nothing, so the downloaded `.ipa`/`.aab` are what it has to point at. (The two build workflows leave `RNW_OUTPUT_DIR` alone — there it is where the lane *writes*.) |
 | `version` / `build-number` | **required** | `APP_VERSION` / `APP_BUILD_NUMBER` |
 | `ios-bundle-id` / `ios-scheme` / `android-package` | **required** | All three on every lane, both platforms — see [The five Fastfile contract variables](#the-five-fastfile-contract-variables) |
 | `ruby` | `true` | Install Ruby (leave on unless the consumer has no Gemfile) |
@@ -736,11 +736,13 @@ their paths through `$GITHUB_ENV`:
 It never echoes a value — only the variable name, the destination path and the
 decoded byte count — and a value that decodes to zero bytes (a truncated
 copy-paste, the classic failure) is fatal rather than silently producing an
-empty key file.
+empty key file. A raw (non-base64) `PLAY_SERVICE_ACCOUNT_JSON` is checked the
+same way and additionally has to parse as JSON: a half-pasted service account
+would otherwise only fail deep inside a Play lane, after the build.
 
 The lanes themselves read: `APP_VERSION`, `APP_BUILD_NUMBER`,
-`RELEASE_NOTES_STORE_FILE`, `IOS_BUNDLE_ID`, `IOS_SCHEME`, `ANDROID_PACKAGE`,
-`BUILD_INFO_FILE`, `RNW_OUTPUT_DIR`, plus `ASC_KEY_ID`, `ASC_ISSUER_ID`,
+`RELEASE_NOTES_STORE_FILE`, `STORE_NOTES_JSON`, `IOS_BUNDLE_ID`, `IOS_SCHEME`,
+`ANDROID_PACKAGE`, `BUILD_INFO_FILE`, `RNW_OUTPUT_DIR`, plus `ASC_KEY_ID`, `ASC_ISSUER_ID`,
 `ASC_KEY_P8_BASE64`, `MATCH_PASSWORD`, `MATCH_GIT_URL`,
 `MATCH_GIT_BASIC_AUTHORIZATION`, `ANDROID_UPLOAD_KEYSTORE_PASSWORD`,
 `ANDROID_UPLOAD_KEY_ALIAS`, `ANDROID_UPLOAD_KEY_PASSWORD` and
@@ -755,10 +757,10 @@ The lanes themselves read: `APP_VERSION`, `APP_BUILD_NUMBER`,
   "buildNumber": 1042,
   "stage": "internal",
   "fingerprint": { "ios": "…", "android": "…" },
-  "expoSdk": "^54.0.0",
+  "expoSdk": "54.0.0",
   "reactNative": "0.81.0",
   "workflowRunId": "…",
-  "artifacts": {}
+  "artifacts": { "apkSha256": "…", "aabSha256": "…" }
 }
 ```
 
@@ -770,6 +772,18 @@ is a breaking change for the OTA gate and the store lanes alike. `expoSdk` and
 is unset, matching the template; `expo-prepare.yml`'s `stage` input defaults to
 `internal` because a prepare run is by definition producing a build for at least
 the internal track.
+
+`artifacts` is empty as `expo-prepare` writes it and is filled in later, by the
+job that produces the binaries: `expo-build-android.yml` runs
+`scripts/release/artifact-hashes.sh` between the `build` and `verify` lanes,
+which writes an enriched **copy** into `$RNW_OUTPUT_DIR` carrying
+`artifacts.apkSha256` / `artifacts.aabSha256`. The `verify` lane reads that copy
+(`BUILD_INFO_FILE` points at it), so the consumer's `verify-android` can compare
+the universal apk against the digest recorded for it, and the copy is uploaded
+with the `.aab` — `github-release.yml` stages the asset artifacts over
+`release-meta`, so the `build-info.json` on the release is the one that names
+the bytes actually attached to it. The release-meta copy is never edited in
+place: both platform jobs download it, and two jobs must not write one file.
 
 ### Consumer-side release scripts
 
