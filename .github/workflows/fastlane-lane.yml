@@ -211,6 +211,13 @@ jobs:
           PLATFORM: ${{ inputs.platform }}
           LANE: ${{ inputs.lane }}
           LANE_ARGS: ${{ inputs.lane-args }}
+          # The lanes read their binaries out of RNW_OUTPUT_DIR, but this
+          # workflow does not build anything: the .ipa/.aab it operates on were
+          # downloaded into RNW_ASSETS_DIR by the step above. Pointing
+          # RNW_OUTPUT_DIR at that directory is what makes `upload_internal`,
+          # `promote_beta` and `release_production` find them here - without it
+          # a lane looks in an empty $RNW_OUT and reports "no binary".
+          RNW_OUTPUT_DIR: ${{ env.RNW_ASSETS_DIR }}
           BUILD_INFO_FILE: ${{ env.RNW_ASSETS_DIR }}/build-info.json
           RELEASE_NOTES_STORE_FILE: ${{ env.RNW_ASSETS_DIR }}/notes-store.txt
           STORE_NOTES_JSON: ${{ env.RNW_ASSETS_DIR }}/store-notes.json

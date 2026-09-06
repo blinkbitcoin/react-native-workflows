@@ -172,6 +172,22 @@ TEMPLATE_LANES="$FIXTURES/consumer-min/fastlane/lanes/shared.rb"
   done
 }
 
+# fastlane-lane builds nothing: the binaries its lanes upload were downloaded
+# into $RNW_ASSETS_DIR. The lanes read $RNW_OUTPUT_DIR, so the two have to be
+# the same directory here - and only here; the build workflows keep
+# RNW_OUTPUT_DIR as the directory the lane *writes* to.
+@test "fastlane-lane points RNW_OUTPUT_DIR at the downloaded artifacts" {
+  f="$REPO_ROOT/.github/workflows/fastlane-lane.yml"
+  got=$(yq -r '[.jobs.lane.steps[] | select(.name == "Fastlane lane")][0].env.RNW_OUTPUT_DIR' "$f")
+  [ "$got" = '${{ env.RNW_ASSETS_DIR }}' ] \
+    || fail "fastlane-lane's lane step sets RNW_OUTPUT_DIR to '$got'"
+  for w in expo-build-ios expo-build-android; do
+    b="$REPO_ROOT/.github/workflows/$w.yml"
+    n=$(yq -r '[.jobs[].steps[]? | select((.env.RNW_OUTPUT_DIR? // "") != "")] | length' "$b")
+    [ "$n" -eq 0 ] || fail "$w.yml overrides RNW_OUTPUT_DIR, which is where its lane writes"
+  done
+}
+
 # Job-level `permissions:` cannot be conditional, so expo-prepare asks for
 # `actions: read` on every call and every caller has to grant it. Both scopes
 # are asserted here because naming `permissions:` at all resets the unnamed

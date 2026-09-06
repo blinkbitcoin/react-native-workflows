@@ -194,13 +194,25 @@ jobs:
           ANDROID_UPLOAD_KEY_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEY_PASSWORD }}
           PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
         run: bash "$RNW/scripts/release/fastlane.sh" android build
+      # Between build and verify: the digests describe what the lane just
+      # produced, and verify is the step that checks the apk it is about to
+      # publish against them. The enriched copy lives beside the binaries and is
+      # uploaded with them, so the release's build-info.json names the exact
+      # bytes attached to it.
+      - name: Record artifact hashes
+        env:
+          BUILD_INFO_FILE: ${{ env.RNW_RELEASE_META_DIR }}/build-info.json
+        run: bash "$RNW/scripts/release/artifact-hashes.sh"
       # ANDROID_UPLOAD_CERT_SHA256 comes from build-env; the lane forwards it to
       # the consumer's verify-android.sh as --cert-sha256, which is what turns
       # "the aab is signed" into "the aab is signed by the expected key".
       - name: Fastlane android verify
         if: ${{ inputs.verify }}
         env:
-          BUILD_INFO_FILE: ${{ env.RNW_RELEASE_META_DIR }}/build-info.json
+          # The enriched copy, not release-meta's: it carries
+          # artifacts.apkSha256, which is what the consumer's verify-android
+          # compares the universal apk against.
+          BUILD_INFO_FILE: ${{ env.RNW_OUTPUT_DIR }}/build-info.json
           RELEASE_NOTES_STORE_FILE: ${{ env.RNW_RELEASE_META_DIR }}/notes-store.txt
           STORE_NOTES_JSON: ${{ env.RNW_RELEASE_META_DIR }}/store-notes.json
           # Published by build-env; forwarded explicitly so the contract is
@@ -217,7 +229,13 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: ${{ inputs.aab-artifact }}
-          path: ${{ env.RNW_OUTPUT_DIR }}/*.aab
+          # build-info.json travels with the binaries it describes: it is the
+          # copy carrying artifacts.apkSha256/aabSha256, and github-release.yml
+          # stages the asset artifacts over release-meta, so this is the one
+          # that ends up on the release.
+          path: |
+            ${{ env.RNW_OUTPUT_DIR }}/*.aab
+            ${{ env.RNW_OUTPUT_DIR }}/build-info.json
           # An .aab is already compressed.
           compression-level: 0
           retention-days: 30
