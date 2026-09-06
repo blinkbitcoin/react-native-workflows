@@ -60,7 +60,9 @@ case "${1:-}" in
             adb pull /sdcard/rnw-rec.mp4 "$RNW_OUT/android-$i.mp4" >/dev/null 2>&1 || true
             i=$((i + 1))
           done
-        ) &
+        ) > "$RNW_OUT/android-record.log" 2>&1 &
+        # The redirect is not cosmetic: a background job that keeps the caller's
+        # stdout open hangs anything that pipes this script's output.
         printf '%s\n' "$!" > "$rec_pid_file"
         log "recording to $RNW_OUT/android-N.mp4 (pid $(cat "$rec_pid_file"))"
         ;;

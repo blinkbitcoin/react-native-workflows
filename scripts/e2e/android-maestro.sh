@@ -39,7 +39,8 @@ trap cleanup EXIT
 rnw_run_hook RNW_E2E_SETUP_SCRIPT || die "RNW_E2E_SETUP_SCRIPT failed"
 bash "$HERE/app-launch.sh" android || die "app-launch.sh android failed"
 
-args=(test "$flows")
+# --platform android so an iOS simulator on the same machine is never picked.
+args=(test "$flows" --platform android)
 [ -f "$flows/config.yaml" ] && args+=(--config "$flows/config.yaml")
 args+=(
   -e "APP_ID=$(rnw_app_id android)"

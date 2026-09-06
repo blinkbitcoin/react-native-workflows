@@ -28,7 +28,11 @@ mkdir -p "$out"
 trap 'rnw_run_hook RNW_E2E_TEARDOWN_SCRIPT || true' EXIT
 rnw_run_hook RNW_E2E_SETUP_SCRIPT || die "RNW_E2E_SETUP_SCRIPT failed"
 
-args=(test "$flows")
+args=(test "$flows" --platform ios)
+# Address the picked simulator explicitly: a developer Mac (and a warm runner)
+# can have an Android emulator attached at the same time, and Maestro otherwise
+# picks whichever device it finds first.
+args+=(--udid "$(rnw_sim_udid)")
 [ -f "$flows/config.yaml" ] && args+=(--config "$flows/config.yaml")
 args+=(
   -e "APP_ID=$(rnw_app_id ios)"

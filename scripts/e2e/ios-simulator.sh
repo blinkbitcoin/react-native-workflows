@@ -63,7 +63,10 @@ case "${1:-}" in
     case "${2:-}" in
       start)
         # h264 (not the hevc default): the artifact has to play in a browser.
-        xcrun simctl io "$(rnw_sim_udid)" recordVideo --codec=h264 --force "$RNW_OUT/ios.mp4" &
+        # Redirected, and not only for tidiness: a background job holding the
+        # caller's stdout hangs anything that pipes this script's output.
+        xcrun simctl io "$(rnw_sim_udid)" recordVideo --codec=h264 --force "$RNW_OUT/ios.mp4" \
+          > "$RNW_OUT/ios-record.log" 2>&1 &
         printf '%s\n' "$!" > "$rec_pid_file"
         log "recording to $RNW_OUT/ios.mp4 (pid $(cat "$rec_pid_file"))"
         ;;

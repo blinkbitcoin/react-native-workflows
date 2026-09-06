@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Debug APK for the emulator. x86_64 only: the CI emulator is x86_64, and
-# building the other three ABIs quadruples the NDK work for nothing.
+# building the other three ABIs quadruples the NDK work for nothing. Override
+# with RNW_ANDROID_ABIS=arm64-v8a to run against an Apple-silicon emulator
+# locally (an x86_64 APK fails there with INSTALL_FAILED_NO_MATCHING_ABIS).
 # --no-daemon because the runner is thrown away after the job.
 # Needs: prebuild.sh android.
 # Output: android/app/build/outputs/apk/debug/app-debug.apk
@@ -14,7 +16,8 @@ root="$(consumer_root)"
 cd "$root/android"
 
 group "gradlew :app:assembleDebug"
-./gradlew :app:assembleDebug -PreactNativeArchitectures=x86_64 --no-daemon --build-cache
+./gradlew :app:assembleDebug \
+  -PreactNativeArchitectures="${RNW_ANDROID_ABIS:-x86_64}" --no-daemon --build-cache
 endgroup
 
 apk="$root/$RNW_ANDROID_APK"
