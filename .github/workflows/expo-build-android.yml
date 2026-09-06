@@ -229,13 +229,15 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: ${{ inputs.aab-artifact }}
-          # build-info.json travels with the binaries it describes: it is the
-          # copy carrying artifacts.apkSha256/aabSha256, and github-release.yml
-          # stages the asset artifacts over release-meta, so this is the one
-          # that ends up on the release.
+          # The build-info copy travels with the binaries it describes, under a
+          # platform-specific name on purpose: a release job merges several
+          # artifacts into one directory with `merge-multiple: true`, whose
+          # order is undefined, so two artifacts both carrying `build-info.json`
+          # would make the release's record a coin toss. github-release.yml
+          # folds this one back in explicitly, with merge-build-info.sh.
           path: |
             ${{ env.RNW_OUTPUT_DIR }}/*.aab
-            ${{ env.RNW_OUTPUT_DIR }}/build-info.json
+            ${{ env.RNW_OUTPUT_DIR }}/build-info.android.json
           # An .aab is already compressed.
           compression-level: 0
           retention-days: 30

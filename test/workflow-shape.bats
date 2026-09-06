@@ -195,6 +195,32 @@ TEMPLATE_LANES="$FIXTURES/consumer-min/fastlane/lanes/shared.rb"
   [ "$n" -eq 1 ] || fail "expo-build-android does not run artifact-hashes.sh exactly once"
 }
 
+# `merge-multiple: true` has no defined order, so two artifacts carrying
+# `build-info.json` would make the release's record a coin toss. The per-platform
+# record therefore ships under its own name and github-release folds it in
+# explicitly, after both downloads and before the upload.
+@test "the release's build-info precedence is explicit, not a merge-multiple race" {
+  a="$REPO_ROOT/.github/workflows/expo-build-android.yml"
+  paths=$(yq -r '[.jobs[].steps[]? | select(.uses? // "" | test("upload-artifact")) | .with.path] | join("\n")' "$a")
+  not_contains "$paths" "/build-info.json" \
+    || fail "expo-build-android uploads a bare build-info.json, which can collide: $paths"
+  contains "$paths" "/build-info.android.json" \
+    || fail "expo-build-android never uploads its per-platform build-info: $paths"
+  g="$REPO_ROOT/.github/workflows/github-release.yml"
+  names=$(yq -r '.jobs.release.steps[].name' "$g")
+  # `yq` here is the Go implementation, whose jq subset has no index(); the step
+  # order is read out of the numbered list instead.
+  step_index() { printf '%s\n' "$names" | grep -nxF "$1" | head -1 | cut -d: -f1; }
+  merge_i=$(step_index "Merge platform build-info")
+  notes_i=$(step_index "Download notes")
+  assets_i=$(step_index "Download assets")
+  upload_i=$(step_index "Release assets")
+  [ -n "$merge_i" ] || fail "github-release never merges the platform build-info: $names"
+  [ "$notes_i" -lt "$assets_i" ] || fail "github-release stages assets before notes: $names"
+  [ "$assets_i" -lt "$merge_i" ] || fail "the merge runs before the assets are staged: $names"
+  [ "$merge_i" -lt "$upload_i" ] || fail "the merge runs after the upload: $names"
+}
+
 # fastlane-lane builds nothing: the binaries its lanes upload were downloaded
 # into $RNW_ASSETS_DIR. The lanes read $RNW_OUTPUT_DIR, so the two have to be
 # the same directory here - and only here; the build workflows keep

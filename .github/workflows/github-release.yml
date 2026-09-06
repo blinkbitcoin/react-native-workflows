@@ -116,6 +116,10 @@ jobs:
         with:
           app-id: ${{ secrets.RELEASE_TAGGER_APP_ID }}
           private-key: ${{ secrets.RELEASE_TAGGER_APP_PRIVATE_KEY }}
+      # Notes first, assets second - but the staging order is not what decides
+      # the release's build-info.json: `merge-multiple` has no defined order, so
+      # the per-platform record ships as `build-info.<platform>.json` (it cannot
+      # collide) and the Merge step below folds it in explicitly.
       - name: Download notes
         if: ${{ inputs.notes-artifact != '' }}
         uses: actions/download-artifact@v8
@@ -129,6 +133,13 @@ jobs:
           pattern: ${{ inputs.assets-artifacts }}
           merge-multiple: true
           path: ${{ env.RNW_ASSETS_DIR }}
+      # After both downloads, before the upload: the release's build-info.json
+      # is expo-prepare's record plus the `artifacts` digests each platform job
+      # recorded for the bytes it built. Only `artifacts` is taken from those
+      # copies - a platform record is a mid-job snapshot and must not put a
+      # stale sha or stage back on the release.
+      - name: Merge platform build-info
+        run: bash "$RNW/scripts/release/merge-build-info.sh"
       - name: Release assets
         id: assets
         env:

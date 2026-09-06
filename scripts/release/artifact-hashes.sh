@@ -5,6 +5,8 @@
 #   $RNW_OUTPUT_DIR/build-info.json = build-info.json + {
 #     artifacts: { apkSha256, aabSha256 }
 #   }
+#   $RNW_OUTPUT_DIR/build-info.android.json = the same bytes, under the name
+#     that is uploaded with the binaries (see the note above the cp below)
 #
 # Why a copy rather than an edit in place: the release-meta artifact is produced
 # by expo-prepare, once, and is downloaded by both platform jobs at the same
@@ -67,7 +69,14 @@ if (process.env.AAB_SHA256) info.artifacts.aabSha256 = process.env.AAB_SHA256;
 writeFileSync(process.env.BUILD_INFO_DEST, JSON.stringify(info, null, 2) + "\n");
 '
 
-log "wrote $dest"
+# A second copy under a platform-specific name is what travels with the
+# binaries: a release job merges several artifacts into one directory with no
+# defined order, so two artifacts both carrying `build-info.json` would make the
+# release's record a coin toss. github-release.yml folds this one back in with
+# scripts/release/merge-build-info.sh, which takes only its `artifacts`.
+cp "$dest" "$RNW_OUTPUT_DIR/build-info.android.json"
+
+log "wrote $dest and $RNW_OUTPUT_DIR/build-info.android.json"
 if [ -n "$apk_sha" ]; then log "apkSha256=$apk_sha"; else log "no .apk in $RNW_OUTPUT_DIR - apkSha256 not recorded"; fi
 if [ -n "$aab_sha" ]; then log "aabSha256=$aab_sha"; else log "no .aab in $RNW_OUTPUT_DIR - aabSha256 not recorded"; fi
 # The verify lane reads the enriched copy, not the one expo-prepare produced.

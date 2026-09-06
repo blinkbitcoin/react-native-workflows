@@ -130,6 +130,9 @@ jobs:
           path: ${{ env.RNW_OTA_DIR }}
           if-no-files-found: error
           retention-days: 90
+          # Like every other upload in the family: a re-run of the job has to
+          # replace its own artifact rather than fail on the existing one.
+          overwrite: true
       - name: Publish update
         env:
           CHANNEL: ${{ inputs.channel }}

@@ -779,11 +779,21 @@ job that produces the binaries: `expo-build-android.yml` runs
 which writes an enriched **copy** into `$RNW_OUTPUT_DIR` carrying
 `artifacts.apkSha256` / `artifacts.aabSha256`. The `verify` lane reads that copy
 (`BUILD_INFO_FILE` points at it), so the consumer's `verify-android` can compare
-the universal apk against the digest recorded for it, and the copy is uploaded
-with the `.aab` — `github-release.yml` stages the asset artifacts over
-`release-meta`, so the `build-info.json` on the release is the one that names
-the bytes actually attached to it. The release-meta copy is never edited in
-place: both platform jobs download it, and two jobs must not write one file.
+the universal apk against the digest recorded for it. The release-meta copy is
+never edited in place: both platform jobs download it, and two jobs must not
+write one file.
+
+**How the digests reach the release.** The copy that travels with the binaries
+is uploaded as **`build-info.android.json`**, not `build-info.json`.
+`github-release.yml` stages several artifacts into one directory with
+`merge-multiple: true`, and that merge has **no defined order** — two artifacts
+carrying the same filename would make the release's record a coin toss, with
+either the digests or the whole record losing, silently. With distinct names the
+collision cannot happen, and a `Merge platform build-info` step
+(`scripts/release/merge-build-info.sh`) folds every `build-info.<platform>.json`
+into `build-info.json` after both downloads and before the upload. Only
+`artifacts` is taken from those copies: a platform record is a mid-job snapshot
+and must not be able to put a stale `sha` or `stage` back on the release.
 
 ### Consumer-side release scripts
 
@@ -795,16 +805,32 @@ The workflows call three things the **consumer** owns:
 | `scripts/release/verify-ios.sh <ipa-or-app> [--no-signing]` | the `ios verify` lane | The lane fails |
 | `scripts/release/verify-android.sh <aab> <apk> [--cert-sha256 X]` | the `android verify` lane | The lane fails |
 
-A consumer may also ship its own `scripts/release/resolve-version.sh`; this
-repo ships an identical one (same contract: prints `APP_VERSION=` /
-`APP_BUILD_NUMBER=`, writes `version` / `build-number` to `$GITHUB_OUTPUT`) and
-`expo-prepare.yml` uses **this repo's copy**, so the two must never drift. The
-resolution order is: a stable `vX.Y.Z` tag on HEAD → a version in
-`$RELEASE_PR_TITLE` → the open `autorelease: pending` PR's title (only when
-`GH_TOKEN` is set) → the newest **stable** `vX.Y.Z` tag with its patch bumped →
-`0.0.1`. Prerelease tags (`v1.2.3-rc.1`) are ignored at every step: they never
-win at HEAD and never seed the bump, so a repository that has only ever cut
-release candidates starts at `0.0.1` rather than regressing from them.
+A consumer may also ship its own `scripts/release/resolve-version.sh`.
+`expo-prepare.yml` uses **this repo's copy**, and the two must never *disagree*:
+a tag build and an OTA build of the same commit resolving different versions is
+the failure this guards against. They are **contract-identical, not
+byte-identical** — this repo's copy sources `scripts/lib/common.sh` (so it also
+writes `$GITHUB_ENV` and rejects a non-numeric `BUILD_NUMBER_OFFSET`), while a
+consumer's is standalone. What must match exactly is the contract: print
+`APP_VERSION=X.Y.Z` and `APP_BUILD_NUMBER=N`, write `version` / `build-number`
+to `$GITHUB_OUTPUT`, and resolve in this order, first match wins:
+
+1. a stable `vX.Y.Z` tag pointing at HEAD;
+2. HEAD's own subject when it is release-please's release commit,
+   `chore(main): release X.Y.Z` — **the release build's only source**: on that
+   merge commit the tag does not exist yet (release-please creates it from the
+   same push), a `push` event carries no `$RELEASE_PR_TITLE`, and the PR is
+   already closed, so without this the build was labelled with a patch bump of
+   the *previous* tag;
+3. a version inside `$RELEASE_PR_TITLE`;
+4. the open `autorelease: pending` PR's title (only when `GH_TOKEN` is set);
+5. the newest **stable** `vX.Y.Z` tag with its patch component bumped;
+6. `0.0.1` when the repository has no stable version tag at all.
+
+Prerelease tags (`v1.2.3-rc.1`) are ignored at every step: they never win at
+HEAD and never seed the bump, so a repository that has only ever cut release
+candidates starts at `0.0.1` rather than regressing from them. The build number
+is the first-parent commit count plus `BUILD_NUMBER_OFFSET` in both copies.
 
 ## Script contract
 

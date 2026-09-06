@@ -33,6 +33,11 @@ field() { node -e 'const i=require(process.argv[1]);const p=process.argv[2].spli
   # release-meta artifact and must not race to rewrite it.
   ! grep -q apkSha256 "$RNW_RELEASE_META_DIR/build-info.json" \
     || fail "the release-meta copy was edited in place"
+  # The uploaded name is platform-specific, so it cannot collide with
+  # release-meta's build-info.json inside a merge-multiple download.
+  [ -f "$RNW_OUTPUT_DIR/build-info.android.json" ] || fail "no per-platform copy was written"
+  [ "$(cat "$RNW_OUTPUT_DIR/build-info.android.json")" = "$(cat "$RNW_OUTPUT_DIR/build-info.json")" ] \
+    || fail "the per-platform copy differs from the one verify reads"
 }
 
 @test "publishes the enriched path and the digests for later steps" {
