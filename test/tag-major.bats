@@ -61,3 +61,30 @@ setup() {
   TAG=v0.1.0 run bash "$REPO_ROOT/scripts/self/tag-major.sh"
   [ "$status" -ne 0 ]
 }
+
+@test "a prerelease tag is skipped, not moved" {
+  cd "$work"
+  git tag v1.2.0-rc.1
+  TAG=v1.2.0-rc.1 run bash "$REPO_ROOT/scripts/self/tag-major.sh" --local
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"skipping prerelease"* ]]
+  run git tag --points-at HEAD
+  [ "$output" = "v1.2.0-rc.1" ]
+  ! git rev-parse -q --verify refs/tags/v1 >/dev/null
+  ! git rev-parse -q --verify refs/tags/v1.2 >/dev/null
+}
+
+@test "running the same TAG twice is idempotent" {
+  cd "$work"
+  git tag v0.1.0
+  TAG=v0.1.0 run bash "$REPO_ROOT/scripts/self/tag-major.sh" --local
+  [ "$status" -eq 0 ]
+  first_v0="$(git rev-parse v0)"
+  first_v01="$(git rev-parse v0.1)"
+
+  TAG=v0.1.0 run bash "$REPO_ROOT/scripts/self/tag-major.sh" --local
+  [ "$status" -eq 0 ]
+  [ "$(git rev-parse v0)" = "$first_v0" ]
+  [ "$(git rev-parse v0.1)" = "$first_v01" ]
+  [ "$(git rev-parse v0)" = "$(git rev-parse HEAD)" ]
+}

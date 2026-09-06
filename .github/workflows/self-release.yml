@@ -20,8 +20,8 @@ jobs:
         id: release
         uses: googleapis/release-please-action@v5
         with:
-          release-type: simple
-          package-name: react-native-workflows
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
           token: ${{ secrets.RELEASE_PLEASE_TOKEN || github.token }}
   major-tag:
     needs: release-please

@@ -3,7 +3,10 @@
   "release-type": "simple",
   "packages": {
     ".": {
+      "release-type": "simple",
       "package-name": "react-native-workflows",
+      "include-component-in-tag": false,
+      "bump-minor-pre-major": true,
       "changelog-sections": [
         { "type": "feat", "section": "Features" },
         { "type": "fix", "section": "Bug Fixes" },

@@ -5,6 +5,11 @@ require_cmd git
 
 : "${TAG:?TAG not set (expected a release-please tag_name output, e.g. v0.1.0)}"
 
+if [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-.+$ ]]; then
+  log "skipping prerelease tag '$TAG' (moving major/minor tags only track full releases)"
+  exit 0
+fi
+
 [[ "$TAG" =~ ^v([0-9]+)\.([0-9]+)\.[0-9]+$ ]] || die "TAG '$TAG' is not a plain vX.Y.Z tag"
 major="v${BASH_REMATCH[1]}"
 minor="v${BASH_REMATCH[1]}.${BASH_REMATCH[2]}"
