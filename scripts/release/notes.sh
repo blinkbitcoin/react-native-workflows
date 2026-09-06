@@ -38,12 +38,12 @@ if [ -f "scripts/release/notes.mjs" ]; then
     # commit references); the generator takes the section a store listing can
     # actually use rather than the raw markdown.
     log "running the consumer's notes.mjs --from-body --body-section"
-    NOTES_LOCALES="${NOTES_LOCALES:-en}" \
+    NOTES_LOCALES="${NOTES_LOCALES:-en-US}" \
       node scripts/release/notes.mjs --from-body "$RELEASE_BODY_FILE" --body-section \
       "${locale_args[@]+"${locale_args[@]}"}" --out "$RNW_RELEASE_META_DIR"
   else
     log "running the consumer's notes.mjs --from-commits"
-    NOTES_LOCALES="${NOTES_LOCALES:-en}" \
+    NOTES_LOCALES="${NOTES_LOCALES:-en-US}" \
       node scripts/release/notes.mjs --from-commits \
       "${locale_args[@]+"${locale_args[@]}"}" --out "$RNW_RELEASE_META_DIR"
   fi

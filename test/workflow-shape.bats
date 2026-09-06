@@ -172,6 +172,29 @@ TEMPLATE_LANES="$FIXTURES/consumer-min/fastlane/lanes/shared.rb"
   done
 }
 
+# A store listing is keyed on the full metadata locale name (en-US, de-DE,
+# pt-BR); a bare language code matches no listing, so the default cannot be
+# `en` however natural that reads.
+@test "expo-prepare's notes-locales default is a store metadata locale" {
+  f="$REPO_ROOT/.github/workflows/expo-prepare.yml"
+  got=$(yq -r '.on.workflow_call.inputs."notes-locales".default' "$f")
+  [ "$got" = "en-US" ] || fail "notes-locales defaults to '$got', expected en-US"
+  grep -q '| `notes-locales` | `en-US` |' "$REPO_ROOT/docs/consumer-guide.md" \
+    || fail "the consumer guide still documents a different notes-locales default"
+}
+
+# The digest step writes an enriched build-info.json into $RNW_OUTPUT_DIR; the
+# in-job verify has to read *that* one, or artifacts.apkSha256 is never there
+# and the lane's apk-sha check silently skips.
+@test "expo-build-android's verify reads the build-info carrying the digests" {
+  f="$REPO_ROOT/.github/workflows/expo-build-android.yml"
+  got=$(yq -r '[.jobs[].steps[] | select(.name == "Fastlane android verify")][0].env.BUILD_INFO_FILE' "$f")
+  [ "$got" = '${{ env.RNW_OUTPUT_DIR }}/build-info.json' ] \
+    || fail "the android verify step reads BUILD_INFO_FILE '$got'"
+  n=$(yq -r '[.jobs[].steps[]? | select((.run? // "") | test("release/artifact-hashes.sh"))] | length' "$f")
+  [ "$n" -eq 1 ] || fail "expo-build-android does not run artifact-hashes.sh exactly once"
+}
+
 # fastlane-lane builds nothing: the binaries its lanes upload were downloaded
 # into $RNW_ASSETS_DIR. The lanes read $RNW_OUTPUT_DIR, so the two have to be
 # the same directory here - and only here; the build workflows keep

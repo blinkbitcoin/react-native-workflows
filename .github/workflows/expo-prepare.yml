@@ -31,9 +31,9 @@ on:
         type: number
         default: 1000
       notes-locales:
-        description: Locales the consumer's scripts/release/notes.mjs should emit store notes for
+        description: "Locales the consumer's scripts/release/notes.mjs should emit store notes for. These are store metadata locale names, not language codes: App Store Connect and Play both key their listings on the full form (en-US, de-DE, pt-BR), and a bare 'en' matches no listing"
         type: string
-        default: 'en'
+        default: 'en-US'
       stage:
         description: Release stage recorded in build-info.json (internal/beta/production)
         type: string

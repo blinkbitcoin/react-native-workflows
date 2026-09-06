@@ -348,7 +348,7 @@ writes `build-info.json` and the store notes, and uploads them as the
 | --- | --- | --- |
 | `repository`, `ref`, `working-directory`, `linux-runner`, `macos-runner`, `native-cache-version` | (as above) | The consumer checkout uses `fetch-depth: 0` — version resolution reads `v*` tags and counts first-parent commits, and both are empty in a shallow clone |
 | `build-number-offset` | `1000` | Added to the first-parent commit count. Raise it, never lower it: App Store Connect and Play both permanently reject a build number that goes backwards |
-| `notes-locales` | `en` | Locales handed to the consumer's `scripts/release/notes.mjs` |
+| `notes-locales` | `en-US` | Locales handed to the consumer's `scripts/release/notes.mjs`, and passed to it as `--locales`. **Store metadata locale names, not language codes** — App Store Connect and Play key their listings on the full form (`en-US`, `de-DE`, `pt-BR`); a bare `en` matches no listing |
 | `stage` | `internal` | Written to `build-info.json`'s `stage` |
 | `release-body-file` | `''` | Consumer-relative file holding a release body; switches note generation to `--from-body` |
 | `release-tag` | `''` | Existing release tag whose **body** becomes the store notes, fetched with `gh release view`. It also becomes the checked-out ref and the gated/stamped commit — see [Preparing from a release tag](#preparing-from-a-release-tag) |

@@ -10,9 +10,10 @@
 #                      it really has to move.
 #   promote            take $TAG out of pre-release, without making it latest
 #   latest             take $TAG out of pre-release and mark it latest
-#   append             append a section to $TAG's existing body
+#   append             append a section to $TAG's existing body (body only:
+#                      this mode uploads nothing and does not touch SHA256SUMS)
 #
-# Every mode uploads whatever of the fixed asset set is present in
+# Every mode except `append` uploads whatever of the fixed asset set is present in
 # $RNW_ASSETS_DIR (`--clobber`, so re-running a stage is safe) together with a
 # freshly computed SHA256SUMS. The list is fixed on purpose: a release whose
 # assets vary run to run cannot be verified by a downstream script.
@@ -242,7 +243,12 @@ case "$mode" in
       printf '%s\n' "$end_marker"
     } > "$body_file"
     gh release edit "$tag" --notes-file "$body_file"
-    upload_assets
+    # No upload_assets here, deliberately. `append` records what a store action
+    # did (a rollout percentage, a halt) from a job that has no binaries staged:
+    # an upload would attach nothing and, worse, regenerate SHA256SUMS over
+    # whatever happens to be in $RNW_ASSETS_DIR - replacing the checksum file
+    # that describes the release's real assets with one computed from an empty
+    # or partial directory. append touches the body, nothing else.
     ;;
   *)
     die "unknown mode '$mode' (create-prerelease|promote|latest|append)"

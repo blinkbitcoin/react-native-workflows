@@ -327,6 +327,23 @@ EOF
   [ "$first" = "$(cat "$RNW_TEST_BODY")" ] || fail "the run after migration was not idempotent"
 }
 
+# append runs after a store action, from a job with no binaries staged: an
+# upload there attaches nothing and regenerates SHA256SUMS over an empty or
+# partial directory, replacing the checksum file that describes the release's
+# real assets.
+@test "append touches the body and nothing else" {
+  : > "$RNW_TEST_EXISTS"
+  assets
+  printf 'real sums\n' > "$ASSETS/SHA256SUMS"
+  printf -- '- rolled out to 10%%\n' > "$BATS_TEST_TMPDIR/section.md"
+  TAG=v1.2.3 NOTES_FILE="$BATS_TEST_TMPDIR/section.md" APPEND_TITLE='Store rollout' release append
+  [ "$status" -eq 0 ] || fail "exited $status: $output"
+  ! grep -q '^release upload' "$RNW_TEST_LOG" || fail "append uploaded assets: $(cat "$RNW_TEST_LOG")"
+  [ "$(cat "$ASSETS/SHA256SUMS")" = "real sums" ] \
+    || fail "append regenerated SHA256SUMS: $(cat "$ASSETS/SHA256SUMS")"
+  contains "$(cat "$RNW_TEST_BODY")" "rolled out to 10%" || fail "the body was not updated"
+}
+
 @test "append without a notes file is fatal" {
   : > "$RNW_TEST_EXISTS"
   TAG=v1.2.3 release append
