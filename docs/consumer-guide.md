@@ -518,16 +518,24 @@ Fingerprint gate → `expo export` → publish → manifest smoke check.
 
 No outputs. Secrets: `consumer-token`, `OTA_PUBLISH_TOKEN` (both optional).
 
-> **Unverified flags.** `scripts/ota/publish.sh` calls
+What is published is the export `scripts/ota/export.sh` wrote to `$RNW_OTA_DIR`
+— the bytes the fingerprint gate vetted — not an export the CLI performs for
+itself after the gate has run. That export is also uploaded as the
+`ota-export-<channel>` artifact (90 days, `!cancelled()`), **source maps
+included**: an OTA update is the one build whose crash reports cannot be
+symbolicated from a store-side dSYM or mapping file, so those maps are the only
+way to read a stack trace from it and they die with the runner otherwise.
+
+> **Unverified against the CLI.** `scripts/ota/publish.sh` calls
 > `npx eoas@$OTA_CLI_VERSION publish --branch CHANNEL --rollout-percentage N
-> --non-interactive`. Those three flags come from the OTA runbook and could not
-> be checked against the CLI offline. Confirm them against
-> `npx eoas@<pinned version> publish --help` the first time `ota-cli-version`
-> is pinned in a real environment, and fix the script and this note together.
-> `OTA_PUBLISH_TOKEN` is on the same checklist: it is put in the publish step's
-> environment but `scripts/ota/publish.sh` never names it, so whether `eoas`
-> reads that exact variable is unverified — a wrong name fails as an auth error,
-> not as a flag error.
+> --input-dir $RNW_OTA_DIR --skip-bundler --non-interactive`, with
+> `OTA_PUBLISH_TOKEN` exported to the CLI as `EXPO_TOKEN`. The flags and that
+> variable name come from the OTA runbook (`--input-dir` only takes effect with
+> `--skip-bundler`, as in `eas-cli`) and could not be checked against the CLI
+> offline. Confirm all of it against `npx eoas@<pinned version> publish --help`
+> the first time `ota-cli-version` is pinned in a real environment, and fix the
+> script and this note together. A wrong token name fails as an auth error, not
+> as a flag error.
 
 ### `build-env`
 

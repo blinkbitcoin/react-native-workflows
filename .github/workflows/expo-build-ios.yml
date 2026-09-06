@@ -213,6 +213,10 @@ jobs:
           ASC_KEY_P8_BASE64: ${{ secrets.ASC_KEY_P8_BASE64 }}
         run: bash "$RNW/scripts/release/fastlane.sh" ios verify
       - name: Upload ios-ipa
+        # `!cancelled()`, like the Android apk and mapping uploads: a failed
+        # `verify` is exactly when a human needs the .ipa to reproduce it, and
+        # without this the artifact dies with the runner.
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7
         with:
           name: ${{ inputs.ipa-artifact }}

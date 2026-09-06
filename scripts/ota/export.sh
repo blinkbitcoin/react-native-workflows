@@ -20,6 +20,11 @@ group "expo export (ota)"
 CI=1 npx expo export --platform all --source-maps --output-dir "$RNW_OTA_DIR"
 endgroup
 
-[ -d "$RNW_OTA_DIR" ] || die "expo export produced no output at $RNW_OTA_DIR"
+# On content, not on the directory: mkdir -p above already guarantees the
+# directory exists, so `[ -d ]` here could never fire.
+[ -n "$(ls -A "$RNW_OTA_DIR" 2>/dev/null)" ] ||
+  die "expo export produced no output in $RNW_OTA_DIR"
+[ -f "$RNW_OTA_DIR/metadata.json" ] ||
+  die "expo export wrote no metadata.json in $RNW_OTA_DIR - the export is not a publishable update"
 log "ota export contents:"
 ls -l "$RNW_OTA_DIR" >&2

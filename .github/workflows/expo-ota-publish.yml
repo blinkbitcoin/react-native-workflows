@@ -117,6 +117,19 @@ jobs:
         run: bash "$RNW/scripts/ota/fingerprint-gate.sh" "$CHANNEL_BUILD_INFO"
       - name: Export update
         run: bash "$RNW/scripts/ota/export.sh"
+      # The export carries the source maps, and an OTA update is the one build
+      # whose crash reports cannot be symbolicated from a store-side
+      # dSYM/mapping - so these are the only way to read a stack trace from it,
+      # and they die with the runner unless they are uploaded. `!cancelled()`:
+      # a failed publish is exactly when the bundle is worth having.
+      - name: Upload OTA export
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: ota-export-${{ inputs.channel }}
+          path: ${{ env.RNW_OTA_DIR }}
+          if-no-files-found: error
+          retention-days: 90
       - name: Publish update
         env:
           CHANNEL: ${{ inputs.channel }}
