@@ -92,9 +92,16 @@ jobs:
     timeout-minutes: 60
     permissions:
       contents: read
-      # `gh run list` in require-green-run.sh reads other workflows' runs. A
-      # called workflow's job can only use what the caller granted, so a caller
-      # that sets require-green-workflow must grant actions: read on the job.
+      # `gh run list` in require-green-run.sh reads other workflows' runs.
+      #
+      # Static on purpose, and unconditional: job-level `permissions:` cannot be
+      # conditional, so this request is made on *every* call, whether or not
+      # require-green-workflow is set. A called workflow's job can only use what
+      # the caller granted, so EVERY caller of this workflow must grant
+      # `actions: read` on the calling job - a caller granting only
+      # `contents: read` is rejected at validation ("is requesting 'actions:
+      # read', but is only allowed 'actions: none'") before any step runs.
+      # docs/consumer-guide.md says so next to this workflow's inputs.
       actions: read
     env:
       WORKING_DIRECTORY: ${{ inputs.working-directory }}

@@ -151,6 +151,43 @@ release() { run bash "$REPO_ROOT/scripts/release/release-assets.sh" "$@"; }
   grep -q "^$expected  app.ipa$" "$ASSETS/SHA256SUMS" || fail "wrong digest for the carried ipa"
 }
 
+# N1: the download used to land in $RNW_ASSETS_DIR with --clobber, so the source
+# pre-release's build-info.json and notes (an *earlier* stage's) replaced this
+# run's - on the release record and in the OTA gate's baseline.
+@test "this run's release-meta wins over the source pre-release's copy" {
+  : > "$RNW_TEST_EXISTS"
+  source_release
+  printf 'this-run\n' > "$ASSETS/build-info.json"
+  printf 'this-run notes\n' > "$ASSETS/notes.md"
+  printf 'source\n' > "$RNW_TEST_SOURCE_ASSETS/build-info.json"
+  printf 'source notes\n' > "$RNW_TEST_SOURCE_ASSETS/notes.md"
+  TAG=v1.2.3 FROM_TAG="$RNW_TEST_SOURCE_TAG" release promote
+  [ "$status" -eq 0 ] || fail "exited $status: $output"
+  [ "$(cat "$ASSETS/build-info.json")" = "this-run" ] \
+    || fail "the source build-info.json overwrote this run's: $(cat "$ASSETS/build-info.json")"
+  [ "$(cat "$ASSETS/notes.md")" = "this-run notes" ] \
+    || fail "the source notes overwrote this run's: $(cat "$ASSETS/notes.md")"
+  # The binaries this run does not have still come across.
+  upload="$(grep '^release upload v1.2.3' "$RNW_TEST_LOG")"
+  contains "$upload" "app.aab" || fail "the carried-forward aab was dropped: $upload"
+}
+
+# N2: with no carried asset, promote used to take the release out of pre-release
+# with nothing attached and then (with delete-source) delete the tested bytes.
+@test "promote refuses a from-tag release that carries no assets" {
+  : > "$RNW_TEST_EXISTS"
+  : > "$RNW_TEST_SOURCE_EXISTS"
+  rm -f "$RNW_TEST_SOURCE_ASSETS"/*
+  printf 'this-run\n' > "$ASSETS/build-info.json"
+  TAG=v1.2.3 FROM_TAG="$RNW_TEST_SOURCE_TAG" DELETE_SOURCE=true release promote
+  [ "$status" -ne 0 ] || fail "promoted an empty source release: $output"
+  contains "$output" "refusing to promote an empty release" || fail "unexpected message: $output"
+  ! grep -q '^release delete' "$RNW_TEST_LOG" || fail "deleted the source anyway: $(cat "$RNW_TEST_LOG")"
+  ! grep -q '^release upload' "$RNW_TEST_LOG" || fail "uploaded before the check: $(cat "$RNW_TEST_LOG")"
+  ! grep -q -- '--prerelease=false' "$RNW_TEST_LOG" || fail "took the release out of pre-release anyway"
+  [ -f "$RNW_TEST_SOURCE_EXISTS" ] || fail "the source pre-release is gone"
+}
+
 @test "promote does not delete the source unless asked" {
   : > "$RNW_TEST_EXISTS"
   source_release

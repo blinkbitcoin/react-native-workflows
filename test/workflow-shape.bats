@@ -172,6 +172,23 @@ TEMPLATE_LANES="$FIXTURES/consumer-min/fastlane/lanes/shared.rb"
   done
 }
 
+# Job-level `permissions:` cannot be conditional, so expo-prepare asks for
+# `actions: read` on every call and every caller has to grant it. Both scopes
+# are asserted here because naming `permissions:` at all resets the unnamed
+# ones to none: dropping `contents: read` would break the checkout instead.
+@test "expo-prepare's job permissions are static contents+actions read" {
+  f="$REPO_ROOT/.github/workflows/expo-prepare.yml"
+  [ "$(yq -r '.jobs.prepare.permissions.contents' "$f")" = "read" ] \
+    || fail "expo-prepare's prepare job does not declare contents: read"
+  [ "$(yq -r '.jobs.prepare.permissions.actions' "$f")" = "read" ] \
+    || fail "expo-prepare's prepare job does not declare actions: read"
+  [ "$(yq -r '.jobs.prepare.permissions | keys | length' "$f")" -eq 2 ] \
+    || fail "expo-prepare's prepare job asks for more than contents+actions: $(yq -r '.jobs.prepare.permissions' "$f")"
+  # The consumer guide is where a caller learns it has to grant this.
+  grep -q 'Every caller of `expo-prepare.yml` must grant `actions: read`' "$REPO_ROOT/docs/consumer-guide.md" \
+    || fail "the consumer guide does not tell callers to grant actions: read"
+}
+
 @test "no workflow sets a top-level concurrency" {
   for w in "${WORKFLOWS[@]}"; do
     has=$(yq -r 'has("concurrency")' "$w")

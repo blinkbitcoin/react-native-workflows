@@ -2,7 +2,12 @@
 # Create or move a GitHub release and attach the fixed release asset set.
 #
 # Usage: release-assets.sh MODE
-#   create-prerelease  create (or update) $TAG as a pre-release at $TARGET_SHA
+#   create-prerelease  create (or update) $TAG as a pre-release at $TARGET_SHA.
+#                      $TARGET_SHA applies to *creation* only: once the tag
+#                      exists, GitHub ignores a release's target_commitish, so
+#                      a re-run after a force-push updates the release but
+#                      leaves the tag on the original commit. Delete the tag if
+#                      it really has to move.
 #   promote            take $TAG out of pre-release, without making it latest
 #   latest             take $TAG out of pre-release and mark it latest
 #   append             append a section to $TAG's existing body
@@ -13,9 +18,18 @@
 # assets vary run to run cannot be verified by a downstream script.
 #
 # `promote` also carries assets forward: with $FROM_TAG set it downloads every
-# asset of that pre-release into $RNW_ASSETS_DIR first, so the promoted release
-# ships the exact binaries that were tested rather than a rebuild. $DELETE_SOURCE
-# then removes the pre-release and its tag once the upload has succeeded.
+# asset of that pre-release, so the promoted release ships the exact binaries
+# that were tested rather than a rebuild. $DELETE_SOURCE then removes the
+# pre-release and its tag once the upload has succeeded.
+#
+# The carried-forward files never overwrite this run's: they land in a scratch
+# directory and are copied into $RNW_ASSETS_DIR only where no file of that name
+# is already there. Both sides carry build-info.json, store-notes.json,
+# notes-store.txt and notes.md, and the source is by definition an *earlier*
+# stage - promoting a beta from an internal pre-release with --clobber shipped
+# the internal run's `"stage": "internal"` build-info and its commit-derived
+# notes on the beta release, and handed that same build-info to the OTA
+# fingerprint gate downstream as its baseline.
 #
 # Env: TAG (required), TITLE, TARGET_SHA, NOTES_FILE, APPEND_TITLE, FROM_TAG,
 #      DELETE_SOURCE, RNW_ASSETS_DIR (default $RNW_OUT/assets), GH_TOKEN,
@@ -34,7 +48,9 @@ assets_dir="${RNW_ASSETS_DIR:-$RNW_OUT/assets}"
 # a later invocation.
 body_file="${RUNNER_TEMP:-/tmp}/rnw-release-body.md"
 stripped_file="$body_file.stripped"
-trap 'rm -f "$body_file" "$stripped_file"' EXIT
+# Where a $FROM_TAG release's assets are staged before being merged in.
+carry_dir="${RUNNER_TEMP:-/tmp}/rnw-carry-assets"
+trap 'rm -f "$body_file" "$stripped_file"; rm -rf "$carry_dir"' EXIT
 
 # The fixed asset set, as basename globs. Anything else in the directory is
 # deliberately ignored rather than silently published.
@@ -52,14 +68,16 @@ ASSET_GLOBS=(
 )
 
 assets=()
+# collect_assets [DIR] - fill $assets with the fixed set found in DIR
+# (default $assets_dir).
 collect_assets() {
-  local g f
+  local dir="${1:-$assets_dir}" g f
   assets=()
-  [ -d "$assets_dir" ] || return 0
+  [ -d "$dir" ] || return 0
   for g in "${ASSET_GLOBS[@]}"; do
     # Unquoted on purpose: $g is the glob pattern being expanded.
     # shellcheck disable=SC2086
-    for f in "$assets_dir"/$g; do
+    for f in "$dir"/$g; do
       if [ -f "$f" ]; then assets+=("$f"); fi
     done
   done
@@ -131,8 +149,25 @@ case "$mode" in
       # information, not an error.
       if gh release view "$FROM_TAG" >/dev/null 2>&1; then
         group "carry assets forward from $FROM_TAG"
-        gh release download "$FROM_TAG" --dir "$assets_dir" --clobber ||
+        rm -rf "$carry_dir"
+        mkdir -p "$carry_dir"
+        gh release download "$FROM_TAG" --dir "$carry_dir" --clobber ||
           die "could not download the assets of $FROM_TAG"
+        collect_assets "$carry_dir"
+        # An empty carry is fatal, and fatal *here*: one step further on, the
+        # release would be taken out of pre-release with no binaries attached
+        # and, with DELETE_SOURCE, the tested bytes deleted right after. This is
+        # what a from-tag pointing at a release that never got its assets (a
+        # BUILD_NUMBER_OFFSET changed between stages, say) looks like.
+        [ "${#assets[@]}" -gt 0 ] ||
+          die "$FROM_TAG carries none of the expected release assets; refusing to promote an empty release"
+        for f in "${assets[@]}"; do
+          if [ -e "$assets_dir/$(basename "$f")" ]; then
+            log "keeping this run's $(basename "$f") - not overwriting it with $FROM_TAG's copy"
+          else
+            cp "$f" "$assets_dir/"
+          fi
+        done
         ls -l "$assets_dir" >&2
         endgroup
       else

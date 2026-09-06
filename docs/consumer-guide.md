@@ -353,16 +353,32 @@ writes `build-info.json` and the store notes, and uploads them as the
 | `release-body-file` | `''` | Consumer-relative file holding a release body; switches note generation to `--from-body` |
 | `release-tag` | `''` | Existing release tag whose **body** becomes the store notes, fetched with `gh release view`. It also becomes the checked-out ref and the gated/stamped commit — see [Preparing from a release tag](#preparing-from-a-release-tag) |
 | `build-env` | `{}` | Non-secret build environment — see [`build-env`](#build-env) |
-| `require-green-workflow` | `''` | Workflow file name (e.g. `release-internal.yml`) that must have concluded `success` for `github.sha` before preparing. Empty disables the gate. The gate step runs **before** `Setup` (so a red upstream fails before anything is installed), which means it uses the `gh` and `yq` from the runner image — true of GitHub-hosted `ubuntu-latest`, not necessarily of a self-hosted `linux-runner` |
+| `require-green-workflow` | `''` | Workflow file name (e.g. `release-internal.yml`) that must have concluded `success` for the **resolved target sha** (the `release-tag` commit when `release-tag` is set, else `github.sha`) before preparing. Empty disables the gate. The gate step runs **before** `Setup` (so a red upstream fails before anything is installed), which means it uses the `gh` and `yq` from the runner image — true of GitHub-hosted `ubuntu-latest`, not necessarily of a self-hosted `linux-runner` |
 | `release-meta-artifact` | `release-meta` | Artifact name for `build-info.json`, `store-notes.json`, `notes-store.txt`, `notes.md` |
 
 Outputs: `version`, `build-number`, `fp-ios`, `fp-android`, `sha` (the commit
 the release was prepared from). Secrets: `consumer-token`, `ANTHROPIC_API_KEY`
 and `OPENAI_API_KEY` (all optional — the two API keys are only needed when the
 consumer's `notes.mjs` drafts store notes with an LLM; the provider, model and
-base URL are non-secret and belong in `build-env`). The job requests `actions: read` on top of
-`contents: read` so `gh run list` can see the gated workflow's runs — a caller
-that sets `require-green-workflow` must grant it.
+base URL are non-secret and belong in `build-env`).
+
+> **Every caller of `expo-prepare.yml` must grant `actions: read` on the calling
+> job**, on top of `contents: read`:
+>
+> ```yaml
+>   prepare:
+>     uses: blinkbitcoin/react-native-workflows/.github/workflows/expo-prepare.yml@v0
+>     permissions:
+>       contents: read
+>       actions: read
+> ```
+>
+> The `prepare` job declares `actions: read` (for `gh run list` in the
+> `require-green-workflow` gate) and job-level `permissions:` **cannot be
+> conditional** — the request is made on every call, whether or not
+> `require-green-workflow` is set. A caller that grants only `contents: read`
+> fails validation with *"is requesting 'actions: read', but is only allowed
+> 'actions: none'"* before a single step runs.
 
 ### `expo-build-ios.yml`
 
@@ -461,7 +477,7 @@ Creates or moves a GitHub release and attaches the fixed asset set.
 | `repository`, `ref`, `working-directory`, `linux-runner`, `macos-runner`, `native-cache-version` | (as above) | This workflow never checks the consumer out, so only `repository` and `linux-runner` do anything |
 | `mode` | (required) | `create-prerelease`, `promote`, `latest` or `append` |
 | `tag` | (required) | Release tag to create or move |
-| `sha` | `''` | Commit the tag points at (`create-prerelease` only) |
+| `sha` | `''` | Commit the tag points at. **Creation only**: once the tag exists GitHub ignores a release's target commit, so a re-run after a force-push updates the release but leaves the tag where it was |
 | `title` | `''` | Release title; empty keeps GitHub's default (the tag) |
 | `notes-artifact` | `release-meta` | Artifact carrying the notes file |
 | `notes-file` | `notes.md` | File inside that artifact used as the body (or, in `append` mode, as the appended section) |
@@ -593,6 +609,22 @@ pre-release and re-uploads it to the target tag (`--clobber`), regenerating
 **the same bytes that were tested**, not a rebuild from the same source — a
 rebuild is a different binary, with a different signature and a different
 fingerprint, and the OTA gate downstream compares fingerprints.
+
+**This run's files win.** The carried-forward assets are staged in a scratch
+directory and copied in only where this run has no file of that name. Both
+sides carry `build-info.json`, `store-notes.json`, `notes-store.txt` and
+`notes.md`, and the source is by definition an earlier stage: promoting `vX.Y.Z`
+from `vX.Y.Z-build.N` must keep the beta run's `"stage"` and its
+release-body-derived notes, not the internal run's — the more so because the
+same `build-info.json` becomes the OTA gate's fingerprint baseline downstream.
+
+**A `from-tag` that carries none of the fixed asset set is fatal**, before
+anything is uploaded, before the release leaves pre-release and before
+`delete-source` can delete anything. That is what a `from-tag` pointing at a
+release which never received its binaries looks like — most often because
+`build-number-offset` changed between stages, so the computed pre-release tag
+names a release that does not exist or is empty. The old behaviour was a
+silently empty promoted release plus a deleted source.
 
 `delete-source: true` then removes the pre-release and its tag, but only after
 the upload succeeded: deleting first would leave no copy of the binaries
