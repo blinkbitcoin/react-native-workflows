@@ -26,6 +26,10 @@ on:
         description: Native cache key prefix; bump to invalidate every native cache at once
         type: string
         default: 'v1'
+      native-extra-globs:
+        description: Extra space-separated consumer-relative shell globs whose file contents are folded into the native dependency hash
+        type: string
+        default: ''
       ios:
         description: Run the iOS build and simulator suite (off by default; macOS runners bill at 10x)
         type: boolean
@@ -127,6 +131,7 @@ jobs:
         with:
           working-directory: ${{ inputs.working-directory }}
           native-cache-version: ${{ inputs.native-cache-version }}
+          native-extra-globs: ${{ inputs.native-extra-globs }}
           xcode: ${{ inputs.xcode }}
       # The built .app plus the generated workspace: ios-pack.sh resolves the
       # scheme from ios/*.xcworkspace, and on a cache hit no prebuild has run.
@@ -163,6 +168,7 @@ jobs:
         if: ${{ steps.restore.outputs.cache-hit != 'true' }}
         run: bash "$RNW/scripts/native/pods.sh"
       - name: Build iOS app
+        id: build
         if: ${{ steps.restore.outputs.cache-hit != 'true' }}
         run: bash "$RNW/scripts/native/ios-build.sh"
       - name: Save iOS app cache
@@ -173,11 +179,15 @@ jobs:
             ${{ inputs.working-directory }}/ios/build/Build/Products/Debug-iphonesimulator
             ${{ inputs.working-directory }}/ios/*.xcworkspace
           key: ${{ steps.keys.outputs.ios-key }}
+      # Not `always()`: when the build itself failed there is no .app and no
+      # workspace, so ios-pack.sh dies and the upload's `if-no-files-found:
+      # error` dies after it - two misleading red steps stacked on the real
+      # error. A cache hit leaves `conclusion` as `skipped`, which still packs.
       - name: Pack iOS app
-        if: always()
+        if: ${{ !cancelled() && steps.build.conclusion != 'failure' }}
         run: bash "$RNW/scripts/native/ios-pack.sh"
       - name: Upload iOS app
-        if: always()
+        if: ${{ !cancelled() && steps.build.conclusion != 'failure' }}
         uses: actions/upload-artifact@v7
         with:
           name: ${{ inputs.ios-artifact-name }}
@@ -299,6 +309,7 @@ jobs:
         with:
           working-directory: ${{ inputs.working-directory }}
           native-cache-version: ${{ inputs.native-cache-version }}
+          native-extra-globs: ${{ inputs.native-extra-globs }}
       - name: Restore APK cache
         id: restore
         uses: actions/cache/restore@v6

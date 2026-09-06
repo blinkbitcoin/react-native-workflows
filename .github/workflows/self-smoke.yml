@@ -50,8 +50,14 @@ jobs:
     with:
       repository: ${{ inputs.repository || 'blinkbitcoin/react-native-mobile-template' }}
       ref: ${{ inputs.ref || 'main' }}
-      ios: ${{ inputs.ios == true }}
-      android: ${{ inputs.android != false }}
+      # On the `schedule` trigger there is no `inputs` context at all, so
+      # `inputs.ios`/`inputs.android` are null and *both* `null == true` and
+      # `null != false` evaluate to false - the cron run would call e2e.yml with
+      # both platforms off and report success without running a single flow.
+      # Branch on the event instead: a scheduled run takes the dispatch defaults
+      # (Android on, iOS off), a dispatch takes what the user picked.
+      ios: ${{ github.event_name == 'workflow_dispatch' && inputs.ios }}
+      android: ${{ github.event_name != 'workflow_dispatch' || inputs.android }}
       dev-client: true
       # A mock GraphQL API the app talks to in dev/E2E. The template ships
       # both hooks at these paths; a smoke target that does not must leave

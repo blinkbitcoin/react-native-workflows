@@ -103,6 +103,10 @@ jobs:
           name: web-dist
           path: ${{ inputs.working-directory }}/${{ inputs.output-dir }}
           retention-days: 1
+          # Every other upload in this family sets this explicitly. Failing here
+          # beats the playwright job downloading an empty artifact and failing
+          # on a missing index.html one job later.
+          if-no-files-found: error
       - name: Upload Pages artifact
         if: ${{ inputs.deploy }}
         uses: actions/upload-pages-artifact@v5

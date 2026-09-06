@@ -15,10 +15,19 @@ waits on a dependency install. It folds together:
    devDependencies whose name matches
    `^(expo|@expo/|react-native|@react-native|@react-native-community|@config-plugins/|patch-package)`,
    rendered as `name@version` (read with `yq`).
-2. `hashFiles` over `app.config.*`, `app.json`, `plugins/**`, `modules/**`,
-   `patches/**`, `Gemfile.lock`, `.mise.toml`, `google-services.json`,
-   `GoogleService-Info.plist`.
-3. Anything matched by the `native-extra-globs` input.
+2. A `shasum -a 256` per file (not `hashFiles`) over two sets: the
+   **root-level only** (`find -maxdepth 1`) matches of `app.config.*`,
+   `app.json`, `Gemfile.lock`, `.mise.toml`, `google-services.json`,
+   `GoogleService-Info.plist`; and every file found **recursively** under
+   `plugins/`, `modules/` and `patches/`. A nested `app.config.ts` is
+   deliberately not picked up — if you have one, add it via
+   `native-extra-globs`.
+3. The contents of every file matched by the `native-extra-globs` input
+   (`e2e.yml` input of the same name, threaded into the `native-key` action) —
+   space-separated, consumer-relative shell globs, e.g.
+   `fastlane/*.rb android/keystores/*`. No recursive `**` (these scripts run
+   under macOS's bash 3.2, which has no `globstar`). The glob *string* itself is
+   folded in too, so changing the patterns also invalidates the caches.
 
 ## Keys
 

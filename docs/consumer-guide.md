@@ -234,7 +234,7 @@ mental model).
 | `actionlint` | `true` | Lint the consumer's `.github/workflows` |
 | `shellcheck` | `true` | Lint the consumer's `scripts/` |
 | `docs-only-detection` | `true` | Classify the PR as docs-only |
-| `docs-globs` | `''` | Extra `\|`-joined POSIX ERE alternatives treated as docs |
+| `docs-globs` | `''` | Extra `\|`-joined POSIX ERE alternatives **added to** the built-in docs pattern (`^docs/\|\.md$\|^LICENSE$\|^\.github/ISSUE_TEMPLATE/\|^\.github/PULL_REQUEST_TEMPLATE`), not a replacement for it |
 
 Outputs: `docs-only` (`'true'` when every changed file matched the docs
 globs; empty when detection is disabled). Secrets: `consumer-token` (optional).
@@ -246,7 +246,7 @@ globs; empty when detection is disabled). Secrets: `consumer-token` (optional).
 | `repository`, `ref`, `working-directory`, `linux-runner`, `macos-runner`, `native-cache-version` | (as above) | — |
 | `coverage` | `true` | Run `coverage-script` and upload `coverage/`; otherwise run `test-script` |
 | `test-script` | `test` | Script run when `coverage` is off |
-| `coverage-script` | `test:coverage` | Script run when `coverage` is on |
+| `coverage-script` | `test:coverage` | Script run when `coverage` is on. Passing `coverage: true` with an **empty** `coverage-script` silently falls back to `test-script` (`${{ inputs.coverage && inputs.coverage-script \|\| inputs.test-script }}`) and then uploads an empty `coverage/`; leave the default or set a real script name |
 | `scripts-test-script` | `test:scripts` | Script that tests `scripts/` itself; empty skips this step |
 | `coverage-artifact-retention-days` | `30` | Retention for the uploaded `coverage/` artifact |
 
@@ -260,6 +260,7 @@ No outputs. Secrets: `consumer-token` (optional).
 | `linux-runner` | `ubuntu-latest` | Runner for the Android jobs |
 | `macos-runner` | `macos-26` | Runner for the iOS jobs |
 | `native-cache-version` | `v1` | Bump to invalidate every native cache at once |
+| `native-extra-globs` | `''` | Space-separated consumer-relative shell globs whose file contents join the native dependency hash (see [`docs/cache-keys.md`](cache-keys.md)) |
 | `ios` | `false` | Run the iOS build + simulator suite (macOS runners bill at 10x) |
 | `android` | `true` | Run the Android build + emulator suite |
 | `xcode` | `''` | Xcode version to select (folded into the iOS cache key) |
@@ -392,16 +393,19 @@ just produced.
 paths**, not package.json script names, run via `bash` by
 `scripts/e2e/run-hook.sh`:
 
-- Setup runs once, right before Metro starts waiting is done (both iOS and
-  Android jobs, right after `metro-start.sh`/before Metro-wait); a
-  **non-empty but missing path is fatal** (fails the job before the suite
-  even attempts to run) — an empty string (`''`, the default) skips the step
-  entirely.
+- Setup runs once, right after `metro-start.sh` and before `metro-wait.sh`
+  (both the iOS and the Android job); a **non-empty but missing path is
+  fatal** (fails the job before the suite even attempts to run) — an empty
+  string (`''`, the default) skips the step entirely.
 - Teardown runs with `if: always()`, after the suite (pass or fail) and, on
-  iOS, after the screen recording stops; on Android it runs inside
-  `android-maestro.sh`'s own `trap ... EXIT` (recording stop → forensics →
-  teardown), because the whole Android suite is one `script:` line for
-  `ReactiveCircus/android-emulator-runner`.
+  iOS, after the screen recording stops. On **both** platforms it is a normal
+  workflow step on the runner host, not something the emulator-side script
+  does: a host-side mock API has to be stopped on the host, and Android's
+  suite runs inside `ReactiveCircus/android-emulator-runner`'s `script:`.
+  (`ios-maestro.sh`/`android-maestro.sh` also honour the `RNW_E2E_SETUP_SCRIPT`
+  / `RNW_E2E_TEARDOWN_SCRIPT` env variables, but nothing in CI sets those —
+  they are the local-run path. Setting both the env var and the workflow input
+  runs the hook twice.)
 - `self-smoke.yml` wires these to
   `scripts/e2e/ci-mock-api-up.sh` / `scripts/e2e/ci-mock-api-down.sh` — the
   template ships both (its own mock GraphQL API server, started for the E2E
@@ -458,7 +462,7 @@ each one lives so a future edit doesn't quietly regress it.
 | --- | --- |
 | A hung Maestro driver must never eat the job twice | `scripts/e2e/maestro-bound.sh` (`bounded_maestro`, exit `124`) + `ios-maestro.sh`/`android-maestro.sh` (retry only on a real failure, never on `124`) |
 | The suite's own timeout must not race the step's `timeout-minutes` | `scripts/e2e/step-timeout.sh` (step timeout = `suite-timeout-minutes + 5`), consumed via `fromJSON(steps.timeout.outputs.minutes)` in `e2e.yml` |
-| Killing Metro must kill its whole process group, not just the wrapper pid | `scripts/e2e/README.md` notes `kill -TERM -"$(cat "$RNW_OUT/metro.pid")"` (leading `-`); implemented in `metro-start.sh`/`metro-wait.sh`'s stop path |
+| Killing Metro must kill its whole process group, not just the wrapper pid | `scripts/e2e/README.md` notes `kill -TERM -"$(cat "$RNW_OUT/metro.pid")"` (leading `-`), which `metro-start.sh` also logs when it starts Metro; nothing kills Metro itself — the job teardown reaps the process group |
 | The first app launch must not race a cold Metro bundle | `scripts/e2e/metro-wait.sh` pre-warms `/.expo/.virtual-metro-entry.bundle?platform=...` before `app-launch.sh` runs |
 | The native dependency hash must be computable before `pnpm install`, or a cache lookup blocks on an install | `scripts/ci/native-hash.sh` reads `pnpm-lock.yaml` directly via `yq` instead of `pnpm list` |
 | `android-emulator-runner`'s `script:` can only run once per invocation and must be a single line | `test/workflow-shape.bats` ("every android-emulator-runner script: is a single 'bash ...' line"); `android-maestro.sh` does prepare→record→launch→suite→forensics itself for exactly this reason |

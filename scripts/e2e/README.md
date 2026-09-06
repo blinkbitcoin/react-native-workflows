@@ -38,9 +38,10 @@ pure-bash fallback).
 | `RNW_MAESTRO_EXCLUDE_TAGS` | (none) | Passed as `--exclude-tags` only when set. |
 | `RNW_SUITE_TIMEOUT_MINUTES` | `10` | Per-attempt bound enforced inside the script (`maestro-bound.sh`), so forensics still run on a hang. |
 | `RNW_METRO_PORT` | `8081` | Metro port; also the port reversed into the Android emulator. |
+| `RNW_MOCK_API_PORT` | `4000` | Host-side mock-API port also reversed into the Android emulator by `android-emulator.sh prepare`. Set it empty to reverse nothing but Metro. |
 | `RNW_OUT` | `${RUNNER_TEMP:-/tmp}/rnw` | Every artifact this family writes: `metro.log`, `metro.pid`, `sim-udid`, `<scheme>.app.tar`, `maestro/`, `forensics/`, videos. |
-| `RNW_E2E_SETUP_SCRIPT` | (none) | Consumer-relative script run before the suite (e.g. start a mock API). A missing file is fatal. |
-| `RNW_E2E_TEARDOWN_SCRIPT` | (none) | Consumer-relative script run after the suite, pass or fail. |
+| `RNW_E2E_SETUP_SCRIPT` | (none) | **Local runs only.** Consumer-relative script run before the suite (e.g. start a mock API), from inside `ios-maestro.sh`/`android-maestro.sh`. A missing file is fatal. In CI the same hooks run as workflow steps on the host from `e2e.yml`'s `e2e-setup-script` input, and nothing sets this variable; setting both runs the hook twice. |
+| `RNW_E2E_TEARDOWN_SCRIPT` | (none) | **Local runs only**, same contract as above (`e2e.yml`'s `e2e-teardown-script` is the CI path). Runs after the suite, pass or fail. |
 | `RNW_ANDROID_ABIS` | `x86_64` | `-PreactNativeArchitectures` for `android-build.sh`. CI emulators are x86_64; set `arm64-v8a` to run against an Apple-silicon emulator locally. |
 
 `$RNW_OUT/run-start` is stamped once, by whichever script sources

@@ -71,7 +71,7 @@ setup() {
   done
 }
 
-@test "the .rnw checkout uses job.workflow_repository and job.workflow_sha (not github.* or any other form)" {
+@test "the .rnw checkout uses job.workflow_repository and job.workflow_sha (not github.* or any other form) and sets persist-credentials: false" {
   for w in "${WORKFLOWS[@]}"; do
     job_names=$(yq -r '.jobs | keys | .[]' "$w")
     for j in $job_names; do
@@ -79,9 +79,35 @@ setup() {
       if [ "$rnw_step_count" -gt 0 ]; then
         repo=$(yq -r "[.jobs.\"$j\".steps[]? | select(.uses? == \"actions/checkout@v7\") | select(.with.path? == \".rnw\")][0].with.repository" "$w")
         ref=$(yq -r "[.jobs.\"$j\".steps[]? | select(.uses? == \"actions/checkout@v7\") | select(.with.path? == \".rnw\")][0].with.ref" "$w")
+        # persist-credentials: false is what keeps this repo's checkout token out
+        # of the consumer workspace; it is as load-bearing as the ref pinning.
+        persist=$(yq -r "[.jobs.\"$j\".steps[]? | select(.uses? == \"actions/checkout@v7\") | select(.with.path? == \".rnw\")][0].with.\"persist-credentials\"" "$w")
         [ "$repo" = '${{ job.workflow_repository }}' ]
         [ "$ref" = '${{ job.workflow_sha }}' ]
+        [ "$persist" = "false" ]
       fi
     done
   done
+}
+
+# The self-* workflows are excluded from WORKFLOWS above (they are not reusable),
+# but two of their expressions are subtle enough to deserve pinning down.
+
+@test "self-smoke's e2e toggles branch on github.event_name so the schedule run is not a no-op" {
+  f="$REPO_ROOT/.github/workflows/self-smoke.yml"
+  ios=$(yq -r '.jobs.e2e.with.ios' "$f")
+  android=$(yq -r '.jobs.e2e.with.android' "$f")
+  # `inputs` is null on a schedule trigger, so a bare inputs.* comparison
+  # evaluates false for both platforms and the weekly smoke runs no E2E at all.
+  [[ "$ios" == *"github.event_name"* ]]
+  [[ "$android" == *"github.event_name"* ]]
+  [[ "$ios" != *"inputs.ios == true"* ]]
+  [[ "$android" != *"inputs.android != false"* ]]
+}
+
+@test "self-release's major-tag job compares release_created to the string 'true'" {
+  f="$REPO_ROOT/.github/workflows/self-release.yml"
+  cond=$(yq -r '.jobs."major-tag".if' "$f")
+  # Job outputs are strings; the literal "false" is truthy in a bare expression.
+  [[ "$cond" == *"release_created == 'true'"* ]]
 }

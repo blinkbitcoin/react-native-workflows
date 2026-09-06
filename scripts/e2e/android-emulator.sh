@@ -39,7 +39,9 @@ case "${1:-}" in
     # reaches them through reversed ports rather than 10.0.2.2 so the app's
     # localhost URLs work unchanged.
     adb reverse "tcp:$RNW_METRO_PORT" "tcp:$RNW_METRO_PORT"
-    adb reverse tcp:4000 tcp:4000
+    if [ -n "$RNW_MOCK_API_PORT" ]; then
+      adb reverse "tcp:$RNW_MOCK_API_PORT" "tcp:$RNW_MOCK_API_PORT"
+    fi
     # The default 256K main buffer wraps within a couple of minutes on the
     # emulator, losing the app-launch window from the post-mortem dump.
     adb logcat -G 64M

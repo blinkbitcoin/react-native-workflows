@@ -8,8 +8,12 @@ RNW_DEV_CLIENT="${RNW_DEV_CLIENT:-true}"
 RNW_MAESTRO_FLOWS="${RNW_MAESTRO_FLOWS:-.maestro}"
 RNW_SUITE_TIMEOUT_MINUTES="${RNW_SUITE_TIMEOUT_MINUTES:-10}"
 RNW_METRO_PORT="${RNW_METRO_PORT:-8081}"
+# Host-side mock API the E2E setup hook starts (the template's mock GraphQL
+# server listens on 4000). Reversed into the emulator so the app's localhost
+# URLs work unchanged; empty disables the reverse entirely.
+RNW_MOCK_API_PORT="${RNW_MOCK_API_PORT-4000}"
 RNW_OUT="${RNW_OUT:-${RUNNER_TEMP:-/tmp}/rnw}"
-export RNW_DEV_CLIENT RNW_MAESTRO_FLOWS RNW_SUITE_TIMEOUT_MINUTES RNW_METRO_PORT RNW_OUT
+export RNW_DEV_CLIENT RNW_MAESTRO_FLOWS RNW_SUITE_TIMEOUT_MINUTES RNW_METRO_PORT RNW_MOCK_API_PORT RNW_OUT
 mkdir -p "$RNW_OUT"
 
 # Immutable "the run started here" stamp. collect-forensics.sh needs a fixed

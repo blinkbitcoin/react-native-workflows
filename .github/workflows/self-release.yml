@@ -25,7 +25,11 @@ jobs:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN || github.token }}
   major-tag:
     needs: release-please
-    if: ${{ needs.release-please.outputs.release_created }}
+    # Job outputs are strings and every non-empty string is truthy in a GitHub
+    # expression, so a bare `outputs.release_created` also fires on the literal
+    # "false" a no-release push produces - which would run tag-major.sh with an
+    # empty TAG and leave main permanently red.
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
