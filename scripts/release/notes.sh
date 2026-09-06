@@ -11,8 +11,9 @@
 # commit subjects as notes. A release whose notes are literally the commit log
 # is a bad release note, not a broken pipeline - so it warns loudly.
 #
-# Env: NOTES_LOCALES (default 'en'), RELEASE_BODY_FILE (a release event's body;
-# switches notes.mjs to --from-body).
+# Env: NOTES_LOCALES (default 'en'), RELEASE_BODY_FILE (a release body, from the
+# release-body-file input or fetched by release-body.sh; switches notes.mjs to
+# --from-body --body-section).
 # Usage: notes.sh
 set -euo pipefail
 source "$(dirname "$0")/../lib/common.sh"
@@ -26,9 +27,12 @@ group "release notes"
 if [ -f "scripts/release/notes.mjs" ]; then
   require_cmd node
   if [ -n "${RELEASE_BODY_FILE:-}" ] && [ -f "$RELEASE_BODY_FILE" ]; then
-    log "running the consumer's notes.mjs --from-body"
+    # --body-section: the body is a whole changelog entry (headings, links,
+    # commit references); the generator takes the section a store listing can
+    # actually use rather than the raw markdown.
+    log "running the consumer's notes.mjs --from-body --body-section"
     NOTES_LOCALES="${NOTES_LOCALES:-en}" \
-      node scripts/release/notes.mjs --from-body "$RELEASE_BODY_FILE" --out "$RNW_RELEASE_META_DIR"
+      node scripts/release/notes.mjs --from-body "$RELEASE_BODY_FILE" --body-section --out "$RNW_RELEASE_META_DIR"
   else
     log "running the consumer's notes.mjs --from-commits"
     NOTES_LOCALES="${NOTES_LOCALES:-en}" \

@@ -78,6 +78,10 @@ on:
         description: Artifact name for the dSYM bundle
         type: string
         default: 'ios-dsym'
+      build-env:
+        description: 'Flat JSON object of non-secret build environment variables published before prebuild, the lanes and the scripts (e.g. {"OTA_ENABLED":"true","EXPO_UPDATES_URL":"https://..."}). Keys must be UPPER_SNAKE and anything that reads as a credential is refused - this is a workflow input, so GitHub neither masks nor hides it'
+        type: string
+        default: '{}'
     secrets:
       consumer-token:
         description: PAT with read access to a private consumer repository; falls back to the caller's github.token (works for a public consumer)
@@ -158,6 +162,10 @@ jobs:
         env:
           ASC_KEY_P8_BASE64: ${{ secrets.ASC_KEY_P8_BASE64 }}
         run: bash "$RNW/scripts/release/decode-secrets.sh"
+      - name: Publish build-env
+        env:
+          RNW_BUILD_ENV: ${{ inputs.build-env }}
+        run: bash "$RNW/scripts/release/build-env.sh"
       - name: Prebuild (ios)
         run: bash "$RNW/scripts/native/prebuild.sh" ios
       - name: Cache CocoaPods

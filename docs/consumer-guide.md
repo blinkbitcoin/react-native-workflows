@@ -351,11 +351,16 @@ writes `build-info.json` and the store notes, and uploads them as the
 | `notes-locales` | `en` | Locales handed to the consumer's `scripts/release/notes.mjs` |
 | `stage` | `internal` | Written to `build-info.json`'s `stage` |
 | `release-body-file` | `''` | Consumer-relative file holding a release body; switches note generation to `--from-body` |
+| `release-tag` | `''` | Existing release tag whose **body** becomes the store notes, fetched with `gh release view`. It also becomes the checked-out ref and the gated/stamped commit — see [Preparing from a release tag](#preparing-from-a-release-tag) |
+| `build-env` | `{}` | Non-secret build environment — see [`build-env`](#build-env) |
 | `require-green-workflow` | `''` | Workflow file name (e.g. `release-internal.yml`) that must have concluded `success` for `github.sha` before preparing. Empty disables the gate. The gate step runs **before** `Setup` (so a red upstream fails before anything is installed), which means it uses the `gh` and `yq` from the runner image — true of GitHub-hosted `ubuntu-latest`, not necessarily of a self-hosted `linux-runner` |
 | `release-meta-artifact` | `release-meta` | Artifact name for `build-info.json`, `store-notes.json`, `notes-store.txt`, `notes.md` |
 
-Outputs: `version`, `build-number`, `fp-ios`, `fp-android`. Secrets:
-`consumer-token` (optional). The job requests `actions: read` on top of
+Outputs: `version`, `build-number`, `fp-ios`, `fp-android`, `sha` (the commit
+the release was prepared from). Secrets: `consumer-token`, `ANTHROPIC_API_KEY`
+and `OPENAI_API_KEY` (all optional — the two API keys are only needed when the
+consumer's `notes.mjs` drafts store notes with an LLM; the provider, model and
+base URL are non-secret and belong in `build-env`). The job requests `actions: read` on top of
 `contents: read` so `gh run list` can see the gated workflow's runs — a caller
 that sets `require-green-workflow` must grant it.
 
@@ -376,6 +381,7 @@ Prebuild → pods → `fastlane ios build` → `fastlane ios verify`, on
 | `verify` | `true` | Run the `ios verify` lane after `build` |
 | `release-meta-artifact` | `release-meta` | Artifact downloaded for `build-info.json` and the store notes |
 | `ipa-artifact` / `dsym-artifact` | `ios-ipa` / `ios-dsym` | Upload names |
+| `build-env` | `{}` | Non-secret build environment, published before prebuild — see [`build-env`](#build-env) |
 
 No outputs. Secrets (all optional): `consumer-token`, `MATCH_PASSWORD`,
 `MATCH_GIT_URL`, `MATCH_GIT_BASIC_AUTHORIZATION`, `ASC_KEY_ID`,
@@ -399,6 +405,7 @@ Prebuild → `fastlane android build` → `fastlane android verify`, on
 | `mapping-path` | `android/app/build/outputs/mapping/**/mapping.txt` | Consumer-relative glob for the mapping file. Override it when the consumer uses a non-default variant output directory — the upload is `if-no-files-found: warn`, so a wrong path yields a green build and permanently unreadable Play crash reports |
 | `bundletool-version` | `1.17.2` | bundletool release downloaded before the lane runs (the `android build` lane derives the universal APK from the .aab with it, and no runner image ships it). Kept equal to `scripts/lib/versions.sh` by `scripts/self/check-versions.sh` |
 | `bundletool-sha256` | `''` | Expected sha256 of the jar; empty skips verification. Google publishes no checksum file alongside the release, so pinning the bytes is opt-in |
+| `build-env` | `{}` | Non-secret build environment, published before prebuild — see [`build-env`](#build-env). Put `ANDROID_UPLOAD_CERT_SHA256` here: the `android verify` lane forwards it to `verify-android.sh` as `--cert-sha256`, which turns "the aab is signed" into "the aab is signed by the expected key" |
 
 No outputs. Secrets (all optional): `consumer-token`,
 `ANDROID_UPLOAD_KEYSTORE_BASE64`, `ANDROID_UPLOAD_KEYSTORE_PASSWORD`,
@@ -426,9 +433,15 @@ uploads, promotions, staged rollouts, halts.
 | `ios-bundle-id` / `ios-scheme` / `android-package` | **required** | All three on every lane, both platforms — see [The five Fastfile contract variables](#the-five-fastfile-contract-variables) |
 | `ruby` | `true` | Install Ruby (leave on unless the consumer has no Gemfile) |
 | `timeout-minutes` | `45` | Raise it for a lane that waits on App Store Connect processing |
+| `build-env` | `{}` | Non-secret build environment — see [`build-env`](#build-env) |
 
-No outputs. Secrets (all optional): `consumer-token` plus the full
-iOS + Android credential set listed under the two build workflows.
+No outputs. Secrets (all optional): `consumer-token`, the full iOS + Android
+credential set listed under the two build workflows, and the App Review set —
+`APP_REVIEW_CONTACT_EMAIL`, `APP_REVIEW_CONTACT_FIRST_NAME`,
+`APP_REVIEW_CONTACT_LAST_NAME`, `APP_REVIEW_CONTACT_PHONE`,
+`APP_REVIEW_DEMO_USER`, `APP_REVIEW_DEMO_PASSWORD`, `APP_REVIEW_NOTES`. Those
+seven are **secrets, not `build-env` or `env-json` values**: a reviewer demo
+login is a real credential, and both of those inputs are printed to the log.
 
 ### `github-release.yml`
 
@@ -445,6 +458,8 @@ Creates or moves a GitHub release and attaches the fixed asset set.
 | `notes-file` | `notes.md` | File inside that artifact used as the body (or, in `append` mode, as the appended section) |
 | `assets-artifacts` | `''` | Artifact name or glob pattern whose files are attached |
 | `append-title` | `Update` | Heading for the section added in `append` mode |
+| `from-tag` | `''` | `promote` only: pre-release tag (e.g. `v1.2.3-build.42`) whose assets are downloaded and re-uploaded to `tag`, so the promoted release ships **the exact binaries that were tested** rather than a rebuild. `SHA256SUMS` is regenerated over the merged set |
+| `delete-source` | `false` | `promote` only: delete the `from-tag` pre-release **and its tag** (`gh release delete --cleanup-tag`) — after the upload succeeded, never before, so a failed upload cannot leave the binaries nowhere. A re-run whose source is already gone continues instead of failing |
 
 Outputs: `url`. Secrets: `RELEASE_TAGGER_APP_ID`,
 `RELEASE_TAGGER_APP_PRIVATE_KEY` (both optional). When they are set the job
@@ -488,6 +503,95 @@ No outputs. Secrets: `consumer-token`, `OTA_PUBLISH_TOKEN` (both optional).
 > environment but `scripts/ota/publish.sh` never names it, so whether `eoas`
 > reads that exact variable is unverified — a wrong name fails as an auth error,
 > not as a flag error.
+
+### `build-env`
+
+`expo-prepare.yml`, `expo-build-ios.yml`, `expo-build-android.yml` and
+`fastlane-lane.yml` take a `build-env` input: a flat JSON object of **non-secret**
+environment variables, published to `$GITHUB_ENV` before prebuild, the lanes and
+the consumer scripts run. It is the only way a caller can get a value into those
+places — nothing else in the family forwards arbitrary environment.
+
+```yaml
+    with:
+      build-env: >-
+        {"OTA_ENABLED":"true",
+         "EXPO_UPDATES_URL":"https://updates.example.com/api/manifest",
+         "EXPO_PUBLIC_API_URL":"https://api.example.com",
+         "ANDROID_UPLOAD_CERT_SHA256":"AA:BB:...",
+         "STORE_NOTES_INCLUDE_CHANGELOG":"true",
+         "RELEASE_NOTES_LLM_PROVIDER":"anthropic",
+         "RELEASE_NOTES_LLM_MODEL":"claude-sonnet-4-5"}
+```
+
+Rules, enforced by `scripts/lib/build-env.sh`:
+
+- Keys must match `^[A-Z][A-Z0-9_]*$`; values must be scalars (a JSON boolean or
+  number is coerced to its string form).
+- **A key that reads as a credential is refused**, not published: anything
+  ending in `_KEY`, `_TOKEN`, `_PASSWORD`, `_PASSPHRASE`, `_SECRET`,
+  `_CREDENTIAL(S)`, plus a short list of known credential names. `build-env` is a
+  workflow *input*: GitHub does not mask it, it appears in the run's parameters,
+  and anyone who can see the run can read it. Refusing loudly is the difference
+  between noticing immediately and leaking quietly.
+- Only key names are logged, never values.
+
+So `RELEASE_NOTES_LLM_PROVIDER` / `RELEASE_NOTES_LLM_MODEL` /
+`OPENAI_BASE_URL` / `STORE_NOTES_INCLUDE_CHANGELOG` go in `build-env`, while
+`ANTHROPIC_API_KEY` / `OPENAI_API_KEY` are declared secrets on `expo-prepare.yml`.
+
+### Preparing from a release tag
+
+`expo-prepare.yml`'s `release-tag` changes three things together, and they only
+make sense together:
+
+1. **The checkout ref** becomes the tag (`ref: ${{ inputs.release-tag || inputs.ref }}`).
+2. **The gated and stamped commit** becomes that tag's commit, resolved by
+   `scripts/release/target-sha.sh` (`git rev-parse "$TAG^{commit}"`, fetching the
+   tag if the clone lacks it) and exposed as the `sha` output. `require-green-workflow`
+   polls for *that* commit's run, and `build-info.json` records it.
+   `github.sha` is the wrong value here: on a `release: published` event it is
+   the default branch's tip when the event fired, which may already be ahead of
+   the tag — so gating on it checks the wrong commit's CI and stamps the binary
+   with a commit it was not built from.
+3. **The store notes** come from that release's body (`gh release view TAG --json body`,
+   written to `$RNW_OUT/release-body.md`), passed to the consumer's `notes.mjs`
+   as `--from-body <file> --body-section`. An empty body is fatal rather than a
+   silent fall back to commit subjects: the caller asked for this release's
+   notes, and shipping a git log to the stores instead would look like success.
+
+### Promoting a pre-release's assets
+
+`github-release.yml`'s `promote` with `from-tag` downloads every asset of the
+pre-release and re-uploads it to the target tag (`--clobber`), regenerating
+`SHA256SUMS` over the merged set. The point is that the promoted release ships
+**the same bytes that were tested**, not a rebuild from the same source — a
+rebuild is a different binary, with a different signature and a different
+fingerprint, and the OTA gate downstream compares fingerprints.
+
+`delete-source: true` then removes the pre-release and its tag, but only after
+the upload succeeded: deleting first would leave no copy of the binaries
+anywhere if the upload then failed. Re-running a promote whose source is already
+gone logs that and continues, so a retried job is not blocked by its own first
+attempt.
+
+### `type: number` inputs and repo variables
+
+`build-number-offset` (`expo-prepare.yml`) and `rollout`
+(`expo-ota-publish.yml`) are `type: number`. A repository variable is always a
+*string*, and an **unset** one is the empty string, which is not a number — so
+`with: rollout: ${{ vars.OTA_ROLLOUT }}` fails the workflow with a type error on
+any repo that has not set the variable. Wrap it:
+
+```yaml
+    with:
+      build-number-offset: ${{ fromJSON(vars.RNW_BUILD_NUMBER_OFFSET || '1000') }}
+      rollout: ${{ fromJSON(vars.OTA_ROLLOUT || '0') }}
+```
+
+`||` yields the first truthy operand, so an unset (empty, falsy) variable falls
+through to the quoted literal, and `fromJSON` turns whichever string won into a
+number.
 
 ### The five Fastfile contract variables
 
@@ -797,4 +901,8 @@ each one lives so a future edit doesn't quietly regress it.
 | A secret decoded to a file is not the same as a secret in the lane's environment — the template's lanes read `ENV.fetch('ASC_KEY_P8_BASE64')` | Both forms are passed; `test/workflow-shape.bats` asserts every declared secret reaches a `fastlane.sh` step's `env:` |
 | Re-running a failed release job must not duplicate the section it appended to the release body | `scripts/release/release-assets.sh` `append` strips any section with the same heading first; `test/release-assets.bats` asserts two runs give a byte-identical body |
 | A bare `[[ ]]` assertion in a bats body cannot fail the test under macOS's bash 3.2, so a security control can silently stop checking | `test/test_helper.bash` (`fail`/`contains`/`not_contains`) and the `\|\| fail` form in every release test file |
+| A promoted release must ship the bytes that were tested, not a rebuild (a rebuild has a different signature and fingerprint) | `github-release.yml`'s `promote` + `from-tag` downloads the pre-release's assets and re-uploads them; `delete-source` runs only after the upload |
+| `github.sha` on a `release: published` event is the default-branch tip, not the tag's commit | `scripts/release/target-sha.sh` resolves `TAG^{commit}` and feeds it to the green-run gate and `build-info.json`; exposed as `expo-prepare`'s `sha` output |
+| A non-secret value passed as a workflow input is public, so a credential smuggled through one leaks quietly | `scripts/lib/build-env.sh` refuses keys ending in `_KEY`/`_TOKEN`/`_PASSWORD`/`_SECRET`/… and logs key names only; `test/build-env.bats` |
+| An unset repo variable is `''`, which a `type: number` input rejects outright | The guide's `fromJSON(vars.X \|\| '1000')` idiom for `build-number-offset` and `rollout` |
 | No runner image ships bundletool, and the `android build` lane needs it to derive the universal APK | `expo-build-android.yml` installs the pinned jar via `scripts/ci/bundletool-install.sh` before the lane runs (version kept equal to `scripts/lib/versions.sh` by `check-versions.sh`) |

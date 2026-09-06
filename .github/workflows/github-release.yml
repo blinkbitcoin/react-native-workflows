@@ -58,6 +58,14 @@ on:
         description: Heading for the section added in `append` mode
         type: string
         default: 'Update'
+      from-tag:
+        description: '`promote` mode only: pre-release tag (e.g. v1.2.3-build.42) whose assets are carried forward to `tag`, so the promoted release ships the exact binaries that were tested rather than a rebuild'
+        type: string
+        default: ''
+      delete-source:
+        description: '`promote` mode only: delete the `from-tag` pre-release and its tag after the assets have been uploaded to `tag`'
+        type: boolean
+        default: false
     secrets:
       RELEASE_TAGGER_APP_ID:
         description: GitHub App id used to create the release; without it the caller's GITHUB_TOKEN is used (a release created with GITHUB_TOKEN does not trigger other workflows)
@@ -131,5 +139,7 @@ jobs:
           TARGET_SHA: ${{ inputs.sha }}
           TITLE: ${{ inputs.title }}
           APPEND_TITLE: ${{ inputs.append-title }}
+          FROM_TAG: ${{ inputs.from-tag }}
+          DELETE_SOURCE: ${{ inputs.delete-source }}
           NOTES_FILE: ${{ env.RNW_ASSETS_DIR }}/${{ inputs.notes-file }}
         run: bash ".rnw/scripts/release/release-assets.sh" "$MODE"

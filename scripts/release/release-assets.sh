@@ -12,8 +12,14 @@
 # freshly computed SHA256SUMS. The list is fixed on purpose: a release whose
 # assets vary run to run cannot be verified by a downstream script.
 #
-# Env: TAG (required), TITLE, TARGET_SHA, NOTES_FILE, APPEND_TITLE,
-#      RNW_ASSETS_DIR (default $RNW_OUT/assets), GH_TOKEN, GH_REPO.
+# `promote` also carries assets forward: with $FROM_TAG set it downloads every
+# asset of that pre-release into $RNW_ASSETS_DIR first, so the promoted release
+# ships the exact binaries that were tested rather than a rebuild. $DELETE_SOURCE
+# then removes the pre-release and its tag once the upload has succeeded.
+#
+# Env: TAG (required), TITLE, TARGET_SHA, NOTES_FILE, APPEND_TITLE, FROM_TAG,
+#      DELETE_SOURCE, RNW_ASSETS_DIR (default $RNW_OUT/assets), GH_TOKEN,
+#      GH_REPO.
 set -euo pipefail
 source "$(dirname "$0")/../lib/common.sh"
 source "$(dirname "$0")/../lib/release-env.sh"
@@ -118,10 +124,38 @@ case "$mode" in
     ;;
   promote)
     release_exists || die "release $tag does not exist - run create-prerelease first"
+    if [ -n "${FROM_TAG:-}" ]; then
+      mkdir -p "$assets_dir"
+      # A re-run of a promote that already deleted its source must not fail:
+      # the assets are on the target release by then, so a missing source is
+      # information, not an error.
+      if gh release view "$FROM_TAG" >/dev/null 2>&1; then
+        group "carry assets forward from $FROM_TAG"
+        gh release download "$FROM_TAG" --dir "$assets_dir" --clobber ||
+          die "could not download the assets of $FROM_TAG"
+        ls -l "$assets_dir" >&2
+        endgroup
+      else
+        log "source pre-release $FROM_TAG does not exist (already promoted and deleted?) - continuing with whatever is in $assets_dir"
+      fi
+    fi
     # --latest=false on purpose: promoting a staged build out of pre-release is
     # not the same decision as declaring it the latest release.
     gh release edit "$tag" --prerelease=false --latest=false "${title_args[@]+"${title_args[@]}"}"
+    # SHA256SUMS is regenerated here over the merged set (carried-forward assets
+    # plus this run's), so it describes the release that actually exists.
     upload_assets
+    # Only after the upload succeeded: deleting the source first would leave no
+    # copy of the binaries anywhere if the upload then failed.
+    if [ -n "${FROM_TAG:-}" ] && [ "${DELETE_SOURCE:-false}" = "true" ]; then
+      if gh release view "$FROM_TAG" >/dev/null 2>&1; then
+        group "delete source pre-release $FROM_TAG"
+        gh release delete "$FROM_TAG" --yes --cleanup-tag
+        endgroup
+      else
+        log "source pre-release $FROM_TAG is already gone - nothing to delete"
+      fi
+    fi
     ;;
   latest)
     release_exists || die "release $tag does not exist - run create-prerelease first"

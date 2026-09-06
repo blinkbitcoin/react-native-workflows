@@ -82,6 +82,10 @@ on:
         description: Job timeout; raise it for a lane that waits on App Store Connect processing
         type: number
         default: 45
+      build-env:
+        description: 'Flat JSON object of non-secret build environment variables published before prebuild, the lanes and the scripts (e.g. {"OTA_ENABLED":"true","EXPO_UPDATES_URL":"https://..."}). Keys must be UPPER_SNAKE and anything that reads as a credential is refused - this is a workflow input, so GitHub neither masks nor hides it'
+        type: string
+        default: '{}'
     secrets:
       consumer-token:
         description: PAT with read access to a private consumer repository; falls back to the caller's github.token (works for a public consumer)
@@ -118,6 +122,30 @@ on:
         required: false
       PLAY_SERVICE_ACCOUNT_JSON:
         description: Google Play service account JSON (raw)
+        required: false
+      # App Review contact and demo-account details. These are secrets, not
+      # `env-json` configuration: env-json values are printed to the log, and a
+      # reviewer demo login is a real credential.
+      APP_REVIEW_CONTACT_EMAIL:
+        description: App Review contact email
+        required: false
+      APP_REVIEW_CONTACT_FIRST_NAME:
+        description: App Review contact first name
+        required: false
+      APP_REVIEW_CONTACT_LAST_NAME:
+        description: App Review contact last name
+        required: false
+      APP_REVIEW_CONTACT_PHONE:
+        description: App Review contact phone number
+        required: false
+      APP_REVIEW_DEMO_USER:
+        description: Demo account username handed to App Review
+        required: false
+      APP_REVIEW_DEMO_PASSWORD:
+        description: Demo account password handed to App Review
+        required: false
+      APP_REVIEW_NOTES:
+        description: Free-text notes for the App Review team
         required: false
 permissions:
   contents: read
@@ -164,6 +192,10 @@ jobs:
           # which artifact carried it.
           merge-multiple: true
           path: ${{ env.RNW_ASSETS_DIR }}
+      - name: Publish build-env
+        env:
+          RNW_BUILD_ENV: ${{ inputs.build-env }}
+        run: bash "$RNW/scripts/release/build-env.sh"
       - name: Publish env-json
         env:
           RNW_ENV_JSON: ${{ inputs.env-json }}
@@ -196,6 +228,13 @@ jobs:
           ANDROID_UPLOAD_KEY_ALIAS: ${{ secrets.ANDROID_UPLOAD_KEY_ALIAS }}
           ANDROID_UPLOAD_KEY_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEY_PASSWORD }}
           PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          APP_REVIEW_CONTACT_EMAIL: ${{ secrets.APP_REVIEW_CONTACT_EMAIL }}
+          APP_REVIEW_CONTACT_FIRST_NAME: ${{ secrets.APP_REVIEW_CONTACT_FIRST_NAME }}
+          APP_REVIEW_CONTACT_LAST_NAME: ${{ secrets.APP_REVIEW_CONTACT_LAST_NAME }}
+          APP_REVIEW_CONTACT_PHONE: ${{ secrets.APP_REVIEW_CONTACT_PHONE }}
+          APP_REVIEW_DEMO_USER: ${{ secrets.APP_REVIEW_DEMO_USER }}
+          APP_REVIEW_DEMO_PASSWORD: ${{ secrets.APP_REVIEW_DEMO_PASSWORD }}
+          APP_REVIEW_NOTES: ${{ secrets.APP_REVIEW_NOTES }}
         # LANE_ARGS reaches fastlane.sh through the environment, not as an
         # unquoted expansion here: the script splits it into arguments itself.
         run: bash "$RNW/scripts/release/fastlane.sh" "$PLATFORM" "$LANE"

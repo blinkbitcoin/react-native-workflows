@@ -39,7 +39,11 @@ on:
         type: string
         default: 'internal'
       release-body-file:
-        description: Consumer-relative file holding a release body; when set, notes are generated from it instead of from commits
+        description: Consumer-relative file holding a release body; when set, notes are generated from it instead of from commits (`release-tag` takes precedence)
+        type: string
+        default: ''
+      release-tag:
+        description: Existing release tag whose body becomes the source of the store notes; fetched with `gh release view` and passed to the consumer's notes.mjs as `--from-body --body-section`. Empty falls back to `release-body-file`, then to the commit subjects
         type: string
         default: ''
       require-green-workflow:
@@ -50,9 +54,19 @@ on:
         description: Artifact name carrying build-info.json, store-notes.json, notes-store.txt and notes.md to the later jobs
         type: string
         default: 'release-meta'
+      build-env:
+        description: 'Flat JSON object of non-secret build environment variables published before prebuild, the lanes and the scripts (e.g. {"OTA_ENABLED":"true","EXPO_UPDATES_URL":"https://..."}). Keys must be UPPER_SNAKE and anything that reads as a credential is refused - this is a workflow input, so GitHub neither masks nor hides it'
+        type: string
+        default: '{}'
     secrets:
       consumer-token:
         description: PAT with read access to a private consumer repository; falls back to the caller's github.token (works for a public consumer)
+        required: false
+      ANTHROPIC_API_KEY:
+        description: API key for the consumer's notes.mjs when it drafts store notes with Claude; unset simply means no LLM pass
+        required: false
+      OPENAI_API_KEY:
+        description: API key for the consumer's notes.mjs when it drafts store notes with an OpenAI-compatible endpoint
         required: false
     outputs:
       version:
@@ -67,6 +81,9 @@ on:
       fp-android:
         description: '@expo/fingerprint hash of the Android native layer'
         value: ${{ jobs.prepare.outputs.fp-android }}
+      sha:
+        description: 'Commit the release was prepared from (the release-tag commit when release-tag is set, else github.sha)'
+        value: ${{ jobs.prepare.outputs.sha }}
 permissions:
   contents: read
 jobs:
@@ -87,12 +104,16 @@ jobs:
       build-number: ${{ steps.version.outputs.build-number }}
       fp-ios: ${{ steps.fingerprint.outputs.fp-ios }}
       fp-android: ${{ steps.fingerprint.outputs.fp-android }}
+      sha: ${{ steps.sha.outputs.sha }}
     steps:
       - name: Checkout consumer
         uses: actions/checkout@v7
         with:
           repository: ${{ inputs.repository || github.repository }}
-          ref: ${{ inputs.ref }}
+          # release-tag wins over ref: preparing a release means preparing *that
+          # tag's commit*, and github.sha on a `release: published` event is the
+          # default-branch tip, which may already be ahead of it.
+          ref: ${{ inputs.release-tag || inputs.ref }}
           token: ${{ secrets.consumer-token || github.token }}
           # fetch-depth: 0 is load-bearing here: resolve-version.sh reads the
           # v* tags and counts first-parent commits, and both are empty on the
@@ -107,18 +128,28 @@ jobs:
           persist-credentials: false
       - name: Publish RNW environment
         run: bash ".rnw/scripts/release/env-publish.sh"
+      - name: Resolve target sha
+        id: sha
+        env:
+          RELEASE_TAG: ${{ inputs.release-tag }}
+        run: bash ".rnw/scripts/release/target-sha.sh" "$RELEASE_TAG"
       - name: Require a green upstream run
         if: ${{ inputs.require-green-workflow != '' }}
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ inputs.repository || github.repository }}
           REQUIRE_GREEN_WORKFLOW: ${{ inputs.require-green-workflow }}
-          REQUIRE_GREEN_SHA: ${{ github.sha }}
+          # The resolved target sha, not github.sha - see target-sha.sh.
+          REQUIRE_GREEN_SHA: ${{ steps.sha.outputs.sha }}
         run: bash ".rnw/scripts/release/require-green-run.sh" "$REQUIRE_GREEN_WORKFLOW" "$REQUIRE_GREEN_SHA"
       - name: Setup
         uses: ./.rnw/.github/actions/setup
         with:
           working-directory: ${{ inputs.working-directory }}
+      - name: Publish build-env
+        env:
+          RNW_BUILD_ENV: ${{ inputs.build-env }}
+        run: bash "$RNW/scripts/release/build-env.sh"
       - name: Resolve version
         id: version
         env:
@@ -131,10 +162,28 @@ jobs:
         run: bash "$RNW/scripts/release/fingerprint.sh"
       - name: Build info
         run: bash "$RNW/scripts/release/build-info.sh"
+      # Before the notes step, and only when asked: it publishes RELEASE_BODY_FILE
+      # into $GITHUB_ENV, which the notes step below picks up in preference to
+      # its own release-body-file input.
+      - name: Fetch release body
+        if: ${{ inputs.release-tag != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ inputs.repository || github.repository }}
+          RELEASE_TAG: ${{ inputs.release-tag }}
+        run: bash "$RNW/scripts/release/release-body.sh" "$RELEASE_TAG"
       - name: Release notes
         env:
           NOTES_LOCALES: ${{ inputs.notes-locales }}
-          RELEASE_BODY_FILE: ${{ inputs.release-body-file }}
+          # The consumer's notes.mjs may draft store notes with an LLM; the
+          # provider/model live in build-env, only the keys are secrets.
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          # env.RELEASE_BODY_FILE is set by the step above when release-tag was
+          # given; the input is the fallback. A step env key always wins over
+          # the job env, so the `||` is what makes the input the fallback rather
+          # than the override.
+          RELEASE_BODY_FILE: ${{ env.RELEASE_BODY_FILE || inputs.release-body-file }}
         run: bash "$RNW/scripts/release/notes.sh"
       - name: Upload release-meta
         uses: actions/upload-artifact@v7

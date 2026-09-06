@@ -9,7 +9,8 @@
 #    expoSdk, reactNative, workflowRunId, artifacts:{}}
 #
 # Env: APP_VERSION, APP_BUILD_NUMBER (resolve-version.sh), FP_IOS, FP_ANDROID
-# (fingerprint.sh), RNW_STAGE, GITHUB_SHA, GITHUB_RUN_ID.
+# (fingerprint.sh), RNW_STAGE, RNW_SHA (target-sha.sh; falls back to
+# GITHUB_SHA), GITHUB_RUN_ID.
 # Usage: build-info.sh
 set -euo pipefail
 source "$(dirname "$0")/../lib/common.sh"
@@ -25,7 +26,7 @@ dest="$RNW_RELEASE_META_DIR/build-info.json"
 
 BUILD_INFO_DEST="$dest" \
   BUILD_INFO_ROOT="$root" \
-  BUILD_INFO_SHA="${GITHUB_SHA:-$(git -C "$root" rev-parse HEAD 2>/dev/null || echo unknown)}" \
+  BUILD_INFO_SHA="${RNW_SHA:-${GITHUB_SHA:-$(git -C "$root" rev-parse HEAD 2>/dev/null || echo unknown)}}" \
   BUILD_INFO_STAGE="${RNW_STAGE:-development}" \
   node --input-type=module -e '
 import { writeFileSync, readFileSync } from "node:fs";

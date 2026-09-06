@@ -86,6 +86,10 @@ on:
         description: Expected sha256 of the bundletool jar; empty skips verification (Google publishes no checksum file, so this is opt-in)
         type: string
         default: ''
+      build-env:
+        description: 'Flat JSON object of non-secret build environment variables published before prebuild, the lanes and the scripts (e.g. {"OTA_ENABLED":"true","EXPO_UPDATES_URL":"https://..."}). Keys must be UPPER_SNAKE and anything that reads as a credential is refused - this is a workflow input, so GitHub neither masks nor hides it'
+        type: string
+        default: '{}'
     secrets:
       consumer-token:
         description: PAT with read access to a private consumer repository; falls back to the caller's github.token (works for a public consumer)
@@ -156,6 +160,10 @@ jobs:
           ANDROID_UPLOAD_KEYSTORE_BASE64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}
           PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
         run: bash "$RNW/scripts/release/decode-secrets.sh"
+      - name: Publish build-env
+        env:
+          RNW_BUILD_ENV: ${{ inputs.build-env }}
+        run: bash "$RNW/scripts/release/build-env.sh"
       - name: Prebuild (android)
         run: bash "$RNW/scripts/native/prebuild.sh" android
       # Before the lane, not inside it: the `android build` lane needs
@@ -186,12 +194,19 @@ jobs:
           ANDROID_UPLOAD_KEY_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEY_PASSWORD }}
           PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
         run: bash "$RNW/scripts/release/fastlane.sh" android build
+      # ANDROID_UPLOAD_CERT_SHA256 comes from build-env; the lane forwards it to
+      # the consumer's verify-android.sh as --cert-sha256, which is what turns
+      # "the aab is signed" into "the aab is signed by the expected key".
       - name: Fastlane android verify
         if: ${{ inputs.verify }}
         env:
           BUILD_INFO_FILE: ${{ env.RNW_RELEASE_META_DIR }}/build-info.json
           RELEASE_NOTES_STORE_FILE: ${{ env.RNW_RELEASE_META_DIR }}/notes-store.txt
           STORE_NOTES_JSON: ${{ env.RNW_RELEASE_META_DIR }}/store-notes.json
+          # Published by build-env; forwarded explicitly so the contract is
+          # visible at the step that depends on it. Empty means "signature
+          # present" only; set it to assert the signing key's fingerprint.
+          ANDROID_UPLOAD_CERT_SHA256: ${{ env.ANDROID_UPLOAD_CERT_SHA256 }}
           ANDROID_UPLOAD_KEYSTORE_BASE64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}
           ANDROID_UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_PASSWORD }}
           ANDROID_UPLOAD_KEY_ALIAS: ${{ secrets.ANDROID_UPLOAD_KEY_ALIAS }}

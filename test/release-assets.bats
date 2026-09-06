@@ -13,6 +13,10 @@ setup() {
   export RNW_TEST_LOG="$BATS_TEST_TMPDIR/gh.log"
   export RNW_TEST_BODY="$BATS_TEST_TMPDIR/body.md"
   export RNW_TEST_EXISTS="$BATS_TEST_TMPDIR/exists"
+  export RNW_TEST_SOURCE_EXISTS="$BATS_TEST_TMPDIR/source-exists"
+  export RNW_TEST_SOURCE_TAG="v1.2.3-build.42"
+  export RNW_TEST_SOURCE_ASSETS="$BATS_TEST_TMPDIR/source-assets"
+  mkdir -p "$RNW_TEST_SOURCE_ASSETS"
   : > "$RNW_TEST_LOG"
   printf 'Initial release notes.\n' > "$RNW_TEST_BODY"
   cat > "$STUB/gh" <<'SH'
@@ -24,10 +28,28 @@ case "$1 $2" in
       *"--json url"*) printf 'https://example.test/releases/%s\n' "$3"; exit 0 ;;
       *"--json body"*) cat "$RNW_TEST_BODY"; exit 0 ;;
     esac
+    if [ "$3" = "$RNW_TEST_SOURCE_TAG" ]; then
+      [ -f "$RNW_TEST_SOURCE_EXISTS" ] || exit 1
+      exit 0
+    fi
     [ -f "$RNW_TEST_EXISTS" ] || exit 1
     exit 0
     ;;
   "release create") : > "$RNW_TEST_EXISTS"; exit 0 ;;
+  "release download")
+    # Serves the source pre-release's assets out of $RNW_TEST_SOURCE_ASSETS.
+    [ -f "$RNW_TEST_SOURCE_EXISTS" ] || exit 1
+    dir=""
+    prev=""
+    for a in "$@"; do
+      [ "$prev" = "--dir" ] && dir="$a"
+      prev="$a"
+    done
+    [ -n "$dir" ] || exit 1
+    cp "$RNW_TEST_SOURCE_ASSETS"/* "$dir"/ 2>/dev/null
+    exit 0
+    ;;
+  "release delete") rm -f "$RNW_TEST_SOURCE_EXISTS"; exit 0 ;;
   "release edit")
     # Mirror --notes-file into the stored body, so a second `append` sees the
     # body the first one wrote - which is the whole point of the re-run test.
@@ -45,7 +67,14 @@ SH
   export PATH="$STUB:$PATH"
   export RNW_OUT="$BATS_TEST_TMPDIR/out" RNW_ASSETS_DIR="$ASSETS" RUNNER_TEMP="$BATS_TEST_TMPDIR/tmp"
   mkdir -p "$RUNNER_TEMP"
-  unset GITHUB_OUTPUT TITLE TARGET_SHA NOTES_FILE APPEND_TITLE
+  unset GITHUB_OUTPUT TITLE TARGET_SHA NOTES_FILE APPEND_TITLE FROM_TAG DELETE_SOURCE
+}
+
+source_release() {
+  : > "$RNW_TEST_SOURCE_EXISTS"
+  printf 'built ipa\n' > "$RNW_TEST_SOURCE_ASSETS/app.ipa"
+  printf 'built aab\n' > "$RNW_TEST_SOURCE_ASSETS/app.aab"
+  printf 'stale sums\n' > "$RNW_TEST_SOURCE_ASSETS/SHA256SUMS"
 }
 
 assets() {
@@ -99,6 +128,64 @@ release() { run bash "$REPO_ROOT/scripts/release/release-assets.sh" "$@"; }
   TAG=v9.9.9 release promote
   [ "$status" -ne 0 ] || fail "promoted a release that does not exist: $output"
   contains "$output" "does not exist" || fail "unexpected message: $output"
+}
+
+@test "promote carries the source pre-release's assets forward and regenerates SHA256SUMS" {
+  : > "$RNW_TEST_EXISTS"
+  source_release
+  printf 'info\n' > "$ASSETS/build-info.json"
+  TAG=v1.2.3 FROM_TAG="$RNW_TEST_SOURCE_TAG" release promote
+  [ "$status" -eq 0 ] || fail "exited $status: $output"
+  grep -q "^release download $RNW_TEST_SOURCE_TAG .*--clobber" "$RNW_TEST_LOG" \
+    || fail "the source assets were not downloaded: $(cat "$RNW_TEST_LOG")"
+  upload="$(grep '^release upload v1.2.3' "$RNW_TEST_LOG")"
+  contains "$upload" "app.ipa" || fail "the carried-forward ipa was not uploaded: $upload"
+  contains "$upload" "app.aab" || fail "the carried-forward aab was not uploaded: $upload"
+  contains "$upload" "build-info.json" || fail "this run's own asset was dropped: $upload"
+  contains "$upload" "--clobber" || fail "the promote upload is not idempotent: $upload"
+  # The source's own SHA256SUMS came down with the rest; it must be recomputed
+  # over the merged set, not shipped as-is.
+  not_contains "$(cat "$ASSETS/SHA256SUMS")" "stale sums" \
+    || fail "the source SHA256SUMS was published verbatim: $(cat "$ASSETS/SHA256SUMS")"
+  expected="$(cd "$ASSETS" && shasum -a 256 app.ipa | cut -d' ' -f1)"
+  grep -q "^$expected  app.ipa$" "$ASSETS/SHA256SUMS" || fail "wrong digest for the carried ipa"
+}
+
+@test "promote does not delete the source unless asked" {
+  : > "$RNW_TEST_EXISTS"
+  source_release
+  TAG=v1.2.3 FROM_TAG="$RNW_TEST_SOURCE_TAG" release promote
+  [ "$status" -eq 0 ] || fail "exited $status: $output"
+  ! grep -q '^release delete' "$RNW_TEST_LOG" || fail "deleted the source without delete-source"
+  [ -f "$RNW_TEST_SOURCE_EXISTS" ] || fail "the source pre-release is gone"
+}
+
+@test "promote with delete-source removes the pre-release and its tag, after the upload" {
+  : > "$RNW_TEST_EXISTS"
+  source_release
+  TAG=v1.2.3 FROM_TAG="$RNW_TEST_SOURCE_TAG" DELETE_SOURCE=true release promote
+  [ "$status" -eq 0 ] || fail "exited $status: $output"
+  grep -q "^release delete $RNW_TEST_SOURCE_TAG --yes --cleanup-tag$" "$RNW_TEST_LOG" \
+    || fail "the source was not deleted with its tag: $(cat "$RNW_TEST_LOG")"
+  # Ordering is the safety property: deleting first would leave no copy of the
+  # binaries anywhere if the upload then failed.
+  upload_line="$(grep -n '^release upload' "$RNW_TEST_LOG" | head -1 | cut -d: -f1)"
+  delete_line="$(grep -n '^release delete' "$RNW_TEST_LOG" | head -1 | cut -d: -f1)"
+  [ "$upload_line" -lt "$delete_line" ] || fail "the source was deleted before the upload"
+}
+
+@test "re-running a promote whose source is already deleted still succeeds" {
+  : > "$RNW_TEST_EXISTS"
+  source_release
+  TAG=v1.2.3 FROM_TAG="$RNW_TEST_SOURCE_TAG" DELETE_SOURCE=true release promote
+  [ "$status" -eq 0 ] || fail "first promote exited $status: $output"
+  first_upload="$(grep '^release upload v1.2.3' "$RNW_TEST_LOG")"
+  : > "$RNW_TEST_LOG"
+  TAG=v1.2.3 FROM_TAG="$RNW_TEST_SOURCE_TAG" DELETE_SOURCE=true release promote
+  [ "$status" -eq 0 ] || fail "re-run exited $status: $output"
+  contains "$output" "already promoted and deleted" || fail "unexpected message on re-run: $output"
+  [ "$first_upload" = "$(grep '^release upload v1.2.3' "$RNW_TEST_LOG")" ] \
+    || fail "the re-run uploaded a different asset set"
 }
 
 @test "append adds the section under its heading" {

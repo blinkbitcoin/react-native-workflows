@@ -115,6 +115,36 @@ lane_step_count() {
   done
 }
 
+# Named explicitly, not just covered by the generic per-step rule above: these
+# seven are the only lane inputs that are secrets *because of what they are*
+# rather than because they authenticate anything, so it is easy to "simplify"
+# them into env-json - which is printed to the log.
+@test "fastlane-lane declares the App Review contact and demo-account secrets" {
+  f="$REPO_ROOT/.github/workflows/fastlane-lane.yml"
+  declared=$(yq -r '.on.workflow_call.secrets | keys | .[]' "$f")
+  for s in APP_REVIEW_CONTACT_EMAIL APP_REVIEW_CONTACT_FIRST_NAME \
+    APP_REVIEW_CONTACT_LAST_NAME APP_REVIEW_CONTACT_PHONE \
+    APP_REVIEW_DEMO_USER APP_REVIEW_DEMO_PASSWORD APP_REVIEW_NOTES; do
+    grep -qxF "$s" <<<"$declared" || fail "fastlane-lane.yml does not declare the secret $s"
+  done
+}
+
+# Callers have no other way to get a non-secret value (OTA_ENABLED,
+# EXPO_UPDATES_URL, EXPO_PUBLIC_*, ANDROID_UPLOAD_CERT_SHA256, ...) into
+# prebuild, the lanes or the notes generator, so every workflow that runs one of
+# those must accept build-env.
+@test "every workflow that runs prebuild, a lane or the notes generator accepts build-env" {
+  for w in expo-prepare expo-build-ios expo-build-android fastlane-lane; do
+    f="$REPO_ROOT/.github/workflows/$w.yml"
+    have=$(yq -r '.on.workflow_call.inputs | has("build-env")' "$f")
+    [ "$have" = "true" ] || fail "$w.yml does not declare a build-env input"
+    default=$(yq -r '.on.workflow_call.inputs."build-env".default' "$f")
+    [ "$default" = "{}" ] || fail "$w.yml's build-env default is '$default', expected {}"
+    steps=$(yq -r '[.jobs[].steps[]? | select((.run? // "") | test("release/build-env.sh"))] | length' "$f")
+    [ "$steps" -ge 1 ] || fail "$w.yml declares build-env but never publishes it"
+  done
+}
+
 @test "every workflow declares on.workflow_call" {
   for w in "${WORKFLOWS[@]}"; do
     has=$(yq -r 'has("on") and (.on | has("workflow_call"))' "$w")
