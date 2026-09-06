@@ -4,4 +4,5 @@
 set -euo pipefail
 source "$(dirname "$0")/../lib/common.sh"
 require_cmd pnpm
-cd "$(consumer_root)" && pnpm store path
+path=$(cd "$(consumer_root)" && pnpm store path)
+gh_output path "$path"

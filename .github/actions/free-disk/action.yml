@@ -1,0 +1,8 @@
+name: free-disk
+description: Free disk space on Linux GitHub-hosted runners before disk-heavy steps (no-op elsewhere)
+runs:
+  using: composite
+  steps:
+    - name: Free disk space
+      shell: bash
+      run: bash "${{ github.action_path }}/../../../scripts/ci/free-disk.sh"

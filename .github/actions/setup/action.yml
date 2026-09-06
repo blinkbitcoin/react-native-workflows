@@ -1,0 +1,58 @@
+name: setup
+description: Install mise-managed tools, optionally Ruby, and pnpm dependencies for the consumer checkout
+inputs:
+  working-directory:
+    description: Consumer directory relative to GITHUB_WORKSPACE
+    default: '.'
+  install:
+    description: Run `pnpm install --frozen-lockfile` in the consumer directory
+    default: 'true'
+  ruby:
+    description: Install Ruby via ruby/setup-ruby (needed for fastlane/CocoaPods lanes)
+    default: 'false'
+runs:
+  using: composite
+  steps:
+    - name: Install mise-managed tools
+      uses: jdx/mise-action@v4
+      with:
+        working_directory: ${{ inputs.working-directory }}
+        cache: true
+    - name: Read pinned Ruby version
+      id: rb
+      if: inputs.ruby == 'true'
+      shell: bash
+      env:
+        WORKING_DIRECTORY: ${{ inputs.working-directory }}
+      run: bash "${{ github.action_path }}/../../../scripts/ci/ruby-version.sh"
+    - name: Install Ruby
+      if: inputs.ruby == 'true'
+      uses: ruby/setup-ruby@v1
+      with:
+        ruby-version: ${{ steps.rb.outputs.version }}
+        bundler-cache: true
+        working-directory: ${{ inputs.working-directory }}
+    - name: Resolve pnpm store path
+      id: store
+      shell: bash
+      env:
+        WORKING_DIRECTORY: ${{ inputs.working-directory }}
+      run: bash "${{ github.action_path }}/../../../scripts/ci/pnpm-store-path.sh"
+    - name: Cache pnpm store
+      uses: actions/cache@v6
+      with:
+        path: ${{ steps.store.outputs.path }}
+        key: pnpm-${{ runner.os }}-${{ hashFiles('**/pnpm-lock.yaml') }}
+        restore-keys: |
+          pnpm-${{ runner.os }}-
+    - name: Install dependencies
+      if: inputs.install == 'true'
+      shell: bash
+      env:
+        WORKING_DIRECTORY: ${{ inputs.working-directory }}
+      run: bash "${{ github.action_path }}/../../../scripts/ci/pnpm-install.sh"
+    - name: Export RNW environment
+      shell: bash
+      env:
+        WORKING_DIRECTORY: ${{ inputs.working-directory }}
+      run: bash "${{ github.action_path }}/../../../scripts/ci/rnw-env.sh"

@@ -1,0 +1,19 @@
+name: maestro
+description: Install and cache the Maestro CLI
+inputs:
+  version:
+    description: Maestro CLI version to install (kept equal to scripts/lib/versions.sh MAESTRO_VERSION; enforced by scripts/self/check-versions.sh)
+    default: '2.10.0'
+runs:
+  using: composite
+  steps:
+    - name: Cache Maestro
+      uses: actions/cache@v6
+      with:
+        path: ~/.maestro
+        key: maestro-${{ runner.os }}-${{ inputs.version }}
+    - name: Install Maestro
+      shell: bash
+      env:
+        MAESTRO_VERSION: ${{ inputs.version }}
+      run: bash "${{ github.action_path }}/../../../scripts/ci/maestro-install.sh"

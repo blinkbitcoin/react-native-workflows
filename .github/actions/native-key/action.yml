@@ -1,0 +1,51 @@
+name: native-key
+description: Compute the native dependency hash and exact cache keys for the consumer's iOS app, Android APK and Pods
+inputs:
+  working-directory:
+    description: Consumer directory relative to GITHUB_WORKSPACE
+    default: '.'
+  native-cache-version:
+    description: Cache key version prefix; bump to invalidate every native cache at once
+    default: 'v1'
+  xcode:
+    description: Xcode version folded into the iOS cache key ("default" is used when empty)
+    default: ''
+  native-extra-globs:
+    description: Extra glob patterns folded into the native dependency hash
+    default: ''
+outputs:
+  hash:
+    description: 16-hex native dependency hash
+    value: ${{ steps.keys.outputs.hash }}
+  ios-key:
+    description: Exact cache key for the built iOS app
+    value: ${{ steps.keys.outputs.ios-key }}
+  android-key:
+    description: Exact cache key for the built Android APK
+    value: ${{ steps.keys.outputs.android-key }}
+  pods-key:
+    description: Cache key for CocoaPods (used with a restore-keys prefix)
+    value: ${{ steps.keys.outputs.pods-key }}
+runs:
+  using: composite
+  steps:
+    - name: Read pinned yq version
+      id: yq-version
+      shell: bash
+      run: bash "${{ github.action_path }}/../../../scripts/ci/yq-version.sh"
+    - name: Install yq
+      uses: jdx/mise-action@v4
+      with:
+        mise_toml: |
+          [tools]
+          yq = "${{ steps.yq-version.outputs.version }}"
+        cache: true
+    - name: Compute native cache keys
+      id: keys
+      shell: bash
+      env:
+        WORKING_DIRECTORY: ${{ inputs.working-directory }}
+        NATIVE_CACHE_VERSION: ${{ inputs.native-cache-version }}
+        XCODE: ${{ inputs.xcode }}
+        NATIVE_EXTRA_GLOBS: ${{ inputs.native-extra-globs }}
+      run: bash "${{ github.action_path }}/../../../scripts/ci/native-keys.sh"

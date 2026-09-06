@@ -1,0 +1,32 @@
+name: forensics
+description: Upload E2E forensics as an artifact and post an artifact-summary (with junit totals) to the job summary
+inputs:
+  name:
+    description: Artifact name
+    default: 'forensics'
+  path:
+    description: Path to upload (defaults to $RNW_OUT/forensics)
+    default: ''
+  junit:
+    description: Optional path to a junit XML file to summarize
+    default: ''
+  retention-days:
+    description: Artifact retention in days
+    default: 7
+runs:
+  using: composite
+  steps:
+    - name: Upload forensics artifact
+      id: up
+      uses: actions/upload-artifact@v7
+      with:
+        name: ${{ inputs.name }}
+        path: ${{ inputs.path != '' && inputs.path || format('{0}/forensics', env.RNW_OUT) }}
+        if-no-files-found: ignore
+        retention-days: ${{ inputs.retention-days }}
+    - name: Summarize forensics artifact
+      shell: bash
+      env:
+        NAME: ${{ inputs.name }}
+        JUNIT: ${{ inputs.junit }}
+      run: bash "${{ github.action_path }}/../../../scripts/ci/artifact-summary.sh" "$NAME" "${{ steps.up.outputs.artifact-url }}" "$JUNIT"
