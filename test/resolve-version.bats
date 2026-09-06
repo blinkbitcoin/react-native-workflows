@@ -57,6 +57,73 @@ resolve() { run bash "$REPO_ROOT/scripts/release/resolve-version.sh" "$REPO"; }
   contains "$output" "release-please release commit" || fail "unexpected origin: $output"
 }
 
+# The merge-commit shape: with the merge button set to "Create a merge commit",
+# HEAD's subject is `Merge pull request #N from …` and the release commit is its
+# *second parent*. Without the HEAD^2 lookup this falls back to the patch bump -
+# the original bug, harder to spot because the fix looks present.
+merge_release_fixture() {
+  commit
+  git -C "$REPO" tag v1.1.1
+  git -C "$REPO" checkout -q -b release-please--branches--main
+  commit 'chore(main): release 1.2.0'
+  git -C "$REPO" checkout -q main
+  git -C "$REPO" merge -q --no-ff \
+    -m 'Merge pull request #12 from release-please--branches--main' release-please--branches--main
+}
+
+@test "release-please's release commit is found through a merge commit" {
+  merge_release_fixture
+  [ -n "$(git -C "$REPO" rev-list --merges -1 HEAD)" ] || fail "the fixture is not a merge commit"
+  resolve
+  [ "$status" -eq 0 ] || fail "exited $status: $output"
+  contains "$output" "APP_VERSION=1.2.0" || fail "the merge commit's release version was missed: $output"
+}
+
+# Anchored on both revisions: a merge whose own subject merely quotes the
+# release subject is not a release commit.
+@test "a merge commit that only quotes the release subject is not a source" {
+  commit
+  git -C "$REPO" tag v0.4.9
+  git -C "$REPO" checkout -q -b feature
+  commit 'feat: something'
+  git -C "$REPO" checkout -q main
+  git -C "$REPO" merge -q --no-ff -m 'Merge pull request #12 from chore(main): release 9.9.9' feature
+  resolve
+  [ "$status" -eq 0 ] || fail "exited $status: $output"
+  contains "$output" "APP_VERSION=0.4.10" || fail "a quoted subject was used as a source: $output"
+}
+
+# The consumer ships its own copy and expo-prepare runs this one: they are
+# contract-identical, not byte-identical, so the case that differs most between
+# two implementations is compared output-to-output.
+@test "this copy and the template's agree on the merge-commit fixture" {
+  other="/Users/jonas/Dev/blink/react-native-mobile-template/scripts/release/resolve-version.sh"
+  [ -f "$other" ] || skip "the template is not checked out next to this repo"
+  merge_release_fixture
+  # Both halves of the contract: the APP_* lines on stdout, and the file both
+  # copies append to when $GITHUB_OUTPUT is set. Only those are the contract -
+  # with GITHUB_OUTPUT unset this copy also prints its outputs (gh_output's
+  # documented fallback) where the template's prints nothing, which is a
+  # difference in a path no workflow takes.
+  mine_out="$BATS_TEST_TMPDIR/mine.out"
+  theirs_out="$BATS_TEST_TMPDIR/theirs.out"
+  : > "$mine_out"
+  : > "$theirs_out"
+  mine="$(GITHUB_OUTPUT="$mine_out" bash "$REPO_ROOT/scripts/release/resolve-version.sh" "$REPO" 2>/dev/null | grep '^APP_')"
+  theirs="$(cd "$REPO" && GITHUB_OUTPUT="$theirs_out" bash "$other" 2>/dev/null | grep '^APP_')"
+  [ "$mine" = "$theirs" ] || fail "the two copies disagree on stdout:
+--- this repo ---
+$mine
+--- template ---
+$theirs"
+  [ "$(sort "$mine_out")" = "$(sort "$theirs_out")" ] || fail "the two copies disagree on \$GITHUB_OUTPUT:
+--- this repo ---
+$(cat "$mine_out")
+--- template ---
+$(cat "$theirs_out")"
+  contains "$mine" "APP_VERSION=1.2.0" || fail "the fixture did not exercise the merge-commit source: $mine"
+}
+
 @test "a tag on HEAD still wins over the release commit subject" {
   commit 'chore(main): release 1.2.0'
   git -C "$REPO" tag v1.2.1

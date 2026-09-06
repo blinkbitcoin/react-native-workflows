@@ -138,8 +138,15 @@ jobs:
       # recorded for the bytes it built. Only `artifacts` is taken from those
       # copies - a platform record is a mid-job snapshot and must not put a
       # stale sha or stage back on the release.
+      #
+      # The literal `.rnw/…` path, like every other step in this job: $RNW is
+      # published by the setup composite action, and this job deliberately never
+      # runs it (it installs nothing - it only talks to the GitHub API). A
+      # `$RNW/…` path here would expand to `/scripts/…` and exit 127 on every
+      # single call. The script needs `node`, which the GitHub-hosted image
+      # ships; a self-hosted linux-runner must too.
       - name: Merge platform build-info
-        run: bash "$RNW/scripts/release/merge-build-info.sh"
+        run: bash ".rnw/scripts/release/merge-build-info.sh"
       - name: Release assets
         id: assets
         env:

@@ -14,8 +14,8 @@
 #
 # Version, first match wins:
 #   1. a `vX.Y.Z` tag pointing at HEAD (the tag build itself)
-#   2. HEAD's own subject when it is release-please's release commit
-#      (`chore(main): release X.Y.Z`)
+#   2. a release-please release commit (`chore(main): release X.Y.Z`) - HEAD's
+#      own subject after a squash/rebase merge, or HEAD^2's after a merge commit
 #   3. a version inside $RELEASE_PR_TITLE (the release-please PR being built)
 #   4. a version inside the title of the open `autorelease: pending` PR (via gh)
 #   5. the newest stable `vX.Y.Z` tag with its patch component bumped by one
@@ -65,17 +65,36 @@ fi
 # than on any commit that happens to carry a version: `chore(main): release
 # 1.2.0`. The version is taken from that subject, not from a grep of the whole
 # message, so a body mentioning another version cannot win.
+#
+# HEAD *and* HEAD^2, matching the template's copy: `HEAD` covers a squash or
+# rebase merge, which carries the PR title as its subject; `HEAD^2` covers a
+# merge commit, whose own subject is `Merge pull request #N from …` and whose
+# second parent is the release commit itself. Without the second-parent lookup a
+# repository whose merge button is set to "Create a merge commit" falls silently
+# back to the patch bump - the original bug, harder to spot because the fix
+# looks present. Both are matched anchored, so a commit that merely quotes the
+# subject ("Merge pull request #12 from chore(main): release 9.9.9") is not a
+# release commit.
+release_subject() {
+  local rev subject
+  for rev in HEAD 'HEAD^2'; do
+    subject="$(git log -1 --format='%s' "$rev" 2>/dev/null || true)"
+    case "$subject" in
+      'chore(main): release '*) printf '%s' "$subject"; return 0 ;;
+    esac
+  done
+  printf ''
+}
+
 if [ -z "$version" ]; then
-  subject="$(git log -1 --format='%s' 2>/dev/null || true)"
-  case "$subject" in
-    'chore(main): release '*)
-      candidate="$(printf '%s' "$subject" | sed -nE 's/^chore\(main\): release ([0-9]+\.[0-9]+\.[0-9]+).*$/\1/p')"
-      if [ -n "$candidate" ]; then
-        version="$candidate"
-        origin="release-please release commit ($subject)"
-      fi
-      ;;
-  esac
+  subject="$(release_subject)"
+  if [ -n "$subject" ]; then
+    candidate="$(printf '%s' "$subject" | sed -nE 's/^chore\(main\): release ([0-9]+\.[0-9]+\.[0-9]+).*$/\1/p')"
+    if [ -n "$candidate" ]; then
+      version="$candidate"
+      origin="release-please release commit ($subject)"
+    fi
+  fi
 fi
 
 if [ -z "$version" ] && [ -n "${RELEASE_PR_TITLE:-}" ]; then

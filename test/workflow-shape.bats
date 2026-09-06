@@ -195,6 +195,23 @@ TEMPLATE_LANES="$FIXTURES/consumer-min/fastlane/lanes/shared.rb"
   [ "$n" -eq 1 ] || fail "expo-build-android does not run artifact-hashes.sh exactly once"
 }
 
+# $RNW is published by the setup composite action. A job that never runs setup
+# expands `$RNW/scripts/…` to `/scripts/…` and exits 127 on every call - a
+# workflow that cannot work at all, and one no unit test would ever reach.
+@test "no run: step uses \$RNW in a job that never runs the setup action" {
+  for w in "${WORKFLOWS[@]}"; do
+    while read -r j; do
+      [ -n "$j" ] || continue
+      # This family's own composite action specifically - not actions/setup-node
+      # or gradle/actions/setup-gradle, neither of which publishes $RNW.
+      setup=$(yq -r "[.jobs.\"$j\".steps[]? | select((.uses // \"\") | test(\"rnw/.github/actions/setup\"))] | length" "$w")
+      [ "$setup" -eq 0 ] || continue
+      bad=$(yq -r "[.jobs.\"$j\".steps[]? | select((.run // \"\") | test(\"RNW/\")) | .name] | join(\", \")" "$w")
+      [ -z "$bad" ] || fail "$(basename "$w") job '$j' never runs the setup action but uses \$RNW in: $bad"
+    done <<<"$(yq -r '.jobs | keys | .[]' "$w")"
+  done
+}
+
 # `merge-multiple: true` has no defined order, so two artifacts carrying
 # `build-info.json` would make the release's record a coin toss. The per-platform
 # record therefore ships under its own name and github-release folds it in

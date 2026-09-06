@@ -611,6 +611,13 @@ make sense together:
 
 ### Promoting a pre-release's assets
 
+> **`github-release.yml` runs no `Setup`.** That job installs nothing — it only
+> talks to the GitHub API — so its steps use the literal `.rnw/scripts/…` path
+> (`$RNW` is published by the setup action and is empty there) and rely on the
+> runner image for `gh`, `bash` and **`node`** (the `Merge platform build-info`
+> step parses JSON with it). All three are on GitHub-hosted `ubuntu-latest`; a
+> self-hosted `linux-runner` must provide them.
+
 `github-release.yml`'s `promote` with `from-tag` downloads every asset of the
 pre-release and re-uploads it to the target tag (`--clobber`), regenerating
 `SHA256SUMS` over the merged set. The point is that the promoted release ships
@@ -816,12 +823,17 @@ consumer's is standalone. What must match exactly is the contract: print
 to `$GITHUB_OUTPUT`, and resolve in this order, first match wins:
 
 1. a stable `vX.Y.Z` tag pointing at HEAD;
-2. HEAD's own subject when it is release-please's release commit,
-   `chore(main): release X.Y.Z` — **the release build's only source**: on that
-   merge commit the tag does not exist yet (release-please creates it from the
-   same push), a `push` event carries no `$RELEASE_PR_TITLE`, and the PR is
-   already closed, so without this the build was labelled with a patch bump of
-   the *previous* tag;
+2. a release-please release commit, `chore(main): release X.Y.Z` — **the
+   release build's only source**: on that commit the tag does not exist yet
+   (release-please creates it from the same push), a `push` event carries no
+   `$RELEASE_PR_TITLE`, and the PR is already closed, so without this the build
+   was labelled with a patch bump of the *previous* tag. Both `HEAD` and
+   `HEAD^2` are checked: a squash or rebase merge carries the release subject on
+   HEAD itself, while a **merge commit**'s own subject is
+   `Merge pull request #N from …` and the release commit is its second parent —
+   so a repository whose merge button is set to "Create a merge commit" would
+   otherwise fall silently back to the patch bump. Both are matched anchored, so
+   a merge whose branch name quotes the subject is not a release commit;
 3. a version inside `$RELEASE_PR_TITLE`;
 4. the open `autorelease: pending` PR's title (only when `GH_TOKEN` is set);
 5. the newest **stable** `vX.Y.Z` tag with its patch component bumped;
