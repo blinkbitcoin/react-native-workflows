@@ -543,7 +543,23 @@ Rules, enforced by `scripts/lib/build-env.sh`:
   workflow *input*: GitHub does not mask it, it appears in the run's parameters,
   and anyone who can see the run can read it. Refusing loudly is the difference
   between noticing immediately and leaking quietly.
+- **A key owned by the family or by the runner is refused**: anything matching
+  `RNW_*`, `GITHUB_*`, `RUNNER_*`, `ACTIONS_*`, `LD_*`, `DYLD_*`, plus `PATH`,
+  `HOME` and `NODE_OPTIONS`. `build-env` is published *before* the fingerprint
+  step, so `{"RNW_FP_IOS":"…"}` would hand the OTA fingerprint gate a
+  caller-supplied constant to compare its baseline against, and
+  `RNW_ASSETS_DIR` / `RNW_RELEASE_META_DIR` would repoint the artifact paths
+  mid-job. Use the dedicated input instead.
+- **A value may contain anything, newlines included.** Values reach
+  `$GITHUB_ENV` through the heredoc delimiter form (`KEY<<__rnw_eof_…`), never
+  as a bare `KEY=value` line — a value carrying a newline would otherwise write
+  a second line that the runner reads as *another* variable (`PATH=/evil` on the
+  second line of an innocent-looking repo variable), in a job that also holds
+  signing credentials.
 - Only key names are logged, never values.
+
+The same rules apply to `fastlane-lane.yml`'s `env-json` input
+(`scripts/release/env-json.sh`), except that its keys may be lower-case.
 
 So `RELEASE_NOTES_LLM_PROVIDER` / `RELEASE_NOTES_LLM_MODEL` /
 `OPENAI_BASE_URL` / `STORE_NOTES_INCLUDE_CHANGELOG` go in `build-env`, while

@@ -15,6 +15,17 @@
 # anyone who can see the run. Refusing here is the difference between a caller
 # noticing at once and a credential quietly ending up in a public log.
 #
+# A key that belongs to this workflow family (RNW_*) or to the runner itself
+# (GITHUB_*, RUNNER_*, ACTIONS_*, PATH, HOME, LD_*, DYLD_*, NODE_OPTIONS) is
+# refused for a different reason: build-env is published before fingerprint.sh
+# runs, so `{"RNW_FP_IOS":"<baseline>"}` would hand the OTA fingerprint gate a
+# caller-supplied constant to compare its baseline against, and RNW_ASSETS_DIR /
+# RNW_RELEASE_META_DIR would repoint the artifact paths mid-job.
+#
+# Values may contain anything, including newlines: they go into $GITHUB_ENV
+# through gh_env, which switches to the heredoc form rather than emitting a
+# second `KEY=` line the runner would read as another variable.
+#
 # Usage: source it, then rnw_publish_build_env
 # shellcheck shell=bash
 
@@ -28,8 +39,10 @@ rnw_publish_build_env() {
   require_cmd node
 
   local env_file="${RUNNER_TEMP:-/tmp}/rnw-build-env.env"
+  # `if !`, not a bare call: the scratch file must not survive a rejection
+  # either, and errexit would abort before any cleanup could run.
   # shellcheck disable=SC2016  # the ${...} inside are JS template literals
-  RNW_BUILD_ENV="$json" node --input-type=module -e '
+  if ! RNW_BUILD_ENV="$json" node --input-type=module -e '
 const raw = process.env.RNW_BUILD_ENV;
 let obj;
 try { obj = JSON.parse(raw); } catch (e) {
@@ -47,6 +60,10 @@ const NEVER = new Set([
   "PLAY_SERVICE_ACCOUNT_JSON", "ASC_KEY_P8_BASE64",
   "ANDROID_UPLOAD_KEYSTORE_BASE64", "MATCH_GIT_BASIC_AUTHORIZATION",
 ]);
+// Names owned by this family or by the runner: see the header. RNW_FP_IOS /
+// RNW_FP_ANDROID are the sharp end - they short-circuit the fingerprint the
+// OTA gate compares against.
+const RESERVED = /^(RNW_|GITHUB_|RUNNER_|ACTIONS_|LD_|DYLD_)|^(PATH|HOME|NODE_OPTIONS)$/;
 for (const [k, v] of Object.entries(obj)) {
   if (!/^[A-Z][A-Z0-9_]*$/.test(k)) {
     console.error(`::error::build-env key is not an upper-case env name: ${k}`);
@@ -56,20 +73,28 @@ for (const [k, v] of Object.entries(obj)) {
     console.error(`::error::build-env key ${k} looks like a credential; pass it as a secret instead - build-env is a workflow input and is not masked`);
     process.exit(1);
   }
+  if (RESERVED.test(k)) {
+    console.error(`::error::build-env key ${k} is reserved by react-native-workflows or by the runner; use the dedicated workflow input instead of build-env`);
+    process.exit(1);
+  }
   if (v !== null && typeof v === "object") {
     console.error(`::error::build-env value for ${k} must be a scalar`);
     process.exit(1);
   }
-  process.stdout.write(`${k}=${v === null ? "" : String(v)}\n`);
+  // NUL-separated, not line-separated: a value may legitimately contain a
+  // newline, and a line-based reader would split it into a second variable.
+  process.stdout.write(`${k}\0${v === null ? "" : String(v)}\0`);
 }
-' > "$env_file"
+' > "$env_file"; then
+    rm -f "$env_file"
+    exit 1
+  fi
 
   count=0
-  while IFS= read -r line; do
-    [ -n "$line" ] || continue
-    log "build-env: ${line%%=*}"
-    if [ -n "${GITHUB_ENV:-}" ]; then printf '%s\n' "$line" >> "$GITHUB_ENV"; fi
-    export "${line%%=*}=${line#*=}"
+  local key value
+  while IFS= read -r -d '' key && IFS= read -r -d '' value; do
+    log "build-env: $key"
+    gh_env "$key" "$value"
     count=$((count + 1))
   done < "$env_file"
   rm -f "$env_file"

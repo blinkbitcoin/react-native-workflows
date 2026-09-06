@@ -6,6 +6,14 @@
 # Values are printed, so this is for configuration, never for credentials - a
 # secret belongs in `secrets:` and decode-secrets.sh.
 #
+# Key policy mirrors scripts/lib/build-env.sh (which is tested by the same
+# assertions in test/env-json.bats and test/build-env.bats, so the two cannot
+# drift): a name owned by this family or by the runner is refused, because
+# build-env's fingerprint-override hole is reachable through this input too.
+# Values reach $GITHUB_ENV through gh_env, which uses the heredoc form for a
+# value containing a newline rather than writing a second `KEY=` line the
+# runner would read as another variable.
+#
 # Usage: env-json.sh
 set -euo pipefail
 source "$(dirname "$0")/../lib/common.sh"
@@ -34,21 +42,27 @@ if (obj === null || typeof obj !== "object" || Array.isArray(obj)) {
   console.error("::error::RNW_ENV_JSON must be a flat JSON object");
   process.exit(1);
 }
+// Same set as scripts/lib/build-env.sh: this input reaches $GITHUB_ENV too.
+const RESERVED = /^(RNW_|GITHUB_|RUNNER_|ACTIONS_|LD_|DYLD_)|^(PATH|HOME|NODE_OPTIONS)$/;
 for (const [k, v] of Object.entries(obj)) {
   if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(k)) {
     console.error(`::error::RNW_ENV_JSON key is not a valid env name: ${k}`);
+    process.exit(1);
+  }
+  if (RESERVED.test(k)) {
+    console.error(`::error::RNW_ENV_JSON key ${k} is reserved by react-native-workflows or by the runner; use the dedicated workflow input instead`);
     process.exit(1);
   }
   if (v !== null && typeof v === "object") {
     console.error(`::error::RNW_ENV_JSON value for ${k} must be a scalar`);
     process.exit(1);
   }
-  process.stdout.write(`${k}=${v === null ? "" : String(v)}\n`);
+  // NUL-separated, not line-separated - see scripts/lib/build-env.sh.
+  process.stdout.write(`${k}\0${v === null ? "" : String(v)}\0`);
 }
 ' > "$env_file"
 
-while IFS= read -r line; do
-  [ -n "$line" ] || continue
-  log "env-json: ${line%%=*}"
-  if [ -n "${GITHUB_ENV:-}" ]; then printf '%s\n' "$line" >> "$GITHUB_ENV"; fi
+while IFS= read -r -d '' key && IFS= read -r -d '' value; do
+  log "env-json: $key"
+  gh_env "$key" "$value"
 done < "$env_file"
