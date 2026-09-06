@@ -72,6 +72,38 @@ commit_file() {
   [ "$output" = "docs-only=true" ]
 }
 
+@test "DOCS_GLOBS_EXTRA is additive: the built-in docs patterns still apply" {
+  commit_file "other.txt"
+  base=$(git -C "$repo" rev-parse HEAD)
+  commit_file "spec/a.txt"
+  commit_file "docs/x.md"
+  head=$(git -C "$repo" rev-parse HEAD)
+  cd "$repo" && DOCS_GLOBS_EXTRA='^spec/' run bash "$REPO_ROOT/scripts/ci/changed-class.sh" "$base" "$head"
+  [ "$status" -eq 0 ]
+  [ "$output" = "docs-only=true" ]
+}
+
+@test "DOCS_GLOBS_EXTRA does not make a src file docs" {
+  commit_file "other.txt"
+  base=$(git -C "$repo" rev-parse HEAD)
+  commit_file "spec/a.txt"
+  commit_file "src/a.ts"
+  head=$(git -C "$repo" rev-parse HEAD)
+  cd "$repo" && DOCS_GLOBS_EXTRA='^spec/' run bash "$REPO_ROOT/scripts/ci/changed-class.sh" "$base" "$head"
+  [ "$status" -eq 0 ]
+  [ "$output" = "docs-only=false" ]
+}
+
+@test "DOCS_GLOBS still replaces the default pattern outright" {
+  commit_file "other.txt"
+  base=$(git -C "$repo" rev-parse HEAD)
+  commit_file "docs/x.md"
+  head=$(git -C "$repo" rev-parse HEAD)
+  cd "$repo" && DOCS_GLOBS='^spec/' run bash "$REPO_ROOT/scripts/ci/changed-class.sh" "$base" "$head"
+  [ "$status" -eq 0 ]
+  [ "$output" = "docs-only=false" ]
+}
+
 @test "docs-only=false when BASE is empty (push event)" {
   commit_file "docs/x.md"
   head=$(git -C "$repo" rev-parse HEAD)

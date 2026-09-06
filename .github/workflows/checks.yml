@@ -87,7 +87,7 @@ on:
         type: boolean
         default: true
       docs-globs:
-        description: Extra regex alternatives (POSIX ERE, '|'-joined) treated as docs for docs-only detection
+        description: Extra regex alternatives (POSIX ERE, '|'-joined) added to the built-in docs pattern for docs-only detection
         type: string
         default: ''
     secrets:
@@ -130,7 +130,9 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.sha }}
-          DOCS_GLOBS: ${{ inputs.docs-globs }}
+          # _EXTRA, not DOCS_GLOBS: the input is additive, so it must not
+          # replace the built-in ^docs/|\.md$|... pattern.
+          DOCS_GLOBS_EXTRA: ${{ inputs.docs-globs }}
         run: bash ".rnw/scripts/ci/changed-class.sh" "$BASE_SHA" "$HEAD_SHA"
   code:
     runs-on: ${{ inputs.linux-runner }}
