@@ -5,7 +5,9 @@ releasing React Native (Expo) apps: checks (typecheck/lint/format/knip/spell/
 i18n/codegen/expo-doctor/audit/actionlint/shellcheck/commitlint), unit tests
 with coverage, E2E (Maestro on iOS simulators and Android emulators, with
 native-build caching), web export + Playwright + GitHub Pages, PR hygiene
-(cancel-on-close, PR-title linting). Consumed by
+(cancel-on-close, PR-title linting), and the release path (version/notes
+preparation, signed store builds through fastlane, GitHub releases,
+fingerprint-gated OTA updates). Consumed by
 `blinkbitcoin/react-native-mobile-template` and similar projects — see
 **[docs/consumer-guide.md](docs/consumer-guide.md)** for the full contract.
 
@@ -60,6 +62,12 @@ the exact ref/sha that defines the running job, then runs its scripts through
 | `web.yml` | Expo web export, Playwright suite, GitHub Pages deploy |
 | `pr-closed.yml` | cancels in-flight runs for a closed PR's head sha |
 | `pr-title.yml` | Conventional Commits lint on the PR title |
+| `expo-prepare.yml` | resolves version/build number, fingerprints, `build-info.json` + store notes as the `release-meta` artifact |
+| `expo-build-ios.yml` | prebuild, pods, `fastlane ios build`/`verify`, uploads `ios-ipa` + `ios-dsym` |
+| `expo-build-android.yml` | prebuild, `fastlane android build`/`verify`, uploads `android-aab`, `android-apk`, `android-mapping` |
+| `fastlane-lane.yml` | runs one named fastlane lane (store upload, promote, staged rollout, halt) |
+| `github-release.yml` | creates/moves a GitHub release with the fixed asset set + `SHA256SUMS` |
+| `expo-ota-publish.yml` | fingerprint-gated OTA export and publish (opt-in via `ota-enabled`) |
 | `self-ci.yml` | this repo's own CI (actionlint, shellcheck, bats, check-versions, spell) |
 | `self-smoke.yml` | runs the family against a real consumer (dispatch + weekly cron) |
 | `self-release.yml` | release-please + moving major/minor tag |

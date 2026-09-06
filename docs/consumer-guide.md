@@ -233,6 +233,7 @@ mental model).
 | `commitlint-commits` | `false` | Also lint every commit's message in the PR |
 | `actionlint` | `true` | Lint the consumer's `.github/workflows` |
 | `shellcheck` | `true` | Lint the consumer's `scripts/` |
+| `release-checks` | `false` | Install Ruby (`ruby/setup-ruby@v1`, `bundler-cache: true`) and run the consumer's `check:release` script — the Fastfile/Gemfile and release-config validation behind the template's `make check-release`. Off by default because a repo with no release setup has no such script |
 | `docs-only-detection` | `true` | Classify the PR as docs-only |
 | `docs-globs` | `''` | Extra `\|`-joined POSIX ERE alternatives **added to** the built-in docs pattern (`^docs/\|\.md$\|^LICENSE$\|^\.github/ISSUE_TEMPLATE/\|^\.github/PULL_REQUEST_TEMPLATE`), not a replacement for it |
 
@@ -314,6 +315,250 @@ above only adds `edited` (guarded by `github.event.changes.title != null`, since
 `on.workflow_call: {}` — no inputs, outputs or secrets. The caller must grant
 `permissions: actions: write` (on top of `contents: read`) for the cancel step.
 
+## Release workflows
+
+Six more reusable workflows cover the release path: version/notes preparation,
+signed store builds, arbitrary fastlane lanes, the GitHub release, and OTA
+publishing. They are strictly opt-in — nothing in `ci.yml` calls them — and
+they follow every rule the workflows above do: `permissions: contents: read` at
+the top, no `concurrency` (the caller owns it), self-checkout into `.rnw/`,
+every `run:` a single `bash "$RNW/scripts/..."` line, and **every secret
+declared `required: false`** so a caller only passes the ones its stage needs.
+
+The pipeline they compose into:
+
+```
+expo-prepare ──► expo-build-ios     ──┐
+             └─► expo-build-android ──┴─► github-release ──► fastlane-lane (store upload/promote)
+                                                          └─► expo-ota-publish
+```
+
+`expo-prepare` is the only job that decides *what* the release is; every later
+job is handed `version` / `build-number` and the `release-meta` artifact rather
+than recomputing them, so a re-run of a single stage can never disagree with
+the stage before it.
+
+### `expo-prepare.yml`
+
+Resolves the version and build number, computes both native fingerprints,
+writes `build-info.json` and the store notes, and uploads them as the
+`release-meta` artifact.
+
+| Input | Default | Meaning |
+| --- | --- | --- |
+| `repository`, `ref`, `working-directory`, `linux-runner`, `macos-runner`, `native-cache-version` | (as above) | The consumer checkout uses `fetch-depth: 0` — version resolution reads `v*` tags and counts first-parent commits, and both are empty in a shallow clone |
+| `build-number-offset` | `1000` | Added to the first-parent commit count. Raise it, never lower it: App Store Connect and Play both permanently reject a build number that goes backwards |
+| `notes-locales` | `en` | Locales handed to the consumer's `scripts/release/notes.mjs` |
+| `stage` | `internal` | Written to `build-info.json`'s `stage` |
+| `release-body-file` | `''` | Consumer-relative file holding a release body; switches note generation to `--from-body` |
+| `require-green-workflow` | `''` | Workflow file name (e.g. `release-internal.yml`) that must have concluded `success` for `github.sha` before preparing. Empty disables the gate |
+| `release-meta-artifact` | `release-meta` | Artifact name for `build-info.json`, `store-notes.json`, `notes-store.txt`, `notes.md` |
+
+Outputs: `version`, `build-number`, `fp-ios`, `fp-android`. Secrets:
+`consumer-token` (optional). The job requests `actions: read` on top of
+`contents: read` so `gh run list` can see the gated workflow's runs — a caller
+that sets `require-green-workflow` must grant it.
+
+### `expo-build-ios.yml`
+
+Prebuild → pods → `fastlane ios build` → `fastlane ios verify`, on
+`macos-runner`.
+
+| Input | Default | Meaning |
+| --- | --- | --- |
+| `repository`, `ref`, `working-directory`, `linux-runner`, `macos-runner`, `native-cache-version` | (as above) | `macos-runner` is the one that matters here |
+| `native-extra-globs` | `''` | Extra globs folded into the native dependency hash (see [`docs/cache-keys.md`](cache-keys.md)) |
+| `xcode` | `''` | Sets `DEVELOPER_DIR` to `/Applications/Xcode_<v>.app/Contents/Developer` and is folded into the Pods cache key |
+| `environment` | `''` | GitHub Environment gating the build (secrets + approvals); empty means none |
+| `version` / `build-number` | `''` | Passed to the lanes as `APP_VERSION` / `APP_BUILD_NUMBER` (wire them to `expo-prepare`'s outputs) |
+| `stage` | `internal` | Passed through as `RNW_STAGE` |
+| `ios-bundle-id` / `ios-scheme` | `''` | `IOS_BUNDLE_ID` / `IOS_SCHEME`; empty lets the Fastfile resolve them from the Expo config |
+| `verify` | `true` | Run the `ios verify` lane after `build` |
+| `release-meta-artifact` | `release-meta` | Artifact downloaded for `build-info.json` and the store notes |
+| `ipa-artifact` / `dsym-artifact` | `ios-ipa` / `ios-dsym` | Upload names |
+
+No outputs. Secrets (all optional): `consumer-token`, `MATCH_PASSWORD`,
+`MATCH_GIT_URL`, `MATCH_GIT_BASIC_AUTHORIZATION`, `ASC_KEY_ID`,
+`ASC_ISSUER_ID`, `ASC_KEY_P8_BASE64`.
+
+### `expo-build-android.yml`
+
+Prebuild → `fastlane android build` → `fastlane android verify`, on
+`linux-runner`.
+
+| Input | Default | Meaning |
+| --- | --- | --- |
+| `repository`, `ref`, `working-directory`, `linux-runner`, `macos-runner`, `native-cache-version` | (as above) | — |
+| `environment` | `''` | GitHub Environment gating the build |
+| `version` / `build-number` | `''` | `APP_VERSION` / `APP_BUILD_NUMBER` |
+| `stage` | `internal` | `RNW_STAGE` |
+| `android-package` | `''` | `ANDROID_PACKAGE`; empty lets the Fastfile resolve it from the Expo config |
+| `verify` | `true` | Run the `android verify` lane after `build` |
+| `release-meta-artifact` | `release-meta` | Artifact downloaded for `build-info.json` and the store notes |
+| `aab-artifact` / `apk-artifact` / `mapping-artifact` | `android-aab` / `android-apk` / `android-mapping` | Upload names |
+
+No outputs. Secrets (all optional): `consumer-token`,
+`ANDROID_UPLOAD_KEYSTORE_BASE64`, `ANDROID_UPLOAD_KEYSTORE_PASSWORD`,
+`ANDROID_UPLOAD_KEY_ALIAS`, `ANDROID_UPLOAD_KEY_PASSWORD`,
+`PLAY_SERVICE_ACCOUNT_JSON`. The apk and the mapping file upload with
+`if: !cancelled()` — without the mapping, every Play crash report for that
+build is permanently unreadable, so it must survive a failed `verify`.
+
+### `fastlane-lane.yml`
+
+One lane, one job. This is what every post-build store action goes through:
+uploads, promotions, staged rollouts, halts.
+
+| Input | Default | Meaning |
+| --- | --- | --- |
+| `repository`, `ref`, `working-directory`, `linux-runner`, `macos-runner`, `native-cache-version` | (as above) | `linux-runner`/`macos-runner` are carried for consistency; `runner` is what selects this job's runner |
+| `platform` | (required) | `ios` or `android` |
+| `lane` | (required) | `ios build\|verify\|upload_internal\|promote_beta\|release_production\|phased\|upload_symbols`, `android build\|verify\|upload_internal\|promote_beta\|release_production\|rollout\|halt` |
+| `lane-args` | `''` | Space-separated fastlane `key:value` arguments (e.g. `percentage:0.1`) |
+| `runner` | `ubuntu-latest` | An iOS lane that touches Xcode needs a macOS runner; a store-API-only lane does not |
+| `environment` | `''` | GitHub Environment gating the lane (this is where a production approval belongs) |
+| `env-json` | `{}` | Flat JSON object published into the lane's environment. **Configuration only** — the values are printed to the log; credentials belong in `secrets:` |
+| `artifacts` | `''` | Artifact name or glob pattern downloaded (merged) into `$RNW_ASSETS_DIR` before the lane runs |
+| `version` / `build-number` | `''` | `APP_VERSION` / `APP_BUILD_NUMBER` |
+| `ios-bundle-id` / `ios-scheme` / `android-package` | `''` | Passed straight through to the lane |
+| `ruby` | `true` | Install Ruby (leave on unless the consumer has no Gemfile) |
+| `timeout-minutes` | `45` | Raise it for a lane that waits on App Store Connect processing |
+
+No outputs. Secrets (all optional): `consumer-token` plus the full
+iOS + Android credential set listed under the two build workflows.
+
+### `github-release.yml`
+
+Creates or moves a GitHub release and attaches the fixed asset set.
+
+| Input | Default | Meaning |
+| --- | --- | --- |
+| `repository`, `ref`, `working-directory`, `linux-runner`, `macos-runner`, `native-cache-version` | (as above) | This workflow never checks the consumer out, so only `repository` and `linux-runner` do anything |
+| `mode` | (required) | `create-prerelease`, `promote`, `latest` or `append` |
+| `tag` | (required) | Release tag to create or move |
+| `sha` | `''` | Commit the tag points at (`create-prerelease` only) |
+| `title` | `''` | Release title; empty keeps GitHub's default (the tag) |
+| `notes-artifact` | `release-meta` | Artifact carrying the notes file |
+| `notes-file` | `notes.md` | File inside that artifact used as the body (or, in `append` mode, as the appended section) |
+| `assets-artifacts` | `''` | Artifact name or glob pattern whose files are attached |
+| `append-title` | `Update` | Heading for the section added in `append` mode |
+
+Outputs: `url`. Secrets: `RELEASE_TAGGER_APP_ID`,
+`RELEASE_TAGGER_APP_PRIVATE_KEY` (both optional). When they are set the job
+mints a GitHub App token with `actions/create-github-app-token@v2`; otherwise
+it uses the caller's `GITHUB_TOKEN`. **That choice is not cosmetic**: a release
+created with `GITHUB_TOKEN` does not trigger other workflows, so a downstream
+`release: published` caller (e.g. `web.yml`'s Pages deploy) never fires. The
+job declares `permissions: contents: write`, which the calling job must grant.
+
+Assets attached in every mode, when present in the downloaded directory:
+`build-info.json`, `store-notes.json`, `notes-store.txt`, `notes.md`, `*.ipa`,
+`*.aab`, `*.apk`, `*.dSYM.zip`, `dsyms.zip`, `mapping.txt`, plus a freshly
+computed `SHA256SUMS`. The list is fixed on purpose — a release whose asset set
+varies run to run cannot be verified by a downstream script.
+
+### `expo-ota-publish.yml`
+
+Fingerprint gate → `expo export` → publish → manifest smoke check.
+
+| Input | Default | Meaning |
+| --- | --- | --- |
+| `repository`, `ref`, `working-directory`, `linux-runner`, `macos-runner`, `native-cache-version` | (as above) | `ref` is the commit whose JS becomes the update |
+| `ota-enabled` | `false` | Master switch; `false` skips the whole job. OTA is opt-in per consumer because an update reaches every installed app immediately and cannot be recalled |
+| `channel` | (required) | Update channel/branch (`internal`, `beta`, `production`, …) |
+| `rollout` | `0` | Rollout percentage 0–100 |
+| `environment` | `''` | GitHub Environment gating the publish |
+| `ota-cli-version` | `''` | Exact `eoas` version. Never leave this empty in a real caller: `scripts/ota/publish.sh` refuses to run unpinned |
+| `channel-build-info-artifact` | `release-meta` | Artifact carrying the `build-info.json` of the store build currently installed on this channel |
+| `manifest-url` | `''` | Manifest URL fetched after publishing as a smoke check; empty skips it |
+| `runtime-version` | `''` | Sent as the `expo-runtime-version` header in that check |
+
+No outputs. Secrets: `consumer-token`, `OTA_PUBLISH_TOKEN` (both optional).
+
+> **Unverified flags.** `scripts/ota/publish.sh` calls
+> `npx eoas@$OTA_CLI_VERSION publish --branch CHANNEL --rollout-percentage N
+> --non-interactive`. Those three flags come from the OTA runbook and could not
+> be checked against the CLI offline. Confirm them against
+> `npx eoas@<pinned version> publish --help` the first time `ota-cli-version`
+> is pinned in a real environment, and fix the script and this note together.
+
+### The OTA fingerprint gate
+
+`scripts/ota/fingerprint-gate.sh` compares the fingerprint of the commit being
+published against `fingerprint.ios` / `fingerprint.android` in the channel's
+`build-info.json`, per platform, and **dies on any mismatch**. This is the most
+important guard in the release path: an update whose JS expects a native module
+the installed binary does not have does not fail loudly — it crashes on launch,
+for every user on the channel, and the only fix is a new store build. A
+`build-info.json` without a `fingerprint` block is treated as a failure, not a
+pass.
+
+Fingerprints are computed with the consumer's own `@expo/fingerprint`
+devDependency: `npx --no fingerprint fingerprint:generate --platform <ios|android>`
+run in the consumer root, so the consumer's `fingerprint.config.js` is picked
+up automatically. `--no` (not `--yes`) is deliberate — the bin must come from
+the consumer's lockfile, never from whatever npm package happens to be named
+`fingerprint`.
+
+### Release secrets and how they reach the lanes
+
+`scripts/release/decode-secrets.sh` turns the base64 secrets into files under
+`$RUNNER_TEMP/secrets` (mode `600` inside a `700` directory) and publishes
+their paths through `$GITHUB_ENV`:
+
+| Secret | File | Exported path variable |
+| --- | --- | --- |
+| `ANDROID_UPLOAD_KEYSTORE_BASE64` | `upload.keystore` | `ANDROID_UPLOAD_KEYSTORE_PATH` |
+| `PLAY_SERVICE_ACCOUNT_JSON_BASE64` (or raw `PLAY_SERVICE_ACCOUNT_JSON`) | `play-service-account.json` | `PLAY_SERVICE_ACCOUNT_JSON_PATH` |
+| `ASC_KEY_P8_BASE64` | `asc-key.p8` | `ASC_KEY_P8_PATH` |
+
+It never echoes a value — only the variable name, the destination path and the
+decoded byte count — and a value that decodes to zero bytes (a truncated
+copy-paste, the classic failure) is fatal rather than silently producing an
+empty key file.
+
+The lanes themselves read: `APP_VERSION`, `APP_BUILD_NUMBER`,
+`RELEASE_NOTES_STORE_FILE`, `IOS_BUNDLE_ID`, `IOS_SCHEME`, `ANDROID_PACKAGE`,
+`BUILD_INFO_FILE`, `RNW_OUTPUT_DIR`, plus `ASC_KEY_ID`, `ASC_ISSUER_ID`,
+`ASC_KEY_P8_BASE64`, `MATCH_PASSWORD`, `MATCH_GIT_URL`,
+`MATCH_GIT_BASIC_AUTHORIZATION`, `ANDROID_UPLOAD_KEYSTORE_PASSWORD`,
+`ANDROID_UPLOAD_KEY_ALIAS`, `ANDROID_UPLOAD_KEY_PASSWORD` and
+`PLAY_SERVICE_ACCOUNT_JSON`.
+
+### `build-info.json`
+
+```json
+{
+  "sha": "…",
+  "version": "1.2.3",
+  "buildNumber": 1042,
+  "stage": "internal",
+  "fingerprint": { "ios": "…", "android": "…" },
+  "expoSdk": "^54.0.0",
+  "reactNative": "0.81.0",
+  "workflowRunId": "…",
+  "artifacts": {}
+}
+```
+
+Written by `scripts/release/build-info.sh`. Adding a key is fine; renaming one
+is a breaking change for the OTA gate and the store lanes alike.
+
+### Consumer-side release scripts
+
+The workflows call three things the **consumer** owns:
+
+| Consumer path | Called by | If missing |
+| --- | --- | --- |
+| `scripts/release/notes.mjs` | `scripts/release/notes.sh` (`--from-commits`, or `--from-body <file>` when `release-body-file` is set) | Falls back to an empty `store-notes.json` and the commit subjects as notes, with an `::warning::` |
+| `scripts/release/verify-ios.sh <ipa-or-app> [--no-signing]` | the `ios verify` lane | The lane fails |
+| `scripts/release/verify-android.sh <aab> <apk> [--cert-sha256 X]` | the `android verify` lane | The lane fails |
+
+A consumer may also ship its own `scripts/release/resolve-version.sh`; this
+repo ships an identical one (same contract: prints `APP_VERSION=` /
+`APP_BUILD_NUMBER=`, writes `version` / `build-number` to `$GITHUB_OUTPUT`) and
+`expo-prepare.yml` uses **this repo's copy**, so the two must never drift.
+
 ## Script contract
 
 Every toggle above calls `scripts/checks/run-script.sh NAME`, which does
@@ -343,6 +588,7 @@ line for line, both repos read on the same date):
 | `test:coverage` | `unit.yml` (`coverage-script`, default path) | yes |
 | `test:scripts` | `unit.yml` (`scripts-test-script`) | yes |
 | `build:web` | `web.yml` (`export-script`) | yes |
+| `check:release` | `checks.yml` (`release-checks` toggle, off by default) | **opt-in** — only a consumer with a release setup ships it; the toggle stays `false` otherwise |
 | `test:e2e:web` | `web.yml` (`e2e-script`) | yes (`bash scripts/e2e/web.sh`, which honors `PLAYWRIGHT_SKIP_EXPORT` — see [the Playwright / export contract](#the-playwright--export-contract)) |
 
 The template also ships `lint:fix`, `format`, `i18n:check`, `codegen:check`,
@@ -475,3 +721,9 @@ each one lives so a future edit doesn't quietly regress it.
 | A reusable workflow must check out *itself* at the calling job's ref, not the caller's, or `$RNW` scripts silently drift from the pinned version | Every job: `repository: ${{ job.workflow_repository }}`, `ref: ${{ job.workflow_sha }}` into `.rnw/`; enforced by `test/workflow-shape.bats` |
 | A Playwright run against a web export should test the artifact that will actually deploy, not a fresh, possibly-different export | `web.yml`'s `playwright` job downloads the `build` job's `web-dist` artifact and sets `PLAYWRIGHT_SKIP_EXPORT=1` (see [above](#the-playwright--export-contract) for the consumer-side half of this contract) |
 | Cancelling stale runs must not cancel the run doing the cancelling | `scripts/ci/cancel-runs.sh` excludes `$GITHUB_RUN_ID` from its own query |
+| A build number must never go backwards (stores reject the build forever), so a merge of a long-lived branch must not jump it either | `scripts/release/resolve-version.sh` counts `git rev-list --count --first-parent HEAD`, plus a monotonic `BUILD_NUMBER_OFFSET`; pinned by `test/resolve-version.bats` |
+| An OTA update whose native fingerprint differs from the installed binary crashes every user on the channel on launch | `scripts/ota/fingerprint-gate.sh` compares per platform and dies on any mismatch (and on a `build-info.json` with no `fingerprint` block); `test/fingerprint-gate.bats` |
+| A promotion must not ship a binary whose own build never went green | `scripts/release/require-green-run.sh` (polls `gh run list`; failure, cancellation, skip and "no run at all" are each fatal); `test/require-green-run.bats` |
+| A decoded signing secret must never be world-readable, and a truncated one must not silently become an empty key file | `scripts/release/decode-secrets.sh` creates each file `600` inside a `700` directory *before* writing, and dies on a zero-byte decode; `test/decode-secrets.bats` |
+| A release created with `GITHUB_TOKEN` does not trigger the `release: published` workflows that depend on it | `github-release.yml` mints an `actions/create-github-app-token@v2` token when `RELEASE_TAGGER_APP_ID`/`RELEASE_TAGGER_APP_PRIVATE_KEY` are set |
+| An Android crash report is unreadable forever without that build's mapping file | `expo-build-android.yml` uploads `android-mapping` (and the apk) with `if: !cancelled()`, so a failed `verify` still yields them |
