@@ -31,7 +31,7 @@ waits on a dependency install. It folds together:
 | Maestro CLI (`~/.maestro`) | `maestro-{os}-{version}` | `maestro` action (version = its `version` input, pinned to `MAESTRO_VERSION`) | `e2e.yml` jobs `ios`, `android` |
 | Android system image | `sysimg-v1-{api}-default-x86_64` | `e2e.yml` job `android` (literal key; `{api}` = `android-api-level`) | `actions/cache@v6` over `$ANDROID_SDK_DIR/system-images/android-{api}` |
 | AVD + adb keys | `avd-v1-{api}-x86_64-default-hidedialogs` | `e2e.yml` job `android` (literal key) | `actions/cache@v6` over `~/.android/avd/*`, `~/.android/adb*`; a miss bakes a snapshot via `scripts/e2e/android-emulator.sh snapshot-bake` |
-| Playwright browsers | `playwright-{os}-{pwversion}` | `web.yml` (version from `scripts/self/playwright-version.sh`) | `web.yml` playwright job |
+| Playwright browsers | `playwright-{os}-{pwversion}` | `web.yml` job `playwright` (version from `scripts/web/playwright-cache-key.sh`, which wraps `scripts/web/playwright-version.sh`) | `web.yml` playwright job |
 | Gradle | managed by `gradle/actions/setup-gradle` | that action | `e2e.yml` job `build-android` (`cache-read-only` off main) |
 | mise tools | managed by `jdx/mise-action` (`cache: true`) | that action | `setup` and `native-key` actions |
 

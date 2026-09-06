@@ -1,0 +1,174 @@
+name: web
+on:
+  workflow_call:
+    inputs:
+      repository:
+        description: Consumer repository to check out (defaults to the caller's repository)
+        type: string
+        default: ''
+      ref:
+        description: Consumer ref to check out (empty lets actions/checkout resolve the correct ref, including PR merge refs)
+        type: string
+        default: ''
+      working-directory:
+        description: Consumer directory relative to GITHUB_WORKSPACE
+        type: string
+        default: '.'
+      linux-runner:
+        description: Runner label for every job in this workflow
+        type: string
+        default: 'ubuntu-latest'
+      macos-runner:
+        description: Runner label for macOS jobs (unused by this workflow; carried for input-set consistency across the family)
+        type: string
+        default: 'macos-26'
+      native-cache-version:
+        description: Native cache key prefix (unused by this workflow; carried for input-set consistency across the family)
+        type: string
+        default: 'v1'
+      playwright:
+        description: Run the Playwright e2e suite against the exported web build
+        type: boolean
+        default: true
+      deploy:
+        description: Publish the export to GitHub Pages (caller typically passes github.ref_type == 'tag')
+        type: boolean
+        default: false
+      base-url:
+        description: Base URL to bake into the export via EXPO_PUBLIC_BASE_URL (e.g. a project Pages path)
+        type: string
+        default: ''
+      export-script:
+        description: Consumer package.json script that exports the web build
+        type: string
+        default: 'build:web'
+      export-args:
+        description: Extra space-separated flags appended to the export script's own args (e.g. '--dev')
+        type: string
+        default: ''
+      output-dir:
+        description: Consumer-relative directory the export script writes to
+        type: string
+        default: 'dist'
+      e2e-script:
+        description: Consumer package.json script that runs the Playwright suite
+        type: string
+        default: 'test:e2e:web'
+      playwright-browsers:
+        description: Space-separated browser names passed to `playwright install`
+        type: string
+        default: 'chromium'
+    outputs:
+      page-url:
+        description: 'URL of the deployed GitHub Pages site (empty unless deploy is true)'
+        value: ${{ jobs.deploy.outputs.page-url }}
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ${{ inputs.linux-runner }}
+    timeout-minutes: 15
+    steps:
+      - name: Checkout consumer
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ inputs.repository || github.repository }}
+          ref: ${{ inputs.ref }}
+      - name: Checkout react-native-workflows
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .rnw
+          persist-credentials: false
+      - name: Setup
+        uses: ./.rnw/.github/actions/setup
+        with:
+          working-directory: ${{ inputs.working-directory }}
+      - name: Export web build
+        env:
+          EXPORT_SCRIPT: ${{ inputs.export-script }}
+          EXPORT_ARGS: ${{ inputs.export-args }}
+          EXPO_PUBLIC_BASE_URL: ${{ inputs.base-url }}
+          OUTPUT_DIR: ${{ inputs.output-dir }}
+        run: bash "$RNW/scripts/web/export.sh"
+      - name: Upload web-dist
+        uses: actions/upload-artifact@v7
+        with:
+          name: web-dist
+          path: ${{ inputs.working-directory }}/${{ inputs.output-dir }}
+          retention-days: 1
+      - name: Upload Pages artifact
+        if: ${{ inputs.deploy }}
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: ${{ inputs.working-directory }}/${{ inputs.output-dir }}
+  playwright:
+    needs: build
+    if: ${{ inputs.playwright }}
+    runs-on: ${{ inputs.linux-runner }}
+    timeout-minutes: 20
+    steps:
+      - name: Checkout consumer
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ inputs.repository || github.repository }}
+          ref: ${{ inputs.ref }}
+      - name: Checkout react-native-workflows
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .rnw
+          persist-credentials: false
+      - name: Setup
+        uses: ./.rnw/.github/actions/setup
+        with:
+          working-directory: ${{ inputs.working-directory }}
+      - name: Download web-dist
+        uses: actions/download-artifact@v8
+        with:
+          name: web-dist
+          path: ${{ inputs.working-directory }}/${{ inputs.output-dir }}
+      - name: Resolve Playwright version
+        id: pw
+        run: bash "$RNW/scripts/web/playwright-cache-key.sh"
+      - name: Cache Playwright browsers
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+      - name: Install Playwright browsers
+        env:
+          PLAYWRIGHT_BROWSERS: ${{ inputs.playwright-browsers }}
+        run: bash "$RNW/scripts/web/playwright-install.sh"
+      - name: Playwright suite
+        env:
+          E2E_SCRIPT: ${{ inputs.e2e-script }}
+          PLAYWRIGHT_SKIP_EXPORT: '1'
+        run: bash "$RNW/scripts/web/playwright.sh"
+      - name: Upload forensics
+        if: always()
+        uses: ./.rnw/.github/actions/forensics
+        with:
+          name: playwright-report
+          path: ${{ inputs.working-directory }}/playwright-report
+  deploy:
+    needs: [build, playwright]
+    if: ${{ always() && inputs.deploy && needs.build.result == 'success' && (needs.playwright.result == 'success' || needs.playwright.result == 'skipped') }}
+    runs-on: ${{ inputs.linux-runner }}
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    outputs:
+      page-url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Configure Pages
+        uses: actions/configure-pages@v6
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
