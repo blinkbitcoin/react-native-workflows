@@ -58,6 +58,22 @@ decode() { run bash "$REPO_ROOT/scripts/release/decode-secrets.sh"; }
     || fail "the raw variable won: $(cat "$SECRETS/play-service-account.json")"
 }
 
+# A one-character paste used to produce a 1-byte "service account" that only
+# failed deep inside a Play lane, long after the expensive part of the release.
+@test "a raw Play service account that is not JSON is fatal" {
+  PLAY_SERVICE_ACCOUNT_JSON='{' decode
+  [ "$status" -ne 0 ] || fail "accepted a truncated service account: $output"
+  contains "$output" "is not valid JSON" || fail "unexpected message: $output"
+  PLAY_SERVICE_ACCOUNT_JSON='x' decode
+  [ "$status" -ne 0 ] || fail "accepted a one-character service account: $output"
+}
+
+@test "the raw guard does not leak the value it rejected" {
+  PLAY_SERVICE_ACCOUNT_JSON='{"private_key":"super-secret-key-material"' decode
+  [ "$status" -ne 0 ] || fail "accepted invalid JSON: $output"
+  not_contains "$output" "super-secret-key-material" || fail "the rejected value leaked: $output"
+}
+
 @test "unset secrets are skipped, not fatal" {
   decode
   [ "$status" -eq 0 ] || fail "exited $status with no secrets set: $output"

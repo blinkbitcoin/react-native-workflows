@@ -64,6 +64,17 @@ write_raw() {
   chmod 600 "$dest"
   printf '%s' "$value" > "$dest"
   size="$(wc -c < "$dest" | tr -d ' ')"
+  # The same zero-byte guard decode_var makes fatal, plus a parse: a truncated
+  # paste produces a "service account" that only fails deep inside a Play lane,
+  # long after the expensive part of the release has run. node is present in
+  # every job that decodes secrets.
+  [ "$size" -gt 0 ] || die "$var is empty"
+  case "$filename" in
+    *.json)
+      node -e 'JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8"))' "$dest" 2>/dev/null ||
+        die "$var is not valid JSON ($size bytes) - paste the whole service-account file, or use ${var}_BASE64"
+      ;;
+  esac
   log "$var -> $dest ($size bytes, verbatim)"
   gh_env "$path_var" "$dest"
 }

@@ -31,7 +31,16 @@ log "waiting for $workflow on $sha (timeout ${timeout_minutes}m, discovery ${dis
 while :; do
   # `|| true`: a transient API error must not fail the gate on the first blip;
   # the loop retries and the overall timeout is the real bound.
-  runs="$(gh run list --workflow "$workflow" --commit "$sha" --json conclusion,status,databaseId 2>/dev/null || true)"
+  # The status is captured separately: a sustained auth or API failure and "no
+  # run has started yet" produce the same empty result, and diagnosing an
+  # outage as "the run was never started" sends the reader to the wrong repo.
+  gh_failed=false
+  runs="$(gh run list --workflow "$workflow" --commit "$sha" --json conclusion,status,databaseId 2>&1)" || gh_failed=true
+  if [ "$gh_failed" = "true" ]; then
+    gh_error="$(printf '%s' "$runs" | tr '\n' ' ')"
+    runs=""
+    log "gh run list failed: $gh_error"
+  fi
   count=0
   if [ -n "$runs" ]; then
     count="$(printf '%s' "$runs" | yq -r 'length // 0' 2>/dev/null || echo 0)"
@@ -59,6 +68,9 @@ while :; do
     log "$workflow run $run_id is $status; polling again in ${poll_seconds}s"
   else
     if [ "$(now)" -ge "$discovery_deadline" ]; then
+      if [ "$gh_failed" = "true" ]; then
+        die "could not query runs of $workflow for $sha within ${discovery_minutes}m - every 'gh run list' failed, the last with: ${gh_error:-unknown error}. This is an API/permissions problem (does the calling job grant actions: read?), not a missing run"
+      fi
       die "no $workflow run found for $sha within ${discovery_minutes}m - it was never started"
     fi
     log "no $workflow run for $sha yet; polling again in ${poll_seconds}s"
