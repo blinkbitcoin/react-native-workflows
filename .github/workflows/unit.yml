@@ -1,0 +1,98 @@
+name: unit
+on:
+  workflow_call:
+    inputs:
+      repository:
+        description: Consumer repository to check out (defaults to the caller's repository)
+        type: string
+        default: ''
+      ref:
+        description: Consumer ref to check out (empty lets actions/checkout resolve the correct ref, including PR merge refs)
+        type: string
+        default: ''
+      working-directory:
+        description: Consumer directory relative to GITHUB_WORKSPACE
+        type: string
+        default: '.'
+      linux-runner:
+        description: Runner label for this job
+        type: string
+        default: 'ubuntu-latest'
+      macos-runner:
+        description: Runner label for macOS jobs (unused by this workflow; carried for input-set consistency across the family)
+        type: string
+        default: 'macos-26'
+      native-cache-version:
+        description: Native cache key prefix (unused by this workflow; carried for input-set consistency across the family)
+        type: string
+        default: 'v1'
+      coverage:
+        description: Run the coverage-script instead of test-script, and upload the coverage/ artifact
+        type: boolean
+        default: true
+      test-script:
+        description: Consumer package.json script to run when coverage is disabled
+        type: string
+        default: 'test'
+      coverage-script:
+        description: Consumer package.json script to run when coverage is enabled
+        type: string
+        default: 'test:coverage'
+      scripts-test-script:
+        description: Consumer package.json script that tests scripts/ itself (empty skips this step)
+        type: string
+        default: 'test:scripts'
+      coverage-artifact-retention-days:
+        description: Retention (days) for the uploaded coverage/ artifact
+        type: number
+        default: 30
+permissions:
+  contents: read
+jobs:
+  unit:
+    runs-on: ${{ inputs.linux-runner }}
+    timeout-minutes: 20
+    steps:
+      - name: Checkout consumer
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ inputs.repository || github.repository }}
+          ref: ${{ inputs.ref }}
+      # See checks.yml for why this step exists: github.workflow_ref/
+      # workflow_sha (not the job context) identify this reusable workflow's
+      # own repo/commit, and .rnw isn't checked out yet so nothing else can
+      # do the parsing.
+      - name: Resolve react-native-workflows checkout ref
+        id: rnw-ref
+        env:
+          WORKFLOW_REF: ${{ github.workflow_ref }}
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
+        run: bash -c 'echo "repository=${WORKFLOW_REF%%/.github/workflows/*}" >> "$GITHUB_OUTPUT"; echo "sha=$WORKFLOW_SHA" >> "$GITHUB_OUTPUT"'
+      - name: Checkout react-native-workflows
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ steps.rnw-ref.outputs.repository }}
+          ref: ${{ steps.rnw-ref.outputs.sha }}
+          path: .rnw
+          persist-credentials: false
+      - name: Setup
+        uses: ./.rnw/.github/actions/setup
+        with:
+          working-directory: ${{ inputs.working-directory }}
+      - name: Unit tests
+        env:
+          SCRIPT_NAME: ${{ inputs.coverage && inputs.coverage-script || inputs.test-script }}
+        run: bash "$RNW/scripts/checks/run-script.sh" "$SCRIPT_NAME"
+      - name: Scripts tests
+        if: ${{ inputs.scripts-test-script != '' }}
+        env:
+          SCRIPT_NAME: ${{ inputs.scripts-test-script }}
+        run: bash "$RNW/scripts/checks/run-script.sh" "$SCRIPT_NAME"
+      - name: Upload coverage
+        if: always() && inputs.coverage
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage
+          path: ${{ inputs.working-directory }}/coverage
+          if-no-files-found: ignore
+          retention-days: ${{ inputs.coverage-artifact-retention-days }}

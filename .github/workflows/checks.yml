@@ -1,0 +1,262 @@
+name: checks
+on:
+  workflow_call:
+    inputs:
+      repository:
+        description: Consumer repository to check out (defaults to the caller's repository)
+        type: string
+        default: ''
+      ref:
+        description: Consumer ref to check out (empty lets actions/checkout resolve the correct ref, including PR merge refs)
+        type: string
+        default: ''
+      working-directory:
+        description: Consumer directory relative to GITHUB_WORKSPACE
+        type: string
+        default: '.'
+      linux-runner:
+        description: Runner label for Linux jobs
+        type: string
+        default: 'ubuntu-latest'
+      macos-runner:
+        description: Runner label for macOS jobs (unused by this workflow; carried for input-set consistency across the family)
+        type: string
+        default: 'macos-26'
+      native-cache-version:
+        description: Native cache key prefix (unused by this workflow; carried for input-set consistency across the family)
+        type: string
+        default: 'v1'
+      typecheck:
+        description: Run the consumer's typecheck script
+        type: boolean
+        default: true
+      lint:
+        description: Run the consumer's lint script
+        type: boolean
+        default: true
+      format:
+        description: Run the consumer's format:check script
+        type: boolean
+        default: true
+      knip:
+        description: Run the consumer's knip script
+        type: boolean
+        default: true
+      spell:
+        description: Run the consumer's spell script
+        type: boolean
+        default: true
+      i18n:
+        description: Run i18n:extract and assert it produced no uncommitted changes
+        type: boolean
+        default: false
+      graphql-codegen:
+        description: Run codegen and assert it produced no uncommitted changes
+        type: boolean
+        default: false
+      expo-doctor:
+        description: Run expo-doctor
+        type: boolean
+        default: true
+      audit:
+        description: Run pnpm audit --prod
+        type: boolean
+        default: true
+      audit-level:
+        description: Minimum severity that fails pnpm audit
+        type: string
+        default: 'high'
+      commitlint:
+        description: Lint the PR title against Conventional Commits
+        type: boolean
+        default: true
+      commitlint-commits:
+        description: Also lint every commit in the PR against Conventional Commits (needs commitlint)
+        type: boolean
+        default: false
+      actionlint:
+        description: Lint the consumer's .github/workflows with actionlint
+        type: boolean
+        default: true
+      shellcheck:
+        description: Lint the consumer's scripts/ with shellcheck
+        type: boolean
+        default: true
+      docs-only-detection:
+        description: Classify the PR as docs-only so callers can skip downstream jobs
+        type: boolean
+        default: true
+      docs-globs:
+        description: Extra regex alternatives (POSIX ERE, '|'-joined) treated as docs for docs-only detection
+        type: string
+        default: ''
+    outputs:
+      docs-only:
+        description: 'true when every changed file matched the docs globs (empty when docs-only-detection is disabled)'
+        value: ${{ jobs.changes.outputs.docs-only }}
+permissions:
+  contents: read
+jobs:
+  changes:
+    if: ${{ inputs.docs-only-detection }}
+    runs-on: ${{ inputs.linux-runner }}
+    timeout-minutes: 5
+    outputs:
+      docs-only: ${{ steps.classify.outputs.docs-only }}
+    steps:
+      - name: Checkout consumer
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ inputs.repository || github.repository }}
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+      # No setup here: changed-class.sh is pure git and doesn't need node/pnpm,
+      # so this job skips it and reaches the script via the plain checkout path
+      # (there's no $RNW yet -- that's exported by setup, which never runs).
+      # github.workflow_ref/workflow_sha (not the job context -- actionlint
+      # 1.7.12 has no job.workflow_repository/job.workflow_sha) identify this
+      # reusable workflow's own repo/commit even though every other `github.*`
+      # field in this job refers to the caller. workflow_ref is
+      # "owner/repo/.github/workflows/file.yml@ref"; this step is the one
+      # unavoidable exception to "every run: uses $RNW" -- .rnw isn't checked
+      # out yet, so there is nothing to call into.
+      - name: Resolve react-native-workflows checkout ref
+        id: rnw-ref
+        env:
+          WORKFLOW_REF: ${{ github.workflow_ref }}
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
+        run: bash -c 'echo "repository=${WORKFLOW_REF%%/.github/workflows/*}" >> "$GITHUB_OUTPUT"; echo "sha=$WORKFLOW_SHA" >> "$GITHUB_OUTPUT"'
+      - name: Checkout react-native-workflows
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ steps.rnw-ref.outputs.repository }}
+          ref: ${{ steps.rnw-ref.outputs.sha }}
+          path: .rnw
+          persist-credentials: false
+      - name: Classify changed files
+        id: classify
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.sha }}
+          DOCS_GLOBS: ${{ inputs.docs-globs }}
+        run: bash ".rnw/scripts/ci/changed-class.sh" "$BASE_SHA" "$HEAD_SHA"
+  code:
+    runs-on: ${{ inputs.linux-runner }}
+    timeout-minutes: 20
+    steps:
+      - name: Checkout consumer
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ inputs.repository || github.repository }}
+          ref: ${{ inputs.ref }}
+      # github.workflow_ref/workflow_sha (not the job context -- actionlint
+      # 1.7.12 has no job.workflow_repository/job.workflow_sha) identify this
+      # reusable workflow's own repo/commit even though every other `github.*`
+      # field in this job refers to the caller. workflow_ref is
+      # "owner/repo/.github/workflows/file.yml@ref"; this step is the one
+      # unavoidable exception to "every run: uses $RNW" -- .rnw isn't checked
+      # out yet, so there is nothing to call into.
+      - name: Resolve react-native-workflows checkout ref
+        id: rnw-ref
+        env:
+          WORKFLOW_REF: ${{ github.workflow_ref }}
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
+        run: bash -c 'echo "repository=${WORKFLOW_REF%%/.github/workflows/*}" >> "$GITHUB_OUTPUT"; echo "sha=$WORKFLOW_SHA" >> "$GITHUB_OUTPUT"'
+      - name: Checkout react-native-workflows
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ steps.rnw-ref.outputs.repository }}
+          ref: ${{ steps.rnw-ref.outputs.sha }}
+          path: .rnw
+          persist-credentials: false
+      - name: Setup
+        uses: ./.rnw/.github/actions/setup
+        with:
+          working-directory: ${{ inputs.working-directory }}
+      - name: Typecheck
+        if: ${{ inputs.typecheck }}
+        env:
+          SCRIPT_NAME: typecheck
+        run: bash "$RNW/scripts/checks/run-script.sh" "$SCRIPT_NAME"
+      - name: Lint
+        if: ${{ inputs.lint }}
+        env:
+          SCRIPT_NAME: lint
+        run: bash "$RNW/scripts/checks/run-script.sh" "$SCRIPT_NAME"
+      - name: Format
+        if: ${{ inputs.format }}
+        env:
+          SCRIPT_NAME: 'format:check'
+        run: bash "$RNW/scripts/checks/run-script.sh" "$SCRIPT_NAME"
+      - name: Knip
+        if: ${{ inputs.knip }}
+        env:
+          SCRIPT_NAME: knip
+        run: bash "$RNW/scripts/checks/run-script.sh" "$SCRIPT_NAME"
+      - name: Spell
+        if: ${{ inputs.spell }}
+        env:
+          SCRIPT_NAME: spell
+        run: bash "$RNW/scripts/checks/run-script.sh" "$SCRIPT_NAME"
+      - name: i18n
+        if: ${{ inputs.i18n }}
+        run: bash "$RNW/scripts/checks/i18n.sh"
+      - name: GraphQL codegen
+        if: ${{ inputs.graphql-codegen }}
+        run: bash "$RNW/scripts/checks/codegen.sh"
+      - name: Expo doctor
+        if: ${{ inputs.expo-doctor }}
+        run: bash "$RNW/scripts/checks/expo-doctor.sh"
+      - name: Audit
+        if: ${{ inputs.audit }}
+        env:
+          AUDIT_LEVEL: ${{ inputs.audit-level }}
+        run: bash "$RNW/scripts/checks/audit.sh"
+      - name: Lint CI (actionlint / shellcheck)
+        if: ${{ inputs.actionlint || inputs.shellcheck }}
+        env:
+          RNW_ACTIONLINT: ${{ inputs.actionlint }}
+          RNW_SHELLCHECK: ${{ inputs.shellcheck }}
+        run: bash "$RNW/scripts/ci/lint-ci.sh"
+  commits:
+    if: ${{ inputs.commitlint && github.event_name == 'pull_request' && github.actor != 'dependabot[bot]' }}
+    runs-on: ${{ inputs.linux-runner }}
+    timeout-minutes: 5
+    steps:
+      - name: Checkout consumer
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ inputs.repository || github.repository }}
+          ref: ${{ inputs.ref }}
+          # fetch-depth: 0 so PR_COMMITS_RANGE below (base sha..head sha) can
+          # resolve both endpoints when commitlint-commits is enabled.
+          fetch-depth: 0
+      # github.workflow_ref/workflow_sha (not the job context -- actionlint
+      # 1.7.12 has no job.workflow_repository/job.workflow_sha) identify this
+      # reusable workflow's own repo/commit even though every other `github.*`
+      # field in this job refers to the caller. workflow_ref is
+      # "owner/repo/.github/workflows/file.yml@ref"; this step is the one
+      # unavoidable exception to "every run: uses $RNW" -- .rnw isn't checked
+      # out yet, so there is nothing to call into.
+      - name: Resolve react-native-workflows checkout ref
+        id: rnw-ref
+        env:
+          WORKFLOW_REF: ${{ github.workflow_ref }}
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
+        run: bash -c 'echo "repository=${WORKFLOW_REF%%/.github/workflows/*}" >> "$GITHUB_OUTPUT"; echo "sha=$WORKFLOW_SHA" >> "$GITHUB_OUTPUT"'
+      - name: Checkout react-native-workflows
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ steps.rnw-ref.outputs.repository }}
+          ref: ${{ steps.rnw-ref.outputs.sha }}
+          path: .rnw
+          persist-credentials: false
+      - name: Setup
+        uses: ./.rnw/.github/actions/setup
+        with:
+          working-directory: ${{ inputs.working-directory }}
+      - name: Commitlint
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_COMMITS_RANGE: ${{ inputs.commitlint-commits && format('{0}..{1}', github.event.pull_request.base.sha, github.sha) || '' }}
+        run: bash "$RNW/scripts/checks/commitlint.sh"

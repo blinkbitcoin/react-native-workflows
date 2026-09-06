@@ -15,14 +15,19 @@ fi
 
 require_cmd mise
 
-if [ -d .github/workflows ]; then
+# RNW_ACTIONLINT / RNW_SHELLCHECK let a single invocation toggle either half
+# independently (checks.yml's `actionlint` and `shellcheck` inputs), while
+# `make check` (no env set) still runs both.
+if [ "${RNW_ACTIONLINT:-true}" = "true" ] && [ -d .github/workflows ]; then
   mise x "actionlint@$ACTIONLINT_VERSION" -- actionlint -color
 fi
 
-files=()
-while IFS= read -r f; do
-  files+=("$f")
-done < <(find scripts -name '*.sh' -not -path '*/.rnw/*')
-if [ "${#files[@]}" -gt 0 ]; then
-  mise x "shellcheck@$SHELLCHECK_VERSION" -- shellcheck -x "${files[@]}"
+if [ "${RNW_SHELLCHECK:-true}" = "true" ]; then
+  files=()
+  while IFS= read -r f; do
+    files+=("$f")
+  done < <(find scripts -name '*.sh' -not -path '*/.rnw/*')
+  if [ "${#files[@]}" -gt 0 ]; then
+    mise x "shellcheck@$SHELLCHECK_VERSION" -- shellcheck -x "${files[@]}"
+  fi
 fi
