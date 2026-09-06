@@ -10,8 +10,14 @@ config-variables: null
 # services/status, so it flags both properties as undefined even though they
 # are real, documented fields for jobs defined in a reusable workflow. Ignore
 # exactly these two messages rather than disabling type checking broadly.
+# actionlint also models the `jobs` context available to
+# on.workflow_call.outputs.<id>.value as carrying only `outputs`, while GitHub
+# documents `jobs.<job_id>.result` alongside it
+# (https://docs.github.com/en/actions/learn-github-actions/contexts#jobs-context).
+# e2e.yml exposes ios-result / android-result from those job results.
 paths:
   .github/workflows/**/*.yml:
     ignore:
       - 'property "workflow_repository" is not defined in object type'
       - 'property "workflow_sha" is not defined in object type'
+      - 'property "result" is not defined in object type \{outputs: \{\}\}'

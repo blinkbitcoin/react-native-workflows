@@ -51,6 +51,13 @@ setup() {
   done
 }
 
+@test "every android-emulator-runner script: is a single 'bash ...' line" {
+  for w in "${WORKFLOWS[@]}"; do
+    bad=$(yq -r '[.jobs[].steps[]? | select((.uses? // "") | test("android-emulator-runner")) | (.with.script // "") | select((test("^bash ") | not) or ((split("\n") | length) > 1))] | length' "$w")
+    [ "$bad" -eq 0 ]
+  done
+}
+
 @test "every job with a run: step checks out .rnw from the workflow's own repo/sha" {
   for w in "${WORKFLOWS[@]}"; do
     job_names=$(yq -r '.jobs | keys | .[]' "$w")
