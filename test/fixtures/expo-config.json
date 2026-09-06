@@ -1,0 +1,88 @@
+{
+  "name": "RN Mobile Template (dev)",
+  "slug": "react-native-mobile-template",
+  "version": "0.0.0",
+  "sdkVersion": "57.0.0",
+  "platforms": [
+    "ios",
+    "android",
+    "web"
+  ],
+  "scheme": "rnmt",
+  "orientation": "portrait",
+  "userInterfaceStyle": "automatic",
+  "icon": "./assets/icon.png",
+  "ios": {
+    "bundleIdentifier": "com.example.rnmt.dev",
+    "buildNumber": "1",
+    "supportsTablet": false,
+    "associatedDomains": []
+  },
+  "android": {
+    "package": "com.example.rnmt.dev",
+    "versionCode": 1,
+    "adaptiveIcon": {
+      "foregroundImage": "./assets/android-icon-foreground.png",
+      "backgroundImage": "./assets/android-icon-background.png",
+      "monochromeImage": "./assets/android-icon-monochrome.png",
+      "backgroundColor": "#E6F4FE"
+    },
+    "predictiveBackGestureEnabled": false,
+    "intentFilters": []
+  },
+  "web": {
+    "bundler": "metro",
+    "output": "static",
+    "favicon": "./assets/favicon.png"
+  },
+  "runtimeVersion": {
+    "policy": "fingerprint"
+  },
+  "updates": {
+    "enabled": false
+  },
+  "experiments": {
+    "typedRoutes": true
+  },
+  "extra": {
+    "variant": "development",
+    "otaEnabled": false,
+    "buildStamp": "development-local-2026-09-06",
+    "router": {}
+  },
+  "plugins": [
+    "expo-router",
+    "expo-localization",
+    "expo-secure-store",
+    "expo-sqlite",
+    "expo-updates",
+    [
+      "./plugins/with-build-stamp",
+      {
+        "stamp": "development-local-2026-09-06"
+      }
+    ],
+    "./plugins/with-android-release-signing",
+    "./plugins/with-android-release-abis",
+    [
+      "expo-splash-screen",
+      {
+        "image": "./assets/splash-icon.png",
+        "imageWidth": 200,
+        "resizeMode": "contain",
+        "backgroundColor": "#ffffff",
+        "dark": {
+          "backgroundColor": "#0b0b0f"
+        }
+      }
+    ],
+    [
+      "expo-font",
+      {
+        "fonts": [
+          "./assets/fonts/Inter-Variable.ttf"
+        ]
+      }
+    ]
+  ]
+}
