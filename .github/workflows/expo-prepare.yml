@@ -1,0 +1,146 @@
+name: expo-prepare
+on:
+  workflow_call:
+    inputs:
+      repository:
+        description: Consumer repository to check out (defaults to the caller's repository)
+        type: string
+        default: ''
+      ref:
+        description: Consumer ref to check out (empty lets actions/checkout resolve the correct ref, including PR merge refs)
+        type: string
+        default: ''
+      working-directory:
+        description: Consumer directory relative to GITHUB_WORKSPACE
+        type: string
+        default: '.'
+      linux-runner:
+        description: Runner label for every job in this workflow
+        type: string
+        default: 'ubuntu-latest'
+      macos-runner:
+        description: Runner label for macOS jobs (unused by this workflow; carried for input-set consistency across the family)
+        type: string
+        default: 'macos-26'
+      native-cache-version:
+        description: Native cache key prefix (unused by this workflow; carried for input-set consistency across the family)
+        type: string
+        default: 'v1'
+      build-number-offset:
+        description: Added to the first-parent commit count to form the build number; raise it, never lower it (stores reject a build number that goes backwards)
+        type: number
+        default: 1000
+      notes-locales:
+        description: Locales the consumer's scripts/release/notes.mjs should emit store notes for
+        type: string
+        default: 'en'
+      stage:
+        description: Release stage recorded in build-info.json (internal/beta/production)
+        type: string
+        default: 'internal'
+      release-body-file:
+        description: Consumer-relative file holding a release body; when set, notes are generated from it instead of from commits
+        type: string
+        default: ''
+      require-green-workflow:
+        description: Workflow file name (e.g. release-internal.yml) that must have concluded successfully for this sha before preparing; empty disables the gate
+        type: string
+        default: ''
+      release-meta-artifact:
+        description: Artifact name carrying build-info.json, store-notes.json, notes-store.txt and notes.md to the later jobs
+        type: string
+        default: 'release-meta'
+    secrets:
+      consumer-token:
+        description: PAT with read access to a private consumer repository; falls back to the caller's github.token (works for a public consumer)
+        required: false
+    outputs:
+      version:
+        description: 'Resolved app version (X.Y.Z)'
+        value: ${{ jobs.prepare.outputs.version }}
+      build-number:
+        description: 'Resolved build number (first-parent commit count + build-number-offset)'
+        value: ${{ jobs.prepare.outputs.build-number }}
+      fp-ios:
+        description: '@expo/fingerprint hash of the iOS native layer'
+        value: ${{ jobs.prepare.outputs.fp-ios }}
+      fp-android:
+        description: '@expo/fingerprint hash of the Android native layer'
+        value: ${{ jobs.prepare.outputs.fp-android }}
+permissions:
+  contents: read
+jobs:
+  prepare:
+    runs-on: ${{ inputs.linux-runner }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      # `gh run list` in require-green-run.sh reads other workflows' runs. A
+      # called workflow's job can only use what the caller granted, so a caller
+      # that sets require-green-workflow must grant actions: read on the job.
+      actions: read
+    env:
+      WORKING_DIRECTORY: ${{ inputs.working-directory }}
+      RNW_STAGE: ${{ inputs.stage }}
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      build-number: ${{ steps.version.outputs.build-number }}
+      fp-ios: ${{ steps.fingerprint.outputs.fp-ios }}
+      fp-android: ${{ steps.fingerprint.outputs.fp-android }}
+    steps:
+      - name: Checkout consumer
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ inputs.repository || github.repository }}
+          ref: ${{ inputs.ref }}
+          token: ${{ secrets.consumer-token || github.token }}
+          # fetch-depth: 0 is load-bearing here: resolve-version.sh reads the
+          # v* tags and counts first-parent commits, and both are empty on the
+          # default shallow clone.
+          fetch-depth: 0
+      - name: Checkout react-native-workflows
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .rnw
+          persist-credentials: false
+      - name: Publish RNW environment
+        run: bash ".rnw/scripts/release/env-publish.sh"
+      - name: Require a green upstream run
+        if: ${{ inputs.require-green-workflow != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ inputs.repository || github.repository }}
+          REQUIRE_GREEN_WORKFLOW: ${{ inputs.require-green-workflow }}
+          REQUIRE_GREEN_SHA: ${{ github.sha }}
+        run: bash ".rnw/scripts/release/require-green-run.sh" "$REQUIRE_GREEN_WORKFLOW" "$REQUIRE_GREEN_SHA"
+      - name: Setup
+        uses: ./.rnw/.github/actions/setup
+        with:
+          working-directory: ${{ inputs.working-directory }}
+      - name: Resolve version
+        id: version
+        env:
+          BUILD_NUMBER_OFFSET: ${{ inputs.build-number-offset }}
+          RELEASE_PR_TITLE: ${{ github.event.pull_request.title }}
+          GH_TOKEN: ${{ github.token }}
+        run: bash "$RNW/scripts/release/resolve-version.sh"
+      - name: Fingerprint
+        id: fingerprint
+        run: bash "$RNW/scripts/release/fingerprint.sh"
+      - name: Build info
+        run: bash "$RNW/scripts/release/build-info.sh"
+      - name: Release notes
+        env:
+          NOTES_LOCALES: ${{ inputs.notes-locales }}
+          RELEASE_BODY_FILE: ${{ inputs.release-body-file }}
+        run: bash "$RNW/scripts/release/notes.sh"
+      - name: Upload release-meta
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ inputs.release-meta-artifact }}
+          path: ${{ env.RNW_RELEASE_META_DIR }}
+          retention-days: 30
+          overwrite: true
+          if-no-files-found: error

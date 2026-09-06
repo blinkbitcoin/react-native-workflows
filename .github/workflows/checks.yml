@@ -82,6 +82,10 @@ on:
         description: Lint the consumer's scripts/ with shellcheck
         type: boolean
         default: true
+      release-checks:
+        description: Run the consumer's `check:release` script (Fastfile/Gemfile lint, release config validation); needs Ruby, so it is off by default
+        type: boolean
+        default: false
       docs-only-detection:
         description: Classify the PR as docs-only so callers can skip downstream jobs
         type: boolean
@@ -194,6 +198,25 @@ jobs:
         env:
           AUDIT_LEVEL: ${{ inputs.audit-level }}
         run: bash "$RNW/scripts/checks/audit.sh"
+      # Ruby is installed here rather than through the `setup` action's `ruby`
+      # input so the 12 checks above never pay for a bundle install they do not
+      # use; `bundler-cache: true` makes the repeat cost near zero.
+      - name: Read pinned Ruby version
+        id: rb
+        if: ${{ inputs.release-checks }}
+        run: bash "$RNW/scripts/ci/ruby-version.sh"
+      - name: Install Ruby
+        if: ${{ inputs.release-checks }}
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ steps.rb.outputs.version }}
+          bundler-cache: true
+          working-directory: ${{ inputs.working-directory }}
+      - name: Release checks
+        if: ${{ inputs.release-checks }}
+        env:
+          SCRIPT_NAME: 'check:release'
+        run: bash "$RNW/scripts/checks/run-script.sh" "$SCRIPT_NAME"
       - name: Lint CI (actionlint / shellcheck)
         if: ${{ inputs.actionlint || inputs.shellcheck }}
         env:

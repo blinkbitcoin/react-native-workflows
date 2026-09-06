@@ -1,0 +1,195 @@
+name: fastlane-lane
+on:
+  workflow_call:
+    inputs:
+      repository:
+        description: Consumer repository to check out (defaults to the caller's repository)
+        type: string
+        default: ''
+      ref:
+        description: Consumer ref to check out (empty lets actions/checkout resolve the correct ref, including PR merge refs)
+        type: string
+        default: ''
+      working-directory:
+        description: Consumer directory relative to GITHUB_WORKSPACE
+        type: string
+        default: '.'
+      linux-runner:
+        description: Runner label for Linux jobs (unused directly; `runner` selects the runner for the lane job)
+        type: string
+        default: 'ubuntu-latest'
+      macos-runner:
+        description: Runner label for macOS jobs (unused directly; `runner` selects the runner for the lane job)
+        type: string
+        default: 'macos-26'
+      native-cache-version:
+        description: Native cache key prefix (unused by this workflow; carried for input-set consistency across the family)
+        type: string
+        default: 'v1'
+      platform:
+        description: Fastlane platform (ios or android)
+        type: string
+        required: true
+      lane:
+        description: 'Lane name: ios build|verify|upload_internal|promote_beta|release_production|phased|upload_symbols, android build|verify|upload_internal|promote_beta|release_production|rollout|halt'
+        type: string
+        required: true
+      lane-args:
+        description: Space-separated fastlane key:value arguments appended to the lane invocation (e.g. 'percentage:0.1')
+        type: string
+        default: ''
+      runner:
+        description: Runner label for the lane job (an iOS lane that touches Xcode needs a macOS runner; a store-API-only lane does not)
+        type: string
+        default: 'ubuntu-latest'
+      environment:
+        description: GitHub Environment whose secrets/approvals gate this lane (empty means no environment)
+        type: string
+        default: ''
+      env-json:
+        description: Flat JSON object of extra environment variables published to the lane (configuration only - secrets belong in `secrets:`)
+        type: string
+        default: '{}'
+      artifacts:
+        description: Artifact name or glob pattern to download before the lane runs (empty downloads nothing); all matches are merged into one directory
+        type: string
+        default: ''
+      version:
+        description: App version passed to the lane as APP_VERSION
+        type: string
+        default: ''
+      build-number:
+        description: Build number passed to the lane as APP_BUILD_NUMBER
+        type: string
+        default: ''
+      ios-bundle-id:
+        description: Bundle identifier passed to the lane as IOS_BUNDLE_ID
+        type: string
+        default: ''
+      ios-scheme:
+        description: Xcode scheme passed to the lane as IOS_SCHEME
+        type: string
+        default: ''
+      android-package:
+        description: Application id passed to the lane as ANDROID_PACKAGE
+        type: string
+        default: ''
+      ruby:
+        description: Install Ruby via ruby/setup-ruby (leave on unless the consumer has no Gemfile)
+        type: boolean
+        default: true
+      timeout-minutes:
+        description: Job timeout; raise it for a lane that waits on App Store Connect processing
+        type: number
+        default: 45
+    secrets:
+      consumer-token:
+        description: PAT with read access to a private consumer repository; falls back to the caller's github.token (works for a public consumer)
+        required: false
+      MATCH_PASSWORD:
+        description: Passphrase for the fastlane match certificate repository
+        required: false
+      MATCH_GIT_URL:
+        description: Git URL of the fastlane match certificate repository
+        required: false
+      MATCH_GIT_BASIC_AUTHORIZATION:
+        description: Base64 basic-auth token used to clone the match repository
+        required: false
+      ASC_KEY_ID:
+        description: App Store Connect API key id
+        required: false
+      ASC_ISSUER_ID:
+        description: App Store Connect API issuer id
+        required: false
+      ASC_KEY_P8_BASE64:
+        description: Base64-encoded App Store Connect .p8 private key
+        required: false
+      ANDROID_UPLOAD_KEYSTORE_BASE64:
+        description: Base64-encoded upload keystore
+        required: false
+      ANDROID_UPLOAD_KEYSTORE_PASSWORD:
+        description: Password of the upload keystore
+        required: false
+      ANDROID_UPLOAD_KEY_ALIAS:
+        description: Alias of the signing key inside the upload keystore
+        required: false
+      ANDROID_UPLOAD_KEY_PASSWORD:
+        description: Password of the signing key inside the upload keystore
+        required: false
+      PLAY_SERVICE_ACCOUNT_JSON:
+        description: Google Play service account JSON (raw)
+        required: false
+permissions:
+  contents: read
+jobs:
+  lane:
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    environment: ${{ inputs.environment }}
+    env:
+      WORKING_DIRECTORY: ${{ inputs.working-directory }}
+      APP_VERSION: ${{ inputs.version }}
+      APP_BUILD_NUMBER: ${{ inputs.build-number }}
+      IOS_BUNDLE_ID: ${{ inputs.ios-bundle-id }}
+      IOS_SCHEME: ${{ inputs.ios-scheme }}
+      ANDROID_PACKAGE: ${{ inputs.android-package }}
+    steps:
+      - name: Checkout consumer
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ inputs.repository || github.repository }}
+          ref: ${{ inputs.ref }}
+          token: ${{ secrets.consumer-token || github.token }}
+      - name: Checkout react-native-workflows
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .rnw
+          persist-credentials: false
+      - name: Publish RNW environment
+        run: bash ".rnw/scripts/release/env-publish.sh"
+      - name: Setup
+        uses: ./.rnw/.github/actions/setup
+        with:
+          working-directory: ${{ inputs.working-directory }}
+          ruby: ${{ inputs.ruby }}
+      - name: Download artifacts
+        if: ${{ inputs.artifacts != '' }}
+        uses: actions/download-artifact@v8
+        with:
+          pattern: ${{ inputs.artifacts }}
+          # One flat directory: a lane is given file paths, not artifact names,
+          # and merge-multiple keeps `$RNW_ASSETS_DIR/app.ipa` stable no matter
+          # which artifact carried it.
+          merge-multiple: true
+          path: ${{ env.RNW_ASSETS_DIR }}
+      - name: Publish env-json
+        env:
+          RNW_ENV_JSON: ${{ inputs.env-json }}
+        run: bash "$RNW/scripts/release/env-json.sh"
+      - name: Decode secrets
+        env:
+          ASC_KEY_P8_BASE64: ${{ secrets.ASC_KEY_P8_BASE64 }}
+          ANDROID_UPLOAD_KEYSTORE_BASE64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+        run: bash "$RNW/scripts/release/decode-secrets.sh"
+      - name: Fastlane lane
+        env:
+          PLATFORM: ${{ inputs.platform }}
+          LANE: ${{ inputs.lane }}
+          LANE_ARGS: ${{ inputs.lane-args }}
+          BUILD_INFO_FILE: ${{ env.RNW_ASSETS_DIR }}/build-info.json
+          RELEASE_NOTES_STORE_FILE: ${{ env.RNW_ASSETS_DIR }}/notes-store.txt
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+          MATCH_GIT_URL: ${{ secrets.MATCH_GIT_URL }}
+          MATCH_GIT_BASIC_AUTHORIZATION: ${{ secrets.MATCH_GIT_BASIC_AUTHORIZATION }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ANDROID_UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_PASSWORD }}
+          ANDROID_UPLOAD_KEY_ALIAS: ${{ secrets.ANDROID_UPLOAD_KEY_ALIAS }}
+          ANDROID_UPLOAD_KEY_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEY_PASSWORD }}
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+        # LANE_ARGS reaches fastlane.sh through the environment, not as an
+        # unquoted expansion here: the script splits it into arguments itself.
+        run: bash "$RNW/scripts/release/fastlane.sh" "$PLATFORM" "$LANE"

@@ -1,0 +1,126 @@
+name: expo-ota-publish
+on:
+  workflow_call:
+    inputs:
+      repository:
+        description: Consumer repository to check out (defaults to the caller's repository)
+        type: string
+        default: ''
+      ref:
+        description: Consumer ref to publish from (the commit whose JS becomes the update)
+        type: string
+        default: ''
+      working-directory:
+        description: Consumer directory relative to GITHUB_WORKSPACE
+        type: string
+        default: '.'
+      linux-runner:
+        description: Runner label for every job in this workflow
+        type: string
+        default: 'ubuntu-latest'
+      macos-runner:
+        description: Runner label for macOS jobs (unused by this workflow; carried for input-set consistency across the family)
+        type: string
+        default: 'macos-26'
+      native-cache-version:
+        description: Native cache key prefix (unused by this workflow; carried for input-set consistency across the family)
+        type: string
+        default: 'v1'
+      ota-enabled:
+        description: Master switch for the whole workflow; false skips every job (OTA is opt-in per consumer)
+        type: boolean
+        default: false
+      channel:
+        description: Update channel/branch to publish to (e.g. internal, beta, production)
+        type: string
+        required: true
+      rollout:
+        description: Rollout percentage 0-100 for this update
+        type: number
+        default: 0
+      environment:
+        description: GitHub Environment whose secrets/approvals gate the publish (empty means no environment)
+        type: string
+        default: ''
+      ota-cli-version:
+        description: Exact eoas version to publish with; never leave this empty in a real caller (an unpinned CLI can change the update format between runs)
+        type: string
+        default: ''
+      channel-build-info-artifact:
+        description: Artifact carrying the build-info.json of the store build currently installed on this channel; its fingerprints gate the publish
+        type: string
+        default: 'release-meta'
+      manifest-url:
+        description: Manifest URL fetched after publishing as a smoke check (empty skips the check)
+        type: string
+        default: ''
+      runtime-version:
+        description: Runtime version sent as the expo-runtime-version header in the smoke check
+        type: string
+        default: ''
+    secrets:
+      consumer-token:
+        description: PAT with read access to a private consumer repository; falls back to the caller's github.token (works for a public consumer)
+        required: false
+      OTA_PUBLISH_TOKEN:
+        description: Token the OTA CLI authenticates with when publishing
+        required: false
+permissions:
+  contents: read
+jobs:
+  publish:
+    # OTA is off unless a caller deliberately turns it on: an accidental update
+    # reaches every installed app immediately and cannot be recalled.
+    if: ${{ inputs.ota-enabled }}
+    runs-on: ${{ inputs.linux-runner }}
+    timeout-minutes: 30
+    environment: ${{ inputs.environment }}
+    env:
+      WORKING_DIRECTORY: ${{ inputs.working-directory }}
+      OTA_ENABLED: 'true'
+      OTA_CLI_VERSION: ${{ inputs.ota-cli-version }}
+    steps:
+      - name: Checkout consumer
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ inputs.repository || github.repository }}
+          ref: ${{ inputs.ref }}
+          token: ${{ secrets.consumer-token || github.token }}
+      - name: Checkout react-native-workflows
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .rnw
+          persist-credentials: false
+      - name: Publish RNW environment
+        run: bash ".rnw/scripts/release/env-publish.sh"
+      - name: Setup
+        uses: ./.rnw/.github/actions/setup
+        with:
+          working-directory: ${{ inputs.working-directory }}
+      - name: Download channel build-info
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ inputs.channel-build-info-artifact }}
+          path: ${{ env.RNW_ASSETS_DIR }}
+      # Before the export, not after: computing a fingerprint is cheap and an
+      # update that fails the gate must never reach the publish step.
+      - name: Fingerprint gate
+        env:
+          CHANNEL_BUILD_INFO: ${{ env.RNW_ASSETS_DIR }}/build-info.json
+        run: bash "$RNW/scripts/ota/fingerprint-gate.sh" "$CHANNEL_BUILD_INFO"
+      - name: Export update
+        run: bash "$RNW/scripts/ota/export.sh"
+      - name: Publish update
+        env:
+          CHANNEL: ${{ inputs.channel }}
+          ROLLOUT: ${{ inputs.rollout }}
+          OTA_PUBLISH_TOKEN: ${{ secrets.OTA_PUBLISH_TOKEN }}
+        run: bash "$RNW/scripts/ota/publish.sh" "$CHANNEL" "$ROLLOUT"
+      - name: Manifest smoke check
+        env:
+          CHANNEL: ${{ inputs.channel }}
+          OTA_MANIFEST_URL: ${{ inputs.manifest-url }}
+          OTA_RUNTIME_VERSION: ${{ inputs.runtime-version }}
+        run: bash "$RNW/scripts/ota/smoke.sh" "$CHANNEL"

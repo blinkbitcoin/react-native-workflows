@@ -1,0 +1,135 @@
+name: github-release
+on:
+  workflow_call:
+    inputs:
+      repository:
+        description: Repository whose release is created or moved (defaults to the caller's repository)
+        type: string
+        default: ''
+      ref:
+        description: Consumer ref (unused by this workflow - it never checks the consumer out; carried for input-set consistency across the family)
+        type: string
+        default: ''
+      working-directory:
+        description: Consumer directory relative to GITHUB_WORKSPACE (unused by this workflow; carried for input-set consistency across the family)
+        type: string
+        default: '.'
+      linux-runner:
+        description: Runner label for every job in this workflow
+        type: string
+        default: 'ubuntu-latest'
+      macos-runner:
+        description: Runner label for macOS jobs (unused by this workflow; carried for input-set consistency across the family)
+        type: string
+        default: 'macos-26'
+      native-cache-version:
+        description: Native cache key prefix (unused by this workflow; carried for input-set consistency across the family)
+        type: string
+        default: 'v1'
+      mode:
+        description: 'create-prerelease | promote | latest | append'
+        type: string
+        required: true
+      tag:
+        description: Release tag to create or move
+        type: string
+        required: true
+      sha:
+        description: Commit the tag points at (create-prerelease only; empty uses the default branch tip)
+        type: string
+        default: ''
+      title:
+        description: Release title (empty keeps GitHub's default, which is the tag)
+        type: string
+        default: ''
+      notes-artifact:
+        description: Artifact carrying notes.md (used as the release body, or as the appended section in `append` mode); empty falls back to GitHub's generated notes
+        type: string
+        default: 'release-meta'
+      notes-file:
+        description: File inside the notes artifact to use as the body
+        type: string
+        default: 'notes.md'
+      assets-artifacts:
+        description: Artifact name or glob pattern whose files are attached to the release (empty attaches nothing); all matches are merged into one directory
+        type: string
+        default: ''
+      append-title:
+        description: Heading for the section added in `append` mode
+        type: string
+        default: 'Update'
+    secrets:
+      RELEASE_TAGGER_APP_ID:
+        description: GitHub App id used to create the release; without it the caller's GITHUB_TOKEN is used (a release created with GITHUB_TOKEN does not trigger other workflows)
+        required: false
+      RELEASE_TAGGER_APP_PRIVATE_KEY:
+        description: Private key of the release-tagger GitHub App
+        required: false
+    outputs:
+      url:
+        description: 'URL of the created or updated release'
+        value: ${{ jobs.release.outputs.url }}
+permissions:
+  contents: read
+jobs:
+  release:
+    runs-on: ${{ inputs.linux-runner }}
+    timeout-minutes: 15
+    permissions:
+      # Creating or editing a release writes to contents. A called workflow's
+      # job cannot widen the caller's token, so the calling job must grant
+      # `contents: write` too.
+      contents: write
+    outputs:
+      url: ${{ steps.assets.outputs.url }}
+    env:
+      # The `secrets` context is not available in a step-level `if:`, so the app
+      # id is mirrored into `env` here purely so the token step can branch on
+      # whether it was configured. Only the id, never the private key.
+      RELEASE_TAGGER_APP_ID: ${{ secrets.RELEASE_TAGGER_APP_ID }}
+    steps:
+      - name: Checkout react-native-workflows
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .rnw
+          persist-credentials: false
+      - name: Publish RNW environment
+        run: bash ".rnw/scripts/release/env-publish.sh"
+      # A release created with the default GITHUB_TOKEN does not trigger other
+      # workflows, so a `release: published` caller downstream would never fire.
+      # An App token does. Configure both secrets or neither: the id is what
+      # this condition reads, and the action fails loudly on a missing key.
+      - name: GitHub App token
+        id: app-token
+        if: ${{ env.RELEASE_TAGGER_APP_ID != '' }}
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.RELEASE_TAGGER_APP_ID }}
+          private-key: ${{ secrets.RELEASE_TAGGER_APP_PRIVATE_KEY }}
+      - name: Download notes
+        if: ${{ inputs.notes-artifact != '' }}
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ inputs.notes-artifact }}
+          path: ${{ env.RNW_ASSETS_DIR }}
+      - name: Download assets
+        if: ${{ inputs.assets-artifacts != '' }}
+        uses: actions/download-artifact@v8
+        with:
+          pattern: ${{ inputs.assets-artifacts }}
+          merge-multiple: true
+          path: ${{ env.RNW_ASSETS_DIR }}
+      - name: Release assets
+        id: assets
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
+          GH_REPO: ${{ inputs.repository || github.repository }}
+          MODE: ${{ inputs.mode }}
+          TAG: ${{ inputs.tag }}
+          TARGET_SHA: ${{ inputs.sha }}
+          TITLE: ${{ inputs.title }}
+          APPEND_TITLE: ${{ inputs.append-title }}
+          NOTES_FILE: ${{ env.RNW_ASSETS_DIR }}/${{ inputs.notes-file }}
+        run: bash ".rnw/scripts/release/release-assets.sh" "$MODE"

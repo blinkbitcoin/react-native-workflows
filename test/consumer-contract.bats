@@ -109,7 +109,9 @@ guide_yaml_block() {
 @test "every workflow_call input is documented in the guide's table for that workflow" {
   command -v yq >/dev/null || skip "yq not installed"
   missing=()
-  for wf in checks unit e2e web pr-title; do
+  for wf in checks unit e2e web pr-title \
+    expo-prepare expo-build-ios expo-build-android \
+    fastlane-lane github-release expo-ota-publish; do
     file="$REPO_ROOT/.github/workflows/$wf.yml"
     section="$(guide_section "$wf.yml")"
     [ -n "$section" ] || fail "no '### \`$wf.yml\`' section in docs/consumer-guide.md"

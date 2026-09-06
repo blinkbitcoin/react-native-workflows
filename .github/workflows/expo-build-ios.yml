@@ -1,0 +1,207 @@
+name: expo-build-ios
+on:
+  workflow_call:
+    inputs:
+      repository:
+        description: Consumer repository to check out (defaults to the caller's repository)
+        type: string
+        default: ''
+      ref:
+        description: Consumer ref to check out (empty lets actions/checkout resolve the correct ref, including PR merge refs)
+        type: string
+        default: ''
+      working-directory:
+        description: Consumer directory relative to GITHUB_WORKSPACE
+        type: string
+        default: '.'
+      linux-runner:
+        description: Runner label for Linux jobs (unused by this workflow; carried for input-set consistency across the family)
+        type: string
+        default: 'ubuntu-latest'
+      macos-runner:
+        description: Runner label for the build job
+        type: string
+        default: 'macos-26'
+      native-cache-version:
+        description: Native cache key prefix; bump to invalidate every native cache at once
+        type: string
+        default: 'v1'
+      native-extra-globs:
+        description: Extra space-separated consumer-relative shell globs whose file contents are folded into the native dependency hash
+        type: string
+        default: ''
+      xcode:
+        description: Xcode version to build with (empty uses the runner default); sets DEVELOPER_DIR and is folded into the Pods cache key
+        type: string
+        default: ''
+      environment:
+        description: GitHub Environment whose secrets/approvals gate this build (empty means no environment)
+        type: string
+        default: ''
+      version:
+        description: App version to stamp into the build (from expo-prepare's `version` output)
+        type: string
+        default: ''
+      build-number:
+        description: Build number to stamp into the build (from expo-prepare's `build-number` output)
+        type: string
+        default: ''
+      stage:
+        description: Release stage the lanes build for (internal/beta/production)
+        type: string
+        default: 'internal'
+      ios-bundle-id:
+        description: Bundle identifier passed to the lanes as IOS_BUNDLE_ID (empty lets the Fastfile resolve it from the Expo config)
+        type: string
+        default: ''
+      ios-scheme:
+        description: Xcode scheme passed to the lanes as IOS_SCHEME (empty lets the Fastfile resolve it from the generated workspace)
+        type: string
+        default: ''
+      verify:
+        description: Run the `ios verify` lane after `ios build`
+        type: boolean
+        default: true
+      release-meta-artifact:
+        description: Artifact produced by expo-prepare that carries build-info.json and the store notes
+        type: string
+        default: 'release-meta'
+      ipa-artifact:
+        description: Artifact name for the signed .ipa
+        type: string
+        default: 'ios-ipa'
+      dsym-artifact:
+        description: Artifact name for the dSYM bundle
+        type: string
+        default: 'ios-dsym'
+    secrets:
+      consumer-token:
+        description: PAT with read access to a private consumer repository; falls back to the caller's github.token (works for a public consumer)
+        required: false
+      MATCH_PASSWORD:
+        description: Passphrase for the fastlane match certificate repository
+        required: false
+      MATCH_GIT_URL:
+        description: Git URL of the fastlane match certificate repository
+        required: false
+      MATCH_GIT_BASIC_AUTHORIZATION:
+        description: Base64 basic-auth token used to clone the match repository
+        required: false
+      ASC_KEY_ID:
+        description: App Store Connect API key id
+        required: false
+      ASC_ISSUER_ID:
+        description: App Store Connect API issuer id
+        required: false
+      ASC_KEY_P8_BASE64:
+        description: Base64-encoded App Store Connect .p8 private key (decoded to a 0600 file by decode-secrets.sh)
+        required: false
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ${{ inputs.macos-runner }}
+    timeout-minutes: 90
+    environment: ${{ inputs.environment }}
+    env:
+      WORKING_DIRECTORY: ${{ inputs.working-directory }}
+      RNW_XCODE: ${{ inputs.xcode }}
+      RNW_STAGE: ${{ inputs.stage }}
+      APP_VERSION: ${{ inputs.version }}
+      APP_BUILD_NUMBER: ${{ inputs.build-number }}
+      IOS_BUNDLE_ID: ${{ inputs.ios-bundle-id }}
+      IOS_SCHEME: ${{ inputs.ios-scheme }}
+      # The non-empty value sits in the `&&` slot on purpose: GitHub's `&&`
+      # yields its first falsy operand, so `cond && '' || X` would return X on
+      # both branches and pin every build to one Xcode.
+      DEVELOPER_DIR: ${{ inputs.xcode && format('/Applications/Xcode_{0}.app/Contents/Developer', inputs.xcode) || '' }}
+    steps:
+      - name: Checkout consumer
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ inputs.repository || github.repository }}
+          ref: ${{ inputs.ref }}
+          token: ${{ secrets.consumer-token || github.token }}
+      - name: Checkout react-native-workflows
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .rnw
+          persist-credentials: false
+      - name: Publish RNW environment
+        run: bash ".rnw/scripts/release/env-publish.sh"
+      - name: Native cache keys
+        id: keys
+        uses: ./.rnw/.github/actions/native-key
+        with:
+          working-directory: ${{ inputs.working-directory }}
+          native-cache-version: ${{ inputs.native-cache-version }}
+          native-extra-globs: ${{ inputs.native-extra-globs }}
+          xcode: ${{ inputs.xcode }}
+      - name: Setup
+        uses: ./.rnw/.github/actions/setup
+        with:
+          working-directory: ${{ inputs.working-directory }}
+          # Ruby unconditionally here (unlike e2e.yml, which installs it only on
+          # a cache miss): fastlane is the whole point of this job.
+          ruby: 'true'
+      - name: Decode secrets
+        env:
+          ASC_KEY_P8_BASE64: ${{ secrets.ASC_KEY_P8_BASE64 }}
+        run: bash "$RNW/scripts/release/decode-secrets.sh"
+      - name: Prebuild (ios)
+        run: bash "$RNW/scripts/native/prebuild.sh" ios
+      - name: Cache CocoaPods
+        uses: actions/cache@v6
+        with:
+          path: |
+            ${{ inputs.working-directory }}/ios/Pods
+            ~/Library/Caches/CocoaPods
+          key: ${{ steps.keys.outputs.pods-key }}
+          restore-keys: |
+            pods-${{ runner.os }}-
+      - name: Pod install
+        run: bash "$RNW/scripts/native/pods.sh"
+      - name: Download release-meta
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ inputs.release-meta-artifact }}
+          path: ${{ env.RNW_RELEASE_META_DIR }}
+      - name: Fastlane ios build
+        env:
+          BUILD_INFO_FILE: ${{ env.RNW_RELEASE_META_DIR }}/build-info.json
+          RELEASE_NOTES_STORE_FILE: ${{ env.RNW_RELEASE_META_DIR }}/notes-store.txt
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+          MATCH_GIT_URL: ${{ secrets.MATCH_GIT_URL }}
+          MATCH_GIT_BASIC_AUTHORIZATION: ${{ secrets.MATCH_GIT_BASIC_AUTHORIZATION }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: bash "$RNW/scripts/release/fastlane.sh" ios build
+      - name: Fastlane ios verify
+        if: ${{ inputs.verify }}
+        env:
+          BUILD_INFO_FILE: ${{ env.RNW_RELEASE_META_DIR }}/build-info.json
+        run: bash "$RNW/scripts/release/fastlane.sh" ios verify
+      - name: Upload ios-ipa
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ inputs.ipa-artifact }}
+          path: ${{ env.RNW_OUTPUT_DIR }}/*.ipa
+          # An .ipa is already a zip; re-compressing it costs minutes and saves
+          # nothing.
+          compression-level: 0
+          retention-days: 30
+          overwrite: true
+          if-no-files-found: error
+      - name: Upload ios-dsym
+        # `!cancelled()`: symbols are what makes a failed build's crash reports
+        # readable, so they upload even when verify failed.
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ inputs.dsym-artifact }}
+          path: ${{ env.RNW_OUTPUT_DIR }}/*.dSYM.zip
+          retention-days: 30
+          overwrite: true
+          if-no-files-found: warn

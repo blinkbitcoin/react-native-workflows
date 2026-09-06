@@ -16,6 +16,37 @@ setup() {
   [ "${#WORKFLOWS[@]}" -ge 2 ]
 }
 
+# Named explicitly rather than left to the glob: a workflow accidentally
+# deleted or renamed would otherwise just shrink WORKFLOWS and every other
+# assertion here would still pass.
+@test "every reusable workflow this family publishes is present" {
+  for w in checks unit e2e web pr-closed pr-title \
+    expo-prepare expo-build-ios expo-build-android \
+    fastlane-lane github-release expo-ota-publish; do
+    [ -f "$REPO_ROOT/.github/workflows/$w.yml" ] || {
+      echo "missing .github/workflows/$w.yml" >&2
+      return 1
+    }
+  done
+}
+
+@test "every declared secret is optional (required: false)" {
+  for w in "${WORKFLOWS[@]}"; do
+    # A required secret in a reusable workflow makes every caller declare it,
+    # even the ones that never reach the job needing it.
+    bad=$(yq -r '[(.on.workflow_call.secrets // {}) | to_entries[] | select(.value.required != false)] | length' "$w")
+    [ "$bad" -eq 0 ]
+  done
+}
+
+@test "no workflow puts an empty string in the AND slot of the ternary idiom" {
+  for w in "${WORKFLOWS[@]}"; do
+    # GitHub's && yields its first falsy operand, so `cond && '' || X` is X on
+    # both branches. The non-empty value must sit in the && slot.
+    ! grep -qE "&&[[:space:]]*''[[:space:]]*\|\|" "$w"
+  done
+}
+
 @test "every workflow declares on.workflow_call" {
   for w in "${WORKFLOWS[@]}"; do
     has=$(yq -r 'has("on") and (.on | has("workflow_call"))' "$w")
