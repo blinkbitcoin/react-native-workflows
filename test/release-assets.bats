@@ -143,6 +143,66 @@ $second"
   [ "$(grep -c '^## Store rollout$' "$RNW_TEST_BODY")" -eq 1 ] || fail "the section is duplicated: $body"
 }
 
+# The regression U1 was: the strip ran from the heading to the next `## `, so a
+# notes file that itself starts with a heading terminated the strip early and its
+# tail stacked on every re-run. That is the *default* shape - notes.sh's fallback
+# writes `## <version> (<build>)`, and a release-please body starts with
+# `## [x.y.z](...)`.
+@test "append is idempotent when the notes file itself starts with a ## heading" {
+  : > "$RNW_TEST_EXISTS"
+  cat > "$BATS_TEST_TMPDIR/section.md" <<'EOF'
+## [1.2.3](https://example.test/compare/v1.2.2...v1.2.3) (2026-09-06)
+
+### Features
+
+- a feature
+
+### Bug Fixes
+
+- a fix
+EOF
+  TAG=v1.2.3 NOTES_FILE="$BATS_TEST_TMPDIR/section.md" APPEND_TITLE='Release notes' release append
+  [ "$status" -eq 0 ] || fail "first append exited $status: $output"
+  first="$(cat "$RNW_TEST_BODY")"
+  TAG=v1.2.3 NOTES_FILE="$BATS_TEST_TMPDIR/section.md" APPEND_TITLE='Release notes' release append
+  [ "$status" -eq 0 ] || fail "second append exited $status: $output"
+  second="$(cat "$RNW_TEST_BODY")"
+  [ "$first" = "$second" ] || fail "re-running append changed the body:
+--- first ($(printf '%s' "$first" | wc -l | tr -d ' ') lines) ---
+$first
+--- second ($(printf '%s' "$second" | wc -l | tr -d ' ') lines) ---
+$second"
+  [ "$(grep -c '^- a feature$' "$RNW_TEST_BODY")" -eq 1 ] \
+    || fail "the notes body is duplicated: $(cat "$RNW_TEST_BODY")"
+  [ "$(grep -c '^### Bug Fixes$' "$RNW_TEST_BODY")" -eq 1 ] \
+    || fail "a subsection survived the strip: $(cat "$RNW_TEST_BODY")"
+}
+
+@test "append migrates a body written before the markers existed, without stacking" {
+  : > "$RNW_TEST_EXISTS"
+  # Exactly what the pre-marker version of this script produced.
+  cat > "$RNW_TEST_BODY" <<'EOF'
+Initial release notes.
+
+## Store rollout
+
+- rolled out to 10%
+EOF
+  printf -- '- rolled out to 100%%\n' > "$BATS_TEST_TMPDIR/section.md"
+  TAG=v1.2.3 NOTES_FILE="$BATS_TEST_TMPDIR/section.md" APPEND_TITLE='Store rollout' release append
+  [ "$status" -eq 0 ] || fail "migration append exited $status: $output"
+  [ "$(grep -c '^## Store rollout$' "$RNW_TEST_BODY")" -eq 1 ] \
+    || fail "the legacy section was not replaced: $(cat "$RNW_TEST_BODY")"
+  not_contains "$(cat "$RNW_TEST_BODY")" "rolled out to 10%
+" || fail "the legacy content survived: $(cat "$RNW_TEST_BODY")"
+  grep -qxF '<!-- rnw:append:Store rollout -->' "$RNW_TEST_BODY" \
+    || fail "the migrated body carries no marker: $(cat "$RNW_TEST_BODY")"
+  first="$(cat "$RNW_TEST_BODY")"
+  TAG=v1.2.3 NOTES_FILE="$BATS_TEST_TMPDIR/section.md" APPEND_TITLE='Store rollout' release append
+  [ "$status" -eq 0 ] || fail "second append exited $status: $output"
+  [ "$first" = "$(cat "$RNW_TEST_BODY")" ] || fail "the run after migration was not idempotent"
+}
+
 @test "append without a notes file is fatal" {
   : > "$RNW_TEST_EXISTS"
   TAG=v1.2.3 release append

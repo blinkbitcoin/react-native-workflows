@@ -131,26 +131,46 @@ case "$mode" in
   append)
     release_exists || die "release $tag does not exist - nothing to append to"
     [ "${#notes_args[@]}" -eq 2 ] || die "append needs NOTES_FILE pointing at an existing section file"
-    heading="## ${APPEND_TITLE:-Update}"
+    title="${APPEND_TITLE:-Update}"
+    heading="## $title"
     # Re-running a failed job is the ordinary way an Actions failure is
     # recovered (it is why the asset upload uses --clobber), so append has to be
-    # idempotent too: drop any existing section with this exact heading - from
-    # the heading line to the next `## ` or EOF - and re-add it. Two identical
-    # runs then produce the same body, byte for byte.
+    # idempotent too.
+    #
+    # The block is delimited by HTML-comment markers, not by "the heading down to
+    # the next `## `". The notes file routinely *starts* with a `## ` heading -
+    # notes.sh's fallback writes `## <version> (<build>)` and a release-please
+    # body starts with `## [x.y.z](...)` - so a heading scan stops at the notes'
+    # own heading and leaves their tail behind, stacking a little more of it on
+    # every re-run. Markers bound the block regardless of its content.
+    begin_marker="<!-- rnw:append:$title -->"
+    end_marker="<!-- /rnw:append:$title -->"
     gh release view "$tag" --json body --jq '.body' > "$body_file"
-    awk -v heading="$heading" '
-      $0 == heading { skipping = 1; next }
-      skipping && /^## / { skipping = 0 }
-      !skipping { print }
-    ' "$body_file" > "$stripped_file"
+    if grep -qxF "$begin_marker" "$body_file"; then
+      awk -v b="$begin_marker" -v e="$end_marker" '
+        $0 == b { skipping = 1; next }
+        skipping && $0 == e { skipping = 0; next }
+        !skipping { print }
+      ' "$body_file" > "$stripped_file"
+    else
+      # Migration path: a body appended by a version of this script that
+      # predates the markers has no begin marker, so fall back to the old
+      # heading scan once. The next run is marker-delimited like any other.
+      awk -v heading="$heading" '
+        $0 == heading { skipping = 1; next }
+        skipping && /^## / { skipping = 0 }
+        !skipping { print }
+      ' "$body_file" > "$stripped_file"
+    fi
     # Trailing blank lines would otherwise accumulate one pair per re-run.
     {
       awk 'BEGIN { blank = 0 }
         /^[[:space:]]*$/ { blank++; next }
         { while (blank-- > 0) print ""; blank = 0; print }
       ' "$stripped_file"
-      printf '\n%s\n\n' "$heading"
+      printf '\n%s\n%s\n\n' "$begin_marker" "$heading"
       cat "$NOTES_FILE"
+      printf '%s\n' "$end_marker"
     } > "$body_file"
     gh release edit "$tag" --notes-file "$body_file"
     upload_assets

@@ -81,22 +81,37 @@ lane_step_count() {
   done
 }
 
-@test "every credential secret a lane workflow declares reaches a fastlane step's env" {
+@test "every credential secret a lane workflow declares reaches EVERY fastlane step's env" {
   # This is exactly what C1 was: ASC_KEY_P8_BASE64 was decoded to a 0600 file
   # but never put in the lane's environment, and the lane reads the base64
   # itself with ENV.fetch - so every store lane would have raised KeyError.
+  #
+  # Per step, not per workflow: a union across all fastlane steps would pass
+  # when the secret is on `verify` but missing from `build`, which is the same
+  # bug made half as often. If a secret ever legitimately belongs to only one
+  # step, add it to an explicit allowlist here rather than flattening again.
   for w in "${WORKFLOWS[@]}"; do
-    if [ "$(lane_step_count "$w")" -gt 0 ]; then
-      declared=$(yq -r '(.on.workflow_call.secrets // {}) | keys | .[]' "$w")
-      lane_env=$(yq -r '[.jobs[].steps[]? | select((.run? // "") | test("release/fastlane.sh")) | (.env // {}) | keys] | flatten | .[]' "$w")
-      for s in $declared; do
-        case "$s" in
-          consumer-token) continue ;;
-        esac
-        grep -qxF "$s" <<<"$lane_env" \
-          || fail "$(basename "$w"): secret $s is declared but never reaches a fastlane step's env"
-      done
-    fi
+    job_names=$(yq -r '.jobs | keys | .[]' "$w")
+    for j in $job_names; do
+      n=$(yq -r "[.jobs.\"$j\".steps[]? | select((.run? // \"\") | test(\"release/fastlane.sh\"))] | length" "$w")
+      if [ "$n" -gt 0 ]; then
+        declared=$(yq -r '(.on.workflow_call.secrets // {}) | keys | .[]' "$w")
+        job_env=$(yq -r "(.jobs.\"$j\".env // {}) | keys | .[]" "$w")
+        i=0
+        while [ "$i" -lt "$n" ]; do
+          step_name=$(yq -r "[.jobs.\"$j\".steps[]? | select((.run? // \"\") | test(\"release/fastlane.sh\"))][$i].name // \"step $i\"" "$w")
+          step_env=$(yq -r "[.jobs.\"$j\".steps[]? | select((.run? // \"\") | test(\"release/fastlane.sh\"))][$i] | (.env // {}) | keys | .[]" "$w")
+          for s in $declared; do
+            case "$s" in
+              consumer-token) continue ;;
+            esac
+            printf '%s\n%s\n' "$job_env" "$step_env" | grep -qxF "$s" \
+              || fail "$(basename "$w"): secret $s is declared but never reaches the [$step_name] step env"
+          done
+          i=$((i + 1))
+        done
+      fi
+    done
   done
 }
 
