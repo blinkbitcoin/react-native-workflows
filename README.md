@@ -17,7 +17,7 @@ Add to your app repo's `.github/workflows/ci.yml`:
 name: ci
 on:
   push: { branches: [main] }
-  pull_request: { types: [opened, synchronize, reopened, labeled] }
+  pull_request: { types: [opened, synchronize, reopened] }
 permissions:
   contents: read
 concurrency:
@@ -35,6 +35,13 @@ jobs:
     if: ${{ needs.checks.outputs.docs-only != 'true' }}
     uses: blinkbitcoin/react-native-workflows/.github/workflows/e2e.yml@v0
 ```
+
+That is the trimmed version. The full one — `paths-ignore` on `push`,
+`workflow_dispatch`, the `labeled` PR type together with the `ios:` expression
+that is the only reason to have it, and the E2E mock-API hooks — is
+[the consumer guide's `ci.yml`](docs/consumer-guide.md#consumer-ciyml), which is
+byte-identical to the first consumer's own caller and is kept that way by
+`test/consumer-contract.bats`.
 
 Every job checks your app out, then checks *this repo* out into `.rnw/` at
 the exact ref/sha that defines the running job, then runs its scripts through
@@ -64,15 +71,19 @@ self-hosted, KVM, disk): [docs/runners.md](docs/runners.md).
 ## After push
 
 Phase 2 is complete locally: the workflows, actions, scripts, bats suite and
-docs are all here, `make check` is green, and `v0.1.0` / `v0.1` / `v0` already
-exist as local tags. What is left is everything that needs a real GitHub
-remote, in order:
+docs are all here, `make check` is green, and `v0.1.0` / `v0.1` / `v0` exist as
+local tags **in the checkout Phase 2 was done in** (tags are not part of any
+commit, so a fresh clone has none — see step 2). What is left is everything
+that needs a real GitHub remote, in order:
 
 1. **Create the GitHub repo** `blinkbitcoin/react-native-workflows` (public;
    consumers pin `@v0` by path, so it must be readable by their tokens) and
    push this branch as `main`.
-2. **Push the tags.** They already exist locally — `git push --tags` publishes
-   `v0.1.0` plus the moving `v0` and `v0.1`. From here on `self-release.yml`
+2. **Push the tags.** In the Phase 2 checkout they already exist, so
+   `git push --tags` publishes `v0.1.0` plus the moving `v0` and `v0.1`. From a
+   *fresh clone* `git push --tags` would silently push nothing — create them
+   first: `git tag -a v0.1.0 -m v0.1.0 && TAG=v0.1.0 bash
+   scripts/self/tag-major.sh --local`. From here on `self-release.yml`
    owns them: release-please cuts the release and its `major-tag` job re-points
    `v0`/`v0.1` via `scripts/self/tag-major.sh`. Consumers pin `@v0` (see
    [Versioning](docs/consumer-guide.md#versioning)) until `1.0.0`, when `@v1`
@@ -97,8 +108,12 @@ remote, in order:
    `macos-26` onto a different or self-hosted label. Both are read in the
    template's `ci.yml` as `vars.E2E_IOS` / `vars.RNW_MACOS_RUNNER`.
 
-No secrets are needed for any of this — every workflow in this family runs on
+No secrets are required for any of this — every workflow in this family runs on
 `github.token`, and `consumer-token` is optional (only for a *private* smoke
-target). The Phase 3 release secrets (signing, store credentials, EAS) belong
+target). Two optional ones are worth knowing about: `RELEASE_PLEASE_TOKEN`
+(`self-release.yml` falls back to `github.token`, but a PR opened with
+`github.token` does **not** trigger the repo's own CI, so set a PAT if
+release-please's PRs should be checked before merge), and the smoke target's
+`consumer-token` above. The Phase 3 release secrets (signing, store credentials, EAS) belong
 to the consumer and are listed in the template's own release runbook, not
 here.

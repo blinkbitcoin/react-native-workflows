@@ -1,0 +1,31 @@
+# Minimal lockfile for the consumer fixture. Only the shape
+# scripts/ci/native-hash.sh reads matters: importers["."].dependencies and
+# .devDependencies, each entry carrying a `version`.
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+  .:
+    dependencies:
+      expo:
+        specifier: ~57.0.20
+        version: 57.0.20
+      react:
+        specifier: 19.2.3
+        version: 19.2.3
+      react-native:
+        specifier: 0.86.3
+        version: 0.86.3
+    devDependencies:
+      expo-doctor:
+        specifier: ^1.20.4
+        version: 1.20.4
+      knip:
+        specifier: ^6.34.0
+        version: 6.34.0
+      typescript:
+        specifier: ~6.0.3
+        version: 6.0.3

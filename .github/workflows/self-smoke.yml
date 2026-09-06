@@ -53,8 +53,8 @@ jobs:
       ios: ${{ inputs.ios == true }}
       android: ${{ inputs.android != false }}
       dev-client: true
-      # These two hooks are created by the template's Task 10 (a mock GraphQL
-      # API the app talks to in dev/E2E); self-smoke fails until the template
-      # ships them at these paths.
+      # A mock GraphQL API the app talks to in dev/E2E. The template ships
+      # both hooks at these paths; a smoke target that does not must leave
+      # these two inputs empty (a non-empty but missing path is fatal).
       e2e-setup-script: scripts/e2e/ci-mock-api-up.sh
       e2e-teardown-script: scripts/e2e/ci-mock-api-down.sh
