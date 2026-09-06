@@ -45,5 +45,5 @@ setup() {
 @test "unknown key exits 1 with an ::error annotation" {
   run bash "$REPO_ROOT/scripts/lib/expo-config.sh" nonexistent.key
   [ "$status" -eq 1 ]
-  [[ "$output" == *"::error::"* ]]
+  [[ "$output" == *"::error::"* ]] || fail "assertion failed; output: $output"
 }

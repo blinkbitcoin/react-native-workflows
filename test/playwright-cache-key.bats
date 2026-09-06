@@ -5,7 +5,7 @@ load test_helper
   unset GITHUB_OUTPUT
   run bash "$REPO_ROOT/scripts/web/playwright-cache-key.sh" "$FIXTURES/consumer/pnpm-lock.yaml"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"version=1.62.1"* ]]
+  [[ "$output" == *"version=1.62.1"* ]] || fail "assertion failed; output: $output"
 }
 
 @test "writes version=<x> to GITHUB_OUTPUT when set" {

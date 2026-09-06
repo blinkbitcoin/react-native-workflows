@@ -21,18 +21,18 @@ EOF
   E2E_SCRIPT='test:e2e:web' \
     run bash "$REPO_ROOT/scripts/web/playwright.sh"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"PLAYWRIGHT_SKIP_EXPORT=1"* ]]
+  [[ "$output" == *"PLAYWRIGHT_SKIP_EXPORT=1"* ]] || fail "assertion failed; output: $output"
 }
 
 @test "honours a caller-provided PLAYWRIGHT_SKIP_EXPORT value" {
   E2E_SCRIPT='test:e2e:web' PLAYWRIGHT_SKIP_EXPORT=0 \
     run bash "$REPO_ROOT/scripts/web/playwright.sh"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"PLAYWRIGHT_SKIP_EXPORT=0"* ]]
+  [[ "$output" == *"PLAYWRIGHT_SKIP_EXPORT=0"* ]] || fail "assertion failed; output: $output"
 }
 
 @test "dies when E2E_SCRIPT is not set" {
   run bash "$REPO_ROOT/scripts/web/playwright.sh"
   [ "$status" -eq 1 ]
-  [[ "$output" == *"E2E_SCRIPT not set"* ]]
+  [[ "$output" == *"E2E_SCRIPT not set"* ]] || fail "assertion failed; output: $output"
 }

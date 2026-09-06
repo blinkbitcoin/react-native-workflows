@@ -4,9 +4,9 @@ load test_helper
 @test "summary includes pass/fail counts and the artifact url" {
   run bash "$REPO_ROOT/scripts/ci/artifact-summary.sh" "E2E Results" "https://example.com/artifact/123" "$FIXTURES/junit-sample.xml"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"2 passed, 1 failed"* ]]
-  [[ "$output" == *"https://example.com/artifact/123"* ]]
-  [[ "$output" == *"E2E Results"* ]]
+  [[ "$output" == *"2 passed, 1 failed"* ]] || fail "assertion failed; output: $output"
+  [[ "$output" == *"https://example.com/artifact/123"* ]] || fail "assertion failed; output: $output"
+  [[ "$output" == *"E2E Results"* ]] || fail "assertion failed; output: $output"
 }
 
 @test "writes to GITHUB_STEP_SUMMARY when set, instead of stdout" {
@@ -21,21 +21,21 @@ load test_helper
 @test "works without a junit file (title and url only)" {
   run bash "$REPO_ROOT/scripts/ci/artifact-summary.sh" "Build" "https://example.com/artifact/9"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"Build"* ]]
-  [[ "$output" == *"https://example.com/artifact/9"* ]]
+  [[ "$output" == *"Build"* ]] || fail "assertion failed; output: $output"
+  [[ "$output" == *"https://example.com/artifact/9"* ]] || fail "assertion failed; output: $output"
 }
 
 @test "tolerates an empty url (e.g. upload-artifact found nothing) and exits 0" {
   run bash "$REPO_ROOT/scripts/ci/artifact-summary.sh" "forensics" ""
   [ "$status" -eq 0 ]
-  [[ "$output" == *"forensics"* ]]
-  [[ "$output" == *"No forensics files were produced."* ]]
+  [[ "$output" == *"forensics"* ]] || fail "assertion failed; output: $output"
+  [[ "$output" == *"No forensics files were produced."* ]] || fail "assertion failed; output: $output"
 }
 
 @test "tolerates a missing url argument entirely and exits 0" {
   run bash "$REPO_ROOT/scripts/ci/artifact-summary.sh" "forensics"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"No forensics files were produced."* ]]
+  [[ "$output" == *"No forensics files were produced."* ]] || fail "assertion failed; output: $output"
 }
 
 @test "tolerates a junit path that does not exist and still writes the summary" {
@@ -48,14 +48,14 @@ load test_helper
   [ "$status" -eq 0 ]
   grep -q "forensics-android" "$summary_file"
   grep -q "https://example.com/artifact/7" "$summary_file"
-  ! grep -q "passed," "$summary_file"
-  [[ "$output" == *"::warning::"* ]]
-  [[ "$output" == *"no junit file at"* ]]
+  ! grep -q "passed," "$summary_file" || fail "a pass/fail count was written with no junit file: $(cat "$summary_file")"
+  [[ "$output" == *"::warning::"* ]] || fail "assertion failed; output: $output"
+  [[ "$output" == *"no junit file at"* ]] || fail "assertion failed; output: $output"
 }
 
 @test "still summarizes junit pass/fail counts when the url is empty" {
   run bash "$REPO_ROOT/scripts/ci/artifact-summary.sh" "forensics" "" "$FIXTURES/junit-sample.xml"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"No forensics files were produced."* ]]
-  [[ "$output" == *"2 passed, 1 failed"* ]]
+  [[ "$output" == *"No forensics files were produced."* ]] || fail "assertion failed; output: $output"
+  [[ "$output" == *"2 passed, 1 failed"* ]] || fail "assertion failed; output: $output"
 }

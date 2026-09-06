@@ -13,5 +13,5 @@ load test_helper
 @test "unknown tool exits 1 with an ::error annotation" {
   run bash "$REPO_ROOT/scripts/ci/tool-version.sh" nonexistent-tool "$FIXTURES/consumer/.mise.toml"
   [ "$status" -eq 1 ]
-  [[ "$output" == *"::error::"* ]]
+  [[ "$output" == *"::error::"* ]] || fail "assertion failed; output: $output"
 }

@@ -7,10 +7,10 @@ load test_helper
     run bash "$REPO_ROOT/scripts/ci/native-keys.sh" "$FIXTURES/consumer"
   [ "$status" -eq 0 ]
   hash=$(bash "$REPO_ROOT/scripts/ci/native-hash.sh" "$FIXTURES/consumer")
-  [[ "$output" == *"hash=$hash"* ]]
-  [[ "$output" == *"ios-key=ios-app-v1-Linux-X64-xcodedefault-$hash"* ]]
-  [[ "$output" == *"android-key=android-apk-v1-$hash"* ]]
-  [[ "$output" == *"pods-key=pods-Linux-$hash"* ]]
+  [[ "$output" == *"hash=$hash"* ]] || fail "assertion failed; output: $output"
+  [[ "$output" == *"ios-key=ios-app-v1-Linux-X64-xcodedefault-$hash"* ]] || fail "assertion failed; output: $output"
+  [[ "$output" == *"android-key=android-apk-v1-$hash"* ]] || fail "assertion failed; output: $output"
+  [[ "$output" == *"pods-key=pods-Linux-$hash"* ]] || fail "assertion failed; output: $output"
 }
 
 @test "explicit xcode input and a different version/os/arch fold into the ios key" {
@@ -18,8 +18,8 @@ load test_helper
   RUNNER_OS=macOS RUNNER_ARCH=ARM64 NATIVE_CACHE_VERSION=v2 XCODE=16.1 \
     run bash "$REPO_ROOT/scripts/ci/native-keys.sh" "$FIXTURES/consumer"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"ios-key=ios-app-v2-macOS-ARM64-xcode16.1-"* ]]
-  [[ "$output" == *"pods-key=pods-macOS-"* ]]
+  [[ "$output" == *"ios-key=ios-app-v2-macOS-ARM64-xcode16.1-"* ]] || fail "assertion failed; output: $output"
+  [[ "$output" == *"pods-key=pods-macOS-"* ]] || fail "assertion failed; output: $output"
 }
 
 @test "defaults NATIVE_CACHE_VERSION to v1 when unset" {
@@ -27,7 +27,7 @@ load test_helper
   RUNNER_OS=Linux RUNNER_ARCH=X64 XCODE='' \
     run bash "$REPO_ROOT/scripts/ci/native-keys.sh" "$FIXTURES/consumer"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"android-key=android-apk-v1-"* ]]
+  [[ "$output" == *"android-key=android-apk-v1-"* ]] || fail "assertion failed; output: $output"
 }
 
 @test "writes to GITHUB_OUTPUT when set" {

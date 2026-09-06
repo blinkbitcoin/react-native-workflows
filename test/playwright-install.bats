@@ -29,12 +29,12 @@ EOF
   unset PLAYWRIGHT_BROWSERS
   run bash "$REPO_ROOT/scripts/web/playwright-install.sh"
   [ "$status" -eq 0 ]
-  [[ "$output" == *$'chromium\n--with-deps'* ]]
+  [[ "$output" == *$'chromium\n--with-deps'* ]] || fail "assertion failed; output: $output"
 }
 
 @test "word-splits a multi-browser PLAYWRIGHT_BROWSERS into separate args" {
   PLAYWRIGHT_BROWSERS='chromium firefox' \
     run bash "$REPO_ROOT/scripts/web/playwright-install.sh"
   [ "$status" -eq 0 ]
-  [[ "$output" == *$'chromium\nfirefox\n--with-deps'* ]]
+  [[ "$output" == *$'chromium\nfirefox\n--with-deps'* ]] || fail "assertion failed; output: $output"
 }

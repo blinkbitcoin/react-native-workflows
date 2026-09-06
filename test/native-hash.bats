@@ -1,7 +1,7 @@
 #!/usr/bin/env bats
 load test_helper
 @test "hash is 16 hex chars and stable" {
-  run bash "$REPO_ROOT/scripts/ci/native-hash.sh" "$FIXTURES/consumer"; [ "$status" -eq 0 ]; [[ "$output" =~ ^[0-9a-f]{16}$ ]]
+  run bash "$REPO_ROOT/scripts/ci/native-hash.sh" "$FIXTURES/consumer"; [ "$status" -eq 0 ]; [[ "$output" =~ ^[0-9a-f]{16}$ ]] || fail "assertion failed; output: $output"
   first="$output"; run bash "$REPO_ROOT/scripts/ci/native-hash.sh" "$FIXTURES/consumer"; [ "$output" = "$first" ]
 }
 @test "hash changes when a native dep version changes but not for a jest bump" {
@@ -26,5 +26,5 @@ load test_helper
 @test "NATIVE_EXTRA_GLOBS matching nothing is not an error" {
   run env NATIVE_EXTRA_GLOBS='nowhere/*.rb other/*' bash "$REPO_ROOT/scripts/ci/native-hash.sh" "$FIXTURES/consumer"
   [ "$status" -eq 0 ]
-  [[ "$output" =~ ^[0-9a-f]{16}$ ]]
+  [[ "$output" =~ ^[0-9a-f]{16}$ ]] || fail "assertion failed; output: $output"
 }

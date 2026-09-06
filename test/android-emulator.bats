@@ -36,7 +36,7 @@ STUB
   RNW_MOCK_API_PORT=5001 run bash "$REPO_ROOT/scripts/e2e/android-emulator.sh" prepare "$apk"
   [ "$status" -eq 0 ]
   grep -qx "reverse tcp:5001 tcp:5001" "$ADB_LOG"
-  ! grep -qx "reverse tcp:4000 tcp:4000" "$ADB_LOG"
+  ! grep -qx "reverse tcp:4000 tcp:4000" "$ADB_LOG" || fail "port 4000 was reversed despite an empty RNW_MOCK_API_PORT: $(cat "$ADB_LOG")"
 }
 
 @test "an empty RNW_MOCK_API_PORT reverses only Metro" {

@@ -23,7 +23,7 @@ EOF
 @test "sourcing exposes bounded_maestro" {
   run bash -c ". '$REPO_ROOT/scripts/e2e/maestro-bound.sh'; declare -F bounded_maestro"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"bounded_maestro"* ]]
+  [[ "$output" == *"bounded_maestro"* ]] || fail "assertion failed; output: $output"
 }
 
 @test "a fast command's exit code is propagated" {
@@ -34,19 +34,19 @@ EOF
 @test "a fast command's success is propagated" {
   run bash -c ". '$REPO_ROOT/scripts/e2e/maestro-bound.sh'; bounded_maestro 30 bash -c 'echo hi'"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"hi"* ]]
+  [[ "$output" == *"hi"* ]] || fail "assertion failed; output: $output"
 }
 
 @test "a slow command exits 124 via the pure-bash watchdog" {
   run bash -c ". '$REPO_ROOT/scripts/e2e/maestro-bound.sh'; bounded_maestro 1 sleep 30"
   [ "$status" -eq 124 ]
-  [[ "$output" == *"::error::"* ]]
+  [[ "$output" == *"::error::"* ]] || fail "assertion failed; output: $output"
 }
 
 @test "coreutils timeout is used when available" {
   plant_timeout_stub
   run bash -c ". '$REPO_ROOT/scripts/e2e/maestro-bound.sh'; bounded_maestro 5 sleep 30"
   [ "$status" -eq 124 ]
-  [[ "$output" == *"STUB TIMEOUT"* ]]
-  [[ "$output" == *"-k 30s 5s"* ]]
+  [[ "$output" == *"STUB TIMEOUT"* ]] || fail "assertion failed; output: $output"
+  [[ "$output" == *"-k 30s 5s"* ]] || fail "assertion failed; output: $output"
 }

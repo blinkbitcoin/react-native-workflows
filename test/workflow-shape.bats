@@ -43,7 +43,13 @@ setup() {
   for w in "${WORKFLOWS[@]}"; do
     # GitHub's && yields its first falsy operand, so `cond && '' || X` is X on
     # both branches. The non-empty value must sit in the && slot.
-    ! grep -qE "&&[[:space:]]*''[[:space:]]*\|\|" "$w"
+    #
+    # YAML comments are stripped first: the workflows explain this very pitfall
+    # in prose, and matching that prose is a false positive. It *was* one - and
+    # invisible, because a bare `! cmd` is exempt from errexit too, so this
+    # assertion could not fail anything until it was given a `|| fail`.
+    ! grep -vE '^[[:space:]]*#' "$w" | grep -qE "&&[[:space:]]*''[[:space:]]*\|\|" \
+      || fail "$(basename "$w") puts an empty string in the && slot of the ternary idiom"
   done
 }
 
@@ -177,15 +183,15 @@ lane_step_count() {
   android=$(yq -r '.jobs.e2e.with.android' "$f")
   # `inputs` is null on a schedule trigger, so a bare inputs.* comparison
   # evaluates false for both platforms and the weekly smoke runs no E2E at all.
-  [[ "$ios" == *"github.event_name"* ]]
-  [[ "$android" == *"github.event_name"* ]]
-  [[ "$ios" != *"inputs.ios == true"* ]]
-  [[ "$android" != *"inputs.android != false"* ]]
+  [[ "$ios" == *"github.event_name"* ]] || fail "ios toggle does not branch on github.event_name: $ios"
+  [[ "$android" == *"github.event_name"* ]] || fail "android toggle does not branch on github.event_name: $android"
+  [[ "$ios" != *"inputs.ios == true"* ]] || fail "ios toggle is a bare inputs comparison again: $ios"
+  [[ "$android" != *"inputs.android != false"* ]] || fail "android toggle is a bare inputs comparison again: $android"
 }
 
 @test "self-release's major-tag job compares release_created to the string 'true'" {
   f="$REPO_ROOT/.github/workflows/self-release.yml"
   cond=$(yq -r '.jobs."major-tag".if' "$f")
   # Job outputs are strings; the literal "false" is truthy in a bare expression.
-  [[ "$cond" == *"release_created == 'true'"* ]]
+  [[ "$cond" == *"release_created == 'true'"* ]] || fail "major-tag if does not compare to the string true: $cond"
 }

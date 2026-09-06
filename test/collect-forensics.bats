@@ -24,7 +24,7 @@ setup() {
   [ "$status" -eq 0 ]
   [ -f "$RNW_OUT/forensics/during-the-run.ips" ]
   [ ! -f "$RNW_OUT/forensics/before-the-run.ips" ]
-  [[ "$output" == *"iOS crash reports: 1"* ]]
+  [[ "$output" == *"iOS crash reports: 1"* ]] || fail "assertion failed; output: $output"
 }
 
 @test "falls back to the hour window when this process stamps the run itself" {
@@ -59,5 +59,5 @@ setup() {
 @test "always exits 0, even for an unknown platform" {
   run bash "$REPO_ROOT/scripts/e2e/collect-forensics.sh" solaris
   [ "$status" -eq 0 ]
-  [[ "$output" == *"unknown platform"* ]]
+  [[ "$output" == *"unknown platform"* ]] || fail "assertion failed; output: $output"
 }

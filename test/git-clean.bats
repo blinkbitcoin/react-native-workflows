@@ -31,12 +31,12 @@ run_assert() {
   echo "changed" > "$repo/src/graphql/generated/schema.ts"
   run run_assert
   [ "$status" -ne 0 ]
-  [[ "$output" == *"schema.ts"* ]]
+  [[ "$output" == *"schema.ts"* ]] || fail "assertion failed; output: $output"
 }
 
 @test "fails on a brand-new untracked file" {
   echo "new" > "$repo/src/graphql/generated/new-file.ts"
   run run_assert
   [ "$status" -ne 0 ]
-  [[ "$output" == *"new-file.ts"* ]]
+  [[ "$output" == *"new-file.ts"* ]] || fail "assertion failed; output: $output"
 }

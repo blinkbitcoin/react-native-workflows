@@ -13,7 +13,7 @@ setup() {
 @test "fails without TAG set" {
   run bash "$REPO_ROOT/scripts/self/tag-major.sh" --local
   [ "$status" -ne 0 ]
-  [[ "$output" == *"TAG"* ]]
+  [[ "$output" == *"TAG"* ]] || fail "assertion failed; output: $output"
 }
 
 @test "--local moves vN and vN.M to the tagged commit without pushing" {
@@ -22,8 +22,8 @@ setup() {
   TAG=v0.1.0 run bash "$REPO_ROOT/scripts/self/tag-major.sh" --local
   [ "$status" -eq 0 ]
   run git tag --points-at HEAD
-  [[ "$output" == *"v0"* ]]
-  [[ "$output" == *"v0.1"* ]]
+  [[ "$output" == *"v0"* ]] || fail "assertion failed; output: $output"
+  [[ "$output" == *"v0.1"* ]] || fail "assertion failed; output: $output"
 }
 
 @test "moving major tag follows a later release to a new commit" {
@@ -36,13 +36,13 @@ setup() {
   TAG=v0.2.0 bash "$REPO_ROOT/scripts/self/tag-major.sh" --local
 
   run git tag --points-at HEAD
-  [[ "$output" == *"v0"* ]]
-  [[ "$output" == *"v0.2"* ]]
+  [[ "$output" == *"v0"* ]] || fail "assertion failed; output: $output"
+  [[ "$output" == *"v0.2"* ]] || fail "assertion failed; output: $output"
 
   older_commit=$(git rev-parse HEAD~1)
   run git tag --points-at "$older_commit"
-  [[ "$output" == *"v0.1"* ]]
-  [[ "$output" == *"v0.1.0"* ]]
+  [[ "$output" == *"v0.1"* ]] || fail "assertion failed; output: $output"
+  [[ "$output" == *"v0.1.0"* ]] || fail "assertion failed; output: $output"
   for line in "${lines[@]}"; do
     [ "$line" != "v0" ]
   done
@@ -67,11 +67,11 @@ setup() {
   git tag v1.2.0-rc.1
   TAG=v1.2.0-rc.1 run bash "$REPO_ROOT/scripts/self/tag-major.sh" --local
   [ "$status" -eq 0 ]
-  [[ "$output" == *"skipping prerelease"* ]]
+  [[ "$output" == *"skipping prerelease"* ]] || fail "assertion failed; output: $output"
   run git tag --points-at HEAD
   [ "$output" = "v1.2.0-rc.1" ]
-  ! git rev-parse -q --verify refs/tags/v1 >/dev/null
-  ! git rev-parse -q --verify refs/tags/v1.2 >/dev/null
+  ! git rev-parse -q --verify refs/tags/v1 >/dev/null || fail "v1 was created for a prerelease tag"
+  ! git rev-parse -q --verify refs/tags/v1.2 >/dev/null || fail "v1.2 was created for a prerelease tag"
 }
 
 @test "running the same TAG twice is idempotent" {

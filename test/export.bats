@@ -45,12 +45,12 @@ EOF
   EXPORT_SCRIPT='build:web' OUTPUT_DIR=dist \
     run bash "$REPO_ROOT/scripts/web/export.sh"
   [ "$status" -eq 1 ]
-  [[ "$output" == *"::error::"* ]]
-  [[ "$output" == *"dist/index.html"* ]]
+  [[ "$output" == *"::error::"* ]] || fail "assertion failed; output: $output"
+  [[ "$output" == *"dist/index.html"* ]] || fail "assertion failed; output: $output"
 }
 
 @test "dies when EXPORT_SCRIPT is not set" {
   run bash "$REPO_ROOT/scripts/web/export.sh"
   [ "$status" -eq 1 ]
-  [[ "$output" == *"EXPORT_SCRIPT not set"* ]]
+  [[ "$output" == *"EXPORT_SCRIPT not set"* ]] || fail "assertion failed; output: $output"
 }

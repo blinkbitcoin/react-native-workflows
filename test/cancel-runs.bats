@@ -34,8 +34,8 @@ EOF
 @test "a single cancel failure doesn't abort the run, and a final count is printed" {
   run bash "$REPO_ROOT/scripts/ci/cancel-runs.sh"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"cancelling run 111"* ]]
-  [[ "$output" == *"cancelling run 222"* ]]
-  [[ "$output" == *"could not cancel run 222"* ]]
-  [[ "$output" == *"cancelled 1 run(s)"* ]]
+  [[ "$output" == *"cancelling run 111"* ]] || fail "assertion failed; output: $output"
+  [[ "$output" == *"cancelling run 222"* ]] || fail "assertion failed; output: $output"
+  [[ "$output" == *"could not cancel run 222"* ]] || fail "assertion failed; output: $output"
+  [[ "$output" == *"cancelled 1 run(s)"* ]] || fail "assertion failed; output: $output"
 }

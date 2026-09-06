@@ -37,6 +37,6 @@ EOF
 @test "missing script and no binary dies with an ::error:: annotation" {
   run bash "$REPO_ROOT/scripts/checks/run-script.sh" nonexistent-thing
   [ "$status" -eq 1 ]
-  [[ "$output" == *"::error::"* ]]
-  [[ "$output" == *"nonexistent-thing"* ]]
+  [[ "$output" == *"::error::"* ]] || fail "assertion failed; output: $output"
+  [[ "$output" == *"nonexistent-thing"* ]] || fail "assertion failed; output: $output"
 }

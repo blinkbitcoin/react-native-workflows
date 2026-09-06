@@ -16,12 +16,6 @@ load test_helper
 GUIDE="$REPO_ROOT/docs/consumer-guide.md"
 CONSUMER="${RNW_CONSUMER_ROOT:-$FIXTURES/consumer-min}"
 
-# bats-core ships no `fail`, and bats-assert is not a dependency here.
-fail() {
-  echo "$*" >&2
-  return 1
-}
-
 require_consumer() {
   [ -f "$CONSUMER/package.json" ] || skip "no consumer package.json at $CONSUMER (RNW_CONSUMER_ROOT)"
 }

@@ -38,7 +38,7 @@ scripts() {
   run bash "$REPO_ROOT/scripts/ci/lint-ci.sh"
   [ "$status" -eq 0 ]
   grep -q actionlint "$MISE_LOG"
-  ! grep -q shellcheck "$MISE_LOG"
+  ! grep -q shellcheck "$MISE_LOG" || fail "shellcheck ran for a docs-only change: $(cat "$MISE_LOG")"
 }
 
 @test "runs shellcheck even when the consumer has no .github/workflows directory" {
@@ -46,7 +46,7 @@ scripts() {
   run bash "$REPO_ROOT/scripts/ci/lint-ci.sh"
   [ "$status" -eq 0 ]
   grep -q shellcheck "$MISE_LOG"
-  ! grep -q actionlint "$MISE_LOG"
+  ! grep -q actionlint "$MISE_LOG" || fail "actionlint ran with RNW_ACTIONLINT off: $(cat "$MISE_LOG")"
 }
 
 @test "runs both halves when the consumer has both" {
@@ -63,7 +63,7 @@ scripts() {
   scripts
   RNW_ACTIONLINT=false run bash "$REPO_ROOT/scripts/ci/lint-ci.sh"
   [ "$status" -eq 0 ]
-  ! grep -q actionlint "$MISE_LOG"
+  ! grep -q actionlint "$MISE_LOG" || fail "actionlint ran with no .github/workflows: $(cat "$MISE_LOG")"
   grep -q shellcheck "$MISE_LOG"
 }
 
@@ -73,12 +73,12 @@ scripts() {
   RNW_SHELLCHECK=false run bash "$REPO_ROOT/scripts/ci/lint-ci.sh"
   [ "$status" -eq 0 ]
   grep -q actionlint "$MISE_LOG"
-  ! grep -q shellcheck "$MISE_LOG"
+  ! grep -q shellcheck "$MISE_LOG" || fail "shellcheck ran with no scripts dir: $(cat "$MISE_LOG")"
 }
 
 @test "exits 0 with nothing to lint when the consumer has neither directory" {
   run bash "$REPO_ROOT/scripts/ci/lint-ci.sh"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"nothing to lint"* ]]
+  [[ "$output" == *"nothing to lint"* ]] || fail "assertion failed; output: $output"
   [ ! -s "$MISE_LOG" ]
 }

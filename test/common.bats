@@ -11,7 +11,7 @@ setup() { source "$REPO_ROOT/scripts/lib/common.sh"; }
   run gh_output hash abc123; [ "$output" = "hash=abc123" ]
 }
 @test "die exits 1 with an ::error annotation" {
-  run die "boom"; [ "$status" -eq 1 ]; [[ "$output" == *"::error::boom"* ]]
+  run die "boom"; [ "$status" -eq 1 ]; [[ "$output" == *"::error::boom"* ]] || fail "assertion failed; output: $output"
 }
 @test "gh_env_once appends key=value once, even called twice with the same GITHUB_ENV" {
   GITHUB_ENV="$BATS_TEST_TMPDIR/env"; export GITHUB_ENV
