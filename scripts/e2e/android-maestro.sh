@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# The whole on-device half of the Android E2E job in one file: install, wire,
+# record, launch, run the suite, collect forensics. It is a single file on
+# purpose - reactivecircus/android-emulator-runner executes each line of its
+# `script:` input as its own `sh -c`, so multi-step shell cannot live inline.
+# Needs: emulator up, debug APK built, Metro running.
+# Output: $RNW_OUT/maestro/junit.xml, $RNW_OUT/forensics/*
+# Usage: android-maestro.sh
+set -uo pipefail
+HERE="$(cd "$(dirname "$0")" && pwd)"
+source "$HERE/../lib/common.sh"
+source "$HERE/../lib/e2e-env.sh"
+export PATH="$HOME/.maestro/bin:$PATH"
+# shellcheck source=scripts/e2e/maestro-bound.sh
+. "$HERE/maestro-bound.sh"
+require_cmd maestro adb
+
+# Lower than iOS: the Android driver is an APK install, not an Xcode build.
+export MAESTRO_DRIVER_STARTUP_TIMEOUT=300000
+
+root="$(consumer_root)"
+cd "$root" || exit 1
+flows="$RNW_MAESTRO_FLOWS"
+[ -d "$flows" ] || die "no flows directory at $root/$flows (RNW_MAESTRO_FLOWS)"
+out="$RNW_OUT/maestro"
+mkdir -p "$out"
+
+bash "$HERE/android-emulator.sh" prepare || die "android-emulator.sh prepare failed"
+bash "$HERE/android-emulator.sh" record start || true
+
+# shellcheck disable=SC2329  # invoked by the EXIT trap below
+cleanup() {
+  bash "$HERE/android-emulator.sh" record stop || true
+  bash "$HERE/collect-forensics.sh" android || true
+  rnw_run_hook RNW_E2E_TEARDOWN_SCRIPT || true
+}
+trap cleanup EXIT
+
+rnw_run_hook RNW_E2E_SETUP_SCRIPT || die "RNW_E2E_SETUP_SCRIPT failed"
+bash "$HERE/app-launch.sh" android || die "app-launch.sh android failed"
+
+args=(test "$flows")
+[ -f "$flows/config.yaml" ] && args+=(--config "$flows/config.yaml")
+args+=(
+  -e "APP_ID=$(rnw_app_id android)"
+  --debug-output "$out"
+  --flatten-debug-output
+  --format junit
+  --output "$out/junit.xml"
+)
+[ -n "${RNW_MAESTRO_INCLUDE_TAGS:-}" ] && args+=(--include-tags "$RNW_MAESTRO_INCLUDE_TAGS")
+[ -n "${RNW_MAESTRO_EXCLUDE_TAGS:-}" ] && args+=(--exclude-tags "$RNW_MAESTRO_EXCLUDE_TAGS")
+
+bound=$((RNW_SUITE_TIMEOUT_MINUTES * 60))
+status=0
+group "maestro test (Android, bound ${RNW_SUITE_TIMEOUT_MINUTES}m)"
+bounded_maestro "$bound" maestro "${args[@]}" || status=$?
+endgroup
+
+if [ "$status" -ne 0 ] && [ "$status" -ne 124 ]; then
+  log "::warning::Maestro suite failed (status $status) - rerunning the suite once"
+  status=0
+  group "maestro test (Android, retry)"
+  bounded_maestro "$bound" maestro "${args[@]}" || status=$?
+  endgroup
+fi
+exit "$status"

@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# Debug build of the consumer app for the simulator. Generic destination on
+# purpose: the build needs no concrete device (the app is installed on the
+# booted one later), and xcodebuild's device enumeration intermittently returns
+# only placeholders on fresh runners. Code signing is off - a simulator build
+# never needs it and a runner has no keychain.
+# Needs: prebuild.sh ios + pods.sh.
+# Output: ios/build/Build/Products/Debug-iphonesimulator/<scheme>.app
+# Usage: ios-build.sh
+set -euo pipefail
+source "$(dirname "$0")/../lib/common.sh"
+source "$(dirname "$0")/../lib/e2e-env.sh"
+
+require_cmd xcodebuild
+root="$(consumer_root)"
+cd "$root"
+
+# RNW_XCODE selects a runner's Xcode before anything reads xcodebuild's version.
+if [ -n "${RNW_XCODE:-}" ]; then
+  log "selecting Xcode $RNW_XCODE"
+  sudo xcode-select -s "/Applications/Xcode_$RNW_XCODE.app"
+fi
+
+scheme="$(rnw_ios_scheme)"
+log "Xcode scheme: $scheme"
+
+# xcbeautify keeps the log readable; without it the raw xcodebuild output is
+# still complete, so a missing formatter is never fatal.
+formatter=(cat)
+if command -v xcbeautify >/dev/null 2>&1; then
+  formatter=(xcbeautify)
+elif command -v xcpretty >/dev/null 2>&1; then
+  formatter=(xcpretty)
+fi
+
+group "xcodebuild ($scheme, Debug, iphonesimulator)"
+set +e
+xcodebuild \
+  -workspace "ios/$scheme.xcworkspace" \
+  -scheme "$scheme" \
+  -configuration Debug \
+  -sdk iphonesimulator \
+  -destination 'generic/platform=iOS Simulator' \
+  -derivedDataPath ios/build \
+  CODE_SIGNING_ALLOWED=NO \
+  build | "${formatter[@]}"
+status=${PIPESTATUS[0]}
+set -e
+endgroup
+[ "$status" -eq 0 ] || die "xcodebuild failed with status $status"
+
+app="$RNW_IOS_PRODUCTS_DIR/$scheme.app"
+[ -d "$app" ] || die "build succeeded but $app is missing"
+log "built $app"
+gh_output app_path "$root/$app"
