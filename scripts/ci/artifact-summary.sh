@@ -4,13 +4,19 @@
 set -euo pipefail
 source "$(dirname "$0")/../lib/common.sh"
 
-title="${1:?usage: artifact-summary.sh TITLE URL [junit.xml]}"
-url="${2:?usage: artifact-summary.sh TITLE URL [junit.xml]}"
+title="${1:?usage: artifact-summary.sh TITLE [URL] [junit.xml]}"
+url="${2:-}"
 junit="${3:-}"
 
-summary="## $title
+if [ -n "$url" ]; then
+  summary="## $title
 
 [View artifact]($url)"
+else
+  summary="## $title
+
+No forensics files were produced."
+fi
 
 if [ -n "$junit" ]; then
   [ -f "$junit" ] || die "artifact-summary: no such junit file: $junit"

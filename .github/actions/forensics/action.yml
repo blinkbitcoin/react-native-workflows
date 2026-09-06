@@ -12,7 +12,7 @@ inputs:
     default: ''
   retention-days:
     description: Artifact retention in days
-    default: 7
+    default: '7'
 runs:
   using: composite
   steps:
@@ -25,8 +25,16 @@ runs:
         if-no-files-found: ignore
         retention-days: ${{ inputs.retention-days }}
     - name: Summarize forensics artifact
+      if: steps.up.outputs.artifact-url != ''
       shell: bash
       env:
         NAME: ${{ inputs.name }}
+        ARTIFACT_URL: ${{ steps.up.outputs.artifact-url }}
         JUNIT: ${{ inputs.junit }}
-      run: bash "${{ github.action_path }}/../../../scripts/ci/artifact-summary.sh" "$NAME" "${{ steps.up.outputs.artifact-url }}" "$JUNIT"
+      run: bash "${{ github.action_path }}/../../../scripts/ci/artifact-summary.sh" "$NAME" "$ARTIFACT_URL" "$JUNIT"
+    - name: Note missing forensics artifact
+      if: steps.up.outputs.artifact-url == ''
+      shell: bash
+      env:
+        NAME: ${{ inputs.name }}
+      run: bash "${{ github.action_path }}/../../../scripts/ci/artifact-summary.sh" "$NAME"

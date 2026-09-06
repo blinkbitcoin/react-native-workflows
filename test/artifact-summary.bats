@@ -24,3 +24,16 @@ load test_helper
   [[ "$output" == *"Build"* ]]
   [[ "$output" == *"https://example.com/artifact/9"* ]]
 }
+
+@test "tolerates an empty url (e.g. upload-artifact found nothing) and exits 0" {
+  run bash "$REPO_ROOT/scripts/ci/artifact-summary.sh" "forensics" ""
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"forensics"* ]]
+  [[ "$output" == *"No forensics files were produced."* ]]
+}
+
+@test "tolerates a missing url argument entirely and exits 0" {
+  run bash "$REPO_ROOT/scripts/ci/artifact-summary.sh" "forensics"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"No forensics files were produced."* ]]
+}
