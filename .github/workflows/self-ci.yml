@@ -1,0 +1,25 @@
+name: Self CI
+on:
+  push: { branches: [main] }
+  pull_request:
+permissions: { contents: read }
+concurrency:
+  group: self-ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: jdx/mise-action@v4
+      - run: make check
+  pr-title:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: jdx/mise-action@v4
+      - env: { PR_TITLE: "${{ github.event.pull_request.title }}" }
+        run: bash scripts/checks/commitlint.sh
