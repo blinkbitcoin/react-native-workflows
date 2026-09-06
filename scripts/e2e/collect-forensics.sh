@@ -14,6 +14,13 @@ mkdir -p "$dest" || exit 0
 
 cp "$RNW_OUT/metro.log" "$dest/" 2>/dev/null || true
 cp "$RNW_OUT"/*.mp4 "$dest/" 2>/dev/null || true
+# Maestro writes junit.xml and the per-command debug output (screenshots, device
+# logs, command hierarchy) to $RNW_OUT/maestro, a *sibling* of forensics/. The
+# forensics action only uploads forensics/, so without this copy the artifact
+# never carries the single most useful thing for diagnosing a failed flow.
+if [ -d "$RNW_OUT/maestro" ]; then
+  cp -R "$RNW_OUT/maestro" "$dest/" 2>/dev/null || true
+fi
 
 if [ "$platform" = ios ]; then
   # Only reports from this run: the folder accumulates across a developer's

@@ -19,6 +19,10 @@ failure must never fail the job) and writes into `$RNW_OUT/forensics`:
   sources `scripts/lib/e2e-env.sh` first) so a stale crash from a previous job
   on the same runner never shows up. If that stamp is missing for some reason
   the fallback is "modified in the last 60 minutes".
+- `maestro/` — the whole Maestro debug directory (`junit.xml` plus the
+  per-command screenshots and device logs), copied in from its sibling
+  `$RNW_OUT/maestro`. Only `forensics/` is uploaded, so this copy is what puts
+  the Maestro output in the artifact at all.
 - Android only: `logcat.txt` (full buffer) and `logcat-crash.txt` (the crash
   buffer). The step also prints two `::group::` blocks straight into the job
   log so you don't have to download anything for the common case: the last 200
@@ -32,6 +36,11 @@ download URL and, when a `junit` path was given, the pass/fail/total counts
 parsed out of it, straight into the job's step summary — so the first thing to
 check is the **Summary** tab of the run, not the artifact.
 
+If the run died before Maestro wrote `junit.xml` (the emulator never booted, the
+app-launch timed out, the suite hit its bound) the summary step logs a
+`::warning::` and posts the summary without counts — it never fails, because it
+runs from the same `if: always()` step that carries the diagnosis.
+
 ## Reading the Maestro debug output
 
 `ios-maestro.sh` / `android-maestro.sh` pass Maestro:
@@ -40,7 +49,8 @@ check is the **Summary** tab of the run, not the artifact.
 --debug-output "$RNW_OUT/maestro" --flatten-debug-output --format junit --output "$RNW_OUT/maestro/junit.xml"
 ```
 
-Inside the `forensics-ios` / `forensics-android` artifact you'll find:
+Inside the `forensics-ios` / `forensics-android` artifact, under `maestro/`,
+you'll find:
 
 - `junit.xml` — machine-readable pass/fail per flow; this is what
   `artifact-summary.sh` totals for the step summary.
@@ -71,9 +81,13 @@ log even though the artifact only carries the final attempt's files.
 
 - iOS: `xcrun simctl io <udid> recordVideo`, started right after install, wait
   and Metro warm-up, stopped in the always-run teardown.
-- Android: `adb emu screenrecord` (chunked internally by the emulator to avoid
-  the ~3-minute single-file cap); `android-emulator.sh record stop` pulls and
-  concatenates chunks before `collect-forensics.sh` copies the `.mp4` out.
+- Android: a background loop in `android-emulator.sh record start` running
+  `adb shell screenrecord --time-limit 180` over and over (the emulator caps a
+  single recording at ~3 minutes), pulling each finished chunk to its own
+  `$RNW_OUT/android-N.mp4`; `record stop` kills the loop and pulls the
+  in-progress chunk as `android-last.mp4`. Nothing concatenates — a long suite
+  leaves several numbered files, in order, and `collect-forensics.sh` copies
+  them all out.
 - The video covers install → launch → suite, so a UI assertion failure near
   the end of a long suite is often faster to diagnose by scrubbing to the last
   30 seconds of the video than by replaying every Maestro screenshot.

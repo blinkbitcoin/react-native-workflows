@@ -40,6 +40,22 @@ setup() {
   [ ! -f "$RNW_OUT/forensics/before-the-run.ips" ]
 }
 
+@test "copies the Maestro debug output and junit.xml into forensics/" {
+  mkdir -p "$RNW_OUT/maestro"
+  printf '<testsuites tests="1" failures="0"/>\n' > "$RNW_OUT/maestro/junit.xml"
+  printf 'png\n' > "$RNW_OUT/maestro/Login-3-tapOn.png"
+  run bash "$REPO_ROOT/scripts/e2e/collect-forensics.sh" ios
+  [ "$status" -eq 0 ]
+  [ -f "$RNW_OUT/forensics/maestro/junit.xml" ]
+  [ -f "$RNW_OUT/forensics/maestro/Login-3-tapOn.png" ]
+}
+
+@test "still exits 0 when there is no maestro/ directory at all" {
+  run bash "$REPO_ROOT/scripts/e2e/collect-forensics.sh" ios
+  [ "$status" -eq 0 ]
+  [ ! -e "$RNW_OUT/forensics/maestro" ]
+}
+
 @test "always exits 0, even for an unknown platform" {
   run bash "$REPO_ROOT/scripts/e2e/collect-forensics.sh" solaris
   [ "$status" -eq 0 ]

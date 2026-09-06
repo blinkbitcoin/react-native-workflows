@@ -38,6 +38,21 @@ load test_helper
   [[ "$output" == *"No forensics files were produced."* ]]
 }
 
+@test "tolerates a junit path that does not exist and still writes the summary" {
+  # The forensics step is `if: always()`; a run that died before Maestro wrote
+  # junit.xml is exactly the run whose forensics matter most, so this must not
+  # fail the step.
+  summary_file="$BATS_TEST_TMPDIR/summary.md"
+  GITHUB_STEP_SUMMARY="$summary_file" run bash "$REPO_ROOT/scripts/ci/artifact-summary.sh" \
+    "forensics-android" "https://example.com/artifact/7" "$BATS_TEST_TMPDIR/nope/maestro/junit.xml"
+  [ "$status" -eq 0 ]
+  grep -q "forensics-android" "$summary_file"
+  grep -q "https://example.com/artifact/7" "$summary_file"
+  ! grep -q "passed," "$summary_file"
+  [[ "$output" == *"::warning::"* ]]
+  [[ "$output" == *"no junit file at"* ]]
+}
+
 @test "still summarizes junit pass/fail counts when the url is empty" {
   run bash "$REPO_ROOT/scripts/ci/artifact-summary.sh" "forensics" "" "$FIXTURES/junit-sample.xml"
   [ "$status" -eq 0 ]
