@@ -58,8 +58,14 @@ jobs:
     if: ${{ needs.checks.outputs.docs-only != 'true' }}
     uses: blinkbitcoin/react-native-workflows/.github/workflows/e2e.yml@v0
     with:
+      # iOS is opt-in (macOS runners bill at 10x): set the repo variable
+      # E2E_IOS=true for every run, or label a single PR `e2e:ios` (the
+      # `labeled` trigger above is what makes the label alone start a run).
       ios: ${{ vars.E2E_IOS == 'true' || contains(github.event.pull_request.labels.*.name, 'e2e:ios') }}
       macos-runner: ${{ vars.RNW_MACOS_RUNNER || 'macos-26' }}
+      dev-client: true
+      e2e-setup-script: scripts/e2e/ci-mock-api-up.sh
+      e2e-teardown-script: scripts/e2e/ci-mock-api-down.sh
 ```
 
 Notes:
@@ -85,8 +91,10 @@ Notes:
 # .github/workflows/web.yml — only add this if the app has a web target
 name: web
 on:
-  push: { branches: [main] }
-  pull_request: { types: [opened, synchronize, reopened] }
+  pull_request:
+    types: [opened, synchronize, reopened]
+  release:
+    types: [published]
 permissions:
   contents: read
 concurrency:
@@ -95,9 +103,41 @@ concurrency:
 jobs:
   web:
     uses: blinkbitcoin/react-native-workflows/.github/workflows/web.yml@v0
+    permissions:
+      contents: read
+      # The called workflow's `deploy` job needs these; a called job can only
+      # narrow the caller's token, never widen it, so they are granted here.
+      pages: write
+      id-token: write
     with:
-      deploy: ${{ github.ref_type == 'tag' }}
+      # PRs export a dev build (fast smoke); a published release exports the
+      # production bundle that actually gets deployed to Pages.
+      # The non-empty value MUST sit in the `&&` slot: GitHub's `&&` yields the
+      # first falsy operand and `||` the first truthy one, so
+      # `cond && '' || '--dev'` evaluates to '--dev' on BOTH branches (the empty
+      # string is falsy) and would quietly deploy a dev bundle.
+      export-args: ${{ github.event_name != 'release' && '--dev' || '' }}
+      deploy: ${{ github.event_name == 'release' }}
 ```
+
+Notes on the `web.yml` caller:
+
+- **The deploy trigger is `release: published`, not a tag push.**
+  `github.ref_type == 'tag'` is not a usable signal here: a `pull_request`- or
+  `push`-triggered run never sets it to `tag`, and a bare tag push carries no
+  release notes; keying on `github.event_name == 'release'` makes "what gets
+  deployed" exactly "what was published".
+- **The GitHub-expression pitfall.** In GitHub expressions `&&` yields its
+  first falsy operand and `||` its first truthy one, and the empty string
+  `''` is falsy — so the ternary idiom `cond && A || B` only works when `A`
+  is truthy. `github.event_name != 'release' && '' || '--dev'` returns
+  `'--dev'` on *both* branches. Always put the non-empty value in the `&&`
+  slot and the empty one in the `||` slot, as above.
+- **`permissions` on the job, not just the workflow.** A called workflow's
+  jobs can only narrow the caller's token, never widen it, so `pages: write`
+  and `id-token: write` (needed by `web.yml`'s `deploy` job) must be granted
+  on the calling job. `contents: read` is repeated there because naming
+  `permissions:` at all resets the unnamed scopes to `none`.
 
 ```yaml
 # .github/workflows/pr-closed.yml
@@ -107,7 +147,7 @@ on:
     types: [closed]
 permissions:
   contents: read
-  actions: write   # required: pr-closed.yml's cancel job needs this to cancel runs
+  actions: write # required: pr-closed.yml's cancel job needs this to cancel runs
 jobs:
   pr-closed:
     uses: blinkbitcoin/react-native-workflows/.github/workflows/pr-closed.yml@v0
@@ -118,11 +158,15 @@ jobs:
 name: pr-title
 on:
   pull_request:
-    types: [opened, edited, synchronize]
+    types: [edited]
 permissions:
   contents: read
 jobs:
   pr-title:
+    # `edited` also fires for a body-only edit; only re-lint when the title
+    # itself changed (`opened`/`synchronize` are already covered by ci.yml's
+    # checks.yml `commitlint` toggle, which lints the same PR title).
+    if: github.event.changes.title != null
     uses: blinkbitcoin/react-native-workflows/.github/workflows/pr-title.yml@v0
 ```
 
@@ -240,7 +284,7 @@ Secrets: `consumer-token` (optional).
 | `linux-runner` | `ubuntu-latest` | Runner for every job |
 | `macos-runner`, `native-cache-version` | (unused) | — |
 | `playwright` | `true` | Run the Playwright suite against the export |
-| `deploy` | `false` | Publish to GitHub Pages (pass `github.ref_type == 'tag'`) |
+| `deploy` | `false` | Publish to GitHub Pages (pass `github.event_name == 'release'` from a `release: published` caller; the calling job must grant `pages: write` + `id-token: write`) |
 | `base-url` | `''` | Baked into the export via `EXPO_PUBLIC_BASE_URL` |
 | `export-script` | `build:web` | Script that exports the web build |
 | `export-args` | `''` | Extra flags appended to the export script |
@@ -257,8 +301,12 @@ Outputs: `page-url` (empty unless `deploy` is true). Secrets: `consumer-token`
 | --- | --- | --- |
 | `repository`, `ref`, `working-directory`, `linux-runner`, `macos-runner`, `native-cache-version` | (as above) | — |
 
-No outputs. Secrets: `consumer-token` (optional). Lints `github.event.pull_request.title`
-against Conventional Commits on every `edited`/`opened`/`synchronize` event.
+No outputs. Secrets: `consumer-token` (optional). Lints
+`github.event.pull_request.title` against Conventional Commits on whatever
+`pull_request` event the caller wires it to. `checks.yml`'s `commitlint`
+toggle already lints the same title on `opened`/`synchronize`, so the caller
+above only adds `edited` (guarded by `github.event.changes.title != null`, since
+`edited` also fires for a body-only edit).
 
 ### `pr-closed.yml`
 
@@ -283,7 +331,7 @@ line for line, both repos read on the same date):
 | `typecheck` | `checks.yml` (`typecheck`) | yes |
 | `lint` | `checks.yml` (`lint`) | yes |
 | `format:check` | `checks.yml` (`format`) | yes |
-| `knip` | `checks.yml` (`knip`) | **no package.json script** — falls back to the `knip` binary in `node_modules/.bin` (present: `knip` is a devDependency), so the toggle still works via the binary path |
+| `knip` | `checks.yml` (`knip`) | **no package script; binary fallback** — falls back to the `knip` binary in `node_modules/.bin` (present: `knip` is a devDependency), so the toggle still works via the binary path. This is deliberate: a `package.json` script literally named `knip` fails `expo-doctor`'s "Check package.json for common issues" ("scripts in package.json conflict with the contents of node_modules/.bin"), and `checks.yml` runs expo-doctor too |
 | `spell` | `checks.yml` (`spell`) | yes (`typos`) |
 | `i18n:extract` | `scripts/checks/i18n.sh` (`i18n` toggle, off by default) | yes |
 | `codegen` | `scripts/checks/codegen.sh` (`graphql-codegen` toggle, off by default) | yes |
@@ -294,7 +342,7 @@ line for line, both repos read on the same date):
 | `test:coverage` | `unit.yml` (`coverage-script`, default path) | yes |
 | `test:scripts` | `unit.yml` (`scripts-test-script`) | yes |
 | `build:web` | `web.yml` (`export-script`) | yes |
-| `test:e2e:web` | `web.yml` (`e2e-script`) | yes, **but see the Playwright/export contract below — the template's current script does not yet honor `PLAYWRIGHT_SKIP_EXPORT`** |
+| `test:e2e:web` | `web.yml` (`e2e-script`) | yes (`bash scripts/e2e/web.sh`, which honors `PLAYWRIGHT_SKIP_EXPORT` — see [the Playwright / export contract](#the-playwright--export-contract)) |
 
 The template also ships `lint:fix`, `format`, `i18n:check`, `codegen:check`,
 `deps:check`, `deps:audit`, `deps:licenses`, `check-bundle-secrets`,
@@ -314,18 +362,29 @@ deployed**, not a second, possibly-different export. This means the
 consumer's `test:e2e:web` script must check that variable and skip its own
 export when it's set:
 
-```jsonc
-// package.json — required shape for test:e2e:web
-"test:e2e:web": "[ -n \"$PLAYWRIGHT_SKIP_EXPORT\" ] || pnpm build:web --dev; playwright test"
+The template implements this in `scripts/e2e/web.sh` (wired up as
+`"test:e2e:web": "bash scripts/e2e/web.sh"`), which is the shape to copy —
+a shell script rather than a one-liner, so the branch stays readable and the
+extra arguments still pass through:
+
+```bash
+# scripts/e2e/web.sh
+set -euo pipefail
+cd "$(dirname "$0")/../.."
+
+if [ -n "${PLAYWRIGHT_SKIP_EXPORT:-}" ]; then
+  echo "PLAYWRIGHT_SKIP_EXPORT set - testing the existing dist/ export"
+else
+  pnpm build:web --dev
+fi
+
+exec pnpm exec playwright test "$@"
 ```
 
-The template's current script (`pnpm build:web --dev && playwright test`)
-does not yet branch on `PLAYWRIGHT_SKIP_EXPORT`, so today it silently
-re-exports before every Playwright run in CI too — harmless (it produces the
-same bytes deterministically today) but wasteful, and it stops testing "the
-artifact that will be deployed" the day the export becomes non-deterministic
-or `deploy: true` runs against a different `base-url` than the local export
-would use. Fix it in the template's `package.json` when convenient.
+Skip the export unconditionally when the variable is set — including locally,
+where `dist/` may be stale — rather than trying to be clever about freshness:
+`web.yml` guarantees the artifact it downloads is the one its own `build` job
+just produced.
 
 ## The E2E hooks contract
 
@@ -344,10 +403,11 @@ paths**, not package.json script names, run via `bash` by
   teardown), because the whole Android suite is one `script:` line for
   `ReactiveCircus/android-emulator-runner`.
 - `self-smoke.yml` wires these to
-  `scripts/e2e/ci-mock-api-up.sh` / `scripts/e2e/ci-mock-api-down.sh` —
-  **paths the template repo is expected to ship** (its own mock GraphQL API
-  server, started for the E2E suite and stopped after). Until the template
-  ships them, `self-smoke.yml`'s `e2e` job fails at the setup step.
+  `scripts/e2e/ci-mock-api-up.sh` / `scripts/e2e/ci-mock-api-down.sh` — the
+  template ships both (its own mock GraphQL API server, started for the E2E
+  suite and stopped after) and its own `ci.yml` passes the same two paths.
+  A consumer that does not ship them must leave both inputs empty, or
+  `e2e.yml` fails at the setup step (a non-empty but missing path is fatal).
 
 ## iOS opt-in
 
@@ -380,12 +440,14 @@ whole tree:
 | knip | `knip.json` → `ignore` (or `project`/`entry` globs that don't reach into it) |
 | typos | `typos.toml` → `[files] extend-exclude`, add `.rnw/**` |
 | git | `.gitignore` — not strictly required (`setup` uses `.git/info/exclude`
-  instead, which is local-only and never committed), but harmless to add for
-  clarity |
+  instead, which is local-only and never committed), but recommended so a
+  local `.rnw/` checkout is ignored by every clone, not just CI's |
 
-The template's `biome.json`, `eslint.config.mjs` and `tsconfig.json` already
-carry this; `knip.json`, `typos.toml` and `.gitignore` do not yet (add them
-alongside the workflow caller files).
+The template carries all six: `biome.json` (`files.includes` → `"!**/.rnw"`),
+`eslint.config.mjs` (`ignores` → `'.rnw/**'`), `tsconfig.json` (`exclude` →
+`".rnw"`), `knip.json` (`ignore` → `".rnw/**"`), `typos.toml`
+(`[files] extend-exclude` → `".rnw/"`) and `.gitignore` (`/.rnw`). Copy that
+set when bootstrapping a new consumer.
 
 ## Gotchas encoded
 

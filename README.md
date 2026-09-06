@@ -63,29 +63,42 @@ self-hosted, KVM, disk): [docs/runners.md](docs/runners.md).
 
 ## After push
 
-- Every job self-checks-out this repo into `.rnw/` via
-  `repository: ${{ job.workflow_repository }}`, `ref: ${{ job.workflow_sha }}`
-  (the job context's fields for the reusable workflow file that defines the
-  current job, not the caller). **After pushing any change to a workflow under
-  `.github/workflows/`, watch the first real CI run on a consumer and confirm
-  the `.rnw` checkout step actually resolves to
-  `blinkbitcoin/react-native-workflows` at the ref/sha that defines the
-  running job** — a regression here would silently check out the wrong repo
-  (or the consumer's own repo) into `.rnw` and break every downstream step
-  that references `$RNW`.
-- **Create the GitHub repo** (`blinkbitcoin/react-native-workflows`) and push
-  `main`.
-- **Tag the first release**: either merge release-please's first PR (it opens
-  automatically on the first push to `main` once `self-release.yml` runs), or
-  tag `v0.1.0` by hand and let `self-release.yml`'s `major-tag` job move `v0`
-  and `v0.1` to it. Consumers pin `@v0` (see
-  [Versioning](docs/consumer-guide.md#versioning)) until `1.0.0`, when `@v1`
-  becomes available.
-- **Run `self-smoke.yml`** (`workflow_dispatch`) once the target consumer
-  (`blinkbitcoin/react-native-mobile-template` by default) exists and has the
-  `scripts/e2e/ci-mock-api-{up,down}.sh` hooks the smoke `e2e` job depends on
-  — confirm all three jobs (`checks`, `unit`, `e2e`) go green before relying
-  on the weekly cron.
-- **Set `E2E_IOS`** as a repo variable on any consumer that should run the
-  iOS suite by default (`vars.E2E_IOS == 'true'` in its `ci.yml`) — remember
-  macOS runners bill at 10x, so opt in deliberately per consumer.
+Phase 2 is complete locally: the workflows, actions, scripts, bats suite and
+docs are all here, `make check` is green, and `v0.1.0` / `v0.1` / `v0` already
+exist as local tags. What is left is everything that needs a real GitHub
+remote, in order:
+
+1. **Create the GitHub repo** `blinkbitcoin/react-native-workflows` (public;
+   consumers pin `@v0` by path, so it must be readable by their tokens) and
+   push this branch as `main`.
+2. **Push the tags.** They already exist locally — `git push --tags` publishes
+   `v0.1.0` plus the moving `v0` and `v0.1`. From here on `self-release.yml`
+   owns them: release-please cuts the release and its `major-tag` job re-points
+   `v0`/`v0.1` via `scripts/self/tag-major.sh`. Consumers pin `@v0` (see
+   [Versioning](docs/consumer-guide.md#versioning)) until `1.0.0`, when `@v1`
+   becomes available.
+3. **Run `self-smoke.yml`** by `workflow_dispatch`. Its target consumer
+   (`blinkbitcoin/react-native-mobile-template` by default) must exist and
+   ship the `scripts/e2e/ci-mock-api-{up,down}.sh` hooks the smoke `e2e` job
+   wires in — the template does. Confirm all three jobs (`checks`, `unit`,
+   `e2e`) go green before relying on the weekly cron.
+4. **Verify the `.rnw` self-checkout on that first run.** Every job checks
+   this repo out into `.rnw/` via `repository: ${{ job.workflow_repository }}`,
+   `ref: ${{ job.workflow_sha }}` — the job context's fields for the reusable
+   workflow file that defines the running job, not the caller. Open the
+   checkout step's log and confirm it resolved to
+   `blinkbitcoin/react-native-workflows` at the calling ref's sha. Do this
+   again after any change to a file under `.github/workflows/`: a regression
+   here would silently check out the wrong repo (or the consumer's own) into
+   `.rnw` and break every step that references `$RNW`.
+5. **Set the consumer repo variables.** `E2E_IOS=true` on any consumer whose
+   iOS suite should run on every push/PR (macOS runners bill at 10x, so opt in
+   deliberately per consumer); `RNW_MACOS_RUNNER` only if iOS should move off
+   `macos-26` onto a different or self-hosted label. Both are read in the
+   template's `ci.yml` as `vars.E2E_IOS` / `vars.RNW_MACOS_RUNNER`.
+
+No secrets are needed for any of this — every workflow in this family runs on
+`github.token`, and `consumer-token` is optional (only for a *private* smoke
+target). The Phase 3 release secrets (signing, store credentials, EAS) belong
+to the consumer and are listed in the template's own release runbook, not
+here.
