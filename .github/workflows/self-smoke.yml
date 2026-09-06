@@ -1,0 +1,60 @@
+name: self-smoke
+on:
+  workflow_dispatch:
+    inputs:
+      repository:
+        description: Consumer repository to exercise
+        type: string
+        default: 'blinkbitcoin/react-native-mobile-template'
+      ref:
+        description: Consumer ref to exercise
+        type: string
+        default: 'main'
+      ios:
+        description: Also run the iOS E2E suite (10x billing)
+        type: boolean
+        default: false
+      android:
+        description: Run the Android E2E suite
+        type: boolean
+        default: true
+  schedule:
+    # Weekly, Monday 06:17 UTC. Odd minute to avoid the top-of-hour GitHub
+    # Actions cron stampede.
+    - cron: '17 6 * * 1'
+# `secrets: inherit` is deliberately absent: the default consumer is public,
+# so the checks/unit/e2e workflows fall back to `github.token` for their
+# consumer checkouts. If the smoke target ever becomes a private repository,
+# add a repo secret `SMOKE_TOKEN` (a PAT with read access to that repository)
+# and pass it below as `secrets: { consumer-token: ${{ secrets.SMOKE_TOKEN }} }`
+# on each `uses:` call -- that secret is what the reusable workflows' optional
+# `consumer-token` input exists for (see docs/consumer-guide.md).
+concurrency:
+  group: self-smoke
+  cancel-in-progress: false
+permissions:
+  contents: read
+jobs:
+  checks:
+    uses: ./.github/workflows/checks.yml
+    with:
+      repository: ${{ inputs.repository || 'blinkbitcoin/react-native-mobile-template' }}
+      ref: ${{ inputs.ref || 'main' }}
+  unit:
+    uses: ./.github/workflows/unit.yml
+    with:
+      repository: ${{ inputs.repository || 'blinkbitcoin/react-native-mobile-template' }}
+      ref: ${{ inputs.ref || 'main' }}
+  e2e:
+    uses: ./.github/workflows/e2e.yml
+    with:
+      repository: ${{ inputs.repository || 'blinkbitcoin/react-native-mobile-template' }}
+      ref: ${{ inputs.ref || 'main' }}
+      ios: ${{ inputs.ios == true }}
+      android: ${{ inputs.android != false }}
+      dev-client: true
+      # These two hooks are created by the template's Task 10 (a mock GraphQL
+      # API the app talks to in dev/E2E); self-smoke fails until the template
+      # ships them at these paths.
+      e2e-setup-script: scripts/e2e/ci-mock-api-up.sh
+      e2e-teardown-script: scripts/e2e/ci-mock-api-down.sh

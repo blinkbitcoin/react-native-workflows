@@ -1,0 +1,17 @@
+[files]
+extend-exclude = ["test/fixtures/**", "CHANGELOG.md", ".git/**"]
+
+[default]
+extend-ignore-re = []
+
+[default.extend-words]
+# Real project/technology names and Apple API field names that trip the dictionary.
+rnw = "rnw"
+maestro = "maestro"
+udid = "udid"
+UDID = "UDID"
+
+[default.extend-identifiers]
+# typos splits this on the case change (PN + Gs) and flags "PN"; treat the
+# whole identifier as one unit instead of trying to teach it "PN" is fine.
+PNGs = "PNGs"

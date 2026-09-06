@@ -1,0 +1,27 @@
+changelog:
+  exclude:
+    labels:
+      - dependencies
+    authors:
+      - dependabot
+      - dependabot[bot]
+  categories:
+    - title: Features
+      labels:
+        - "type: feat"
+        - feat
+    - title: Bug Fixes
+      labels:
+        - "type: fix"
+        - fix
+    - title: CI
+      labels:
+        - "type: ci"
+        - ci
+    - title: Documentation
+      labels:
+        - "type: docs"
+        - docs
+    - title: Other Changes
+      labels:
+        - "*"
