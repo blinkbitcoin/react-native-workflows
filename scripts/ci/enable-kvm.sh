@@ -1,12 +1,20 @@
 #!/usr/bin/env bash
-# Enable KVM acceleration for the Android emulator on a Linux GitHub runner.
-# Unlike free-disk.sh this dies (rather than skipping) on a non-Linux host:
-# an Android emulator job without KVM doesn't fail loudly, it just runs
-# catastrophically slowly, which is worse than a clear error up front.
+# Enable KVM acceleration for the Android emulator on a Linux GitHub-hosted
+# runner. Guarded on GITHUB_ACTIONS+RUNNER_OS (not just `uname -s`) so this
+# never touches udev rules or requires sudo on a developer's own machine by
+# accident; a workflow author who wires an Android emulator job to a
+# non-Linux runner still finds out (the emulator step itself will be
+# catastrophically slow without KVM) but this script itself just skips.
+# Set RNW_FORCE_RUNNER_SCRIPTS=1 to bypass the guard for deliberate
+# local/self-hosted testing.
 set -euo pipefail
 source "$(dirname "$0")/../lib/common.sh"
 
-[ "$(uname -s)" = "Linux" ] || die "enable-kvm.sh only runs on Linux (Android emulator acceleration); uname -s = $(uname -s)"
+if [ "${RNW_FORCE_RUNNER_SCRIPTS:-}" != "1" ] &&
+   { [ "${GITHUB_ACTIONS:-}" != "true" ] || [ "${RUNNER_OS:-}" != "Linux" ]; }; then
+  log "enable-kvm: not a Linux GitHub Actions runner (GITHUB_ACTIONS=${GITHUB_ACTIONS:-}, RUNNER_OS=${RUNNER_OS:-}); nothing to do, skipping"
+  exit 0
+fi
 require_cmd sudo udevadm
 
 echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' |

@@ -4,7 +4,6 @@
 set -euo pipefail
 source "$(dirname "$0")/../lib/common.sh"
 source "$(dirname "$0")/../lib/versions.sh"
-require_cmd mise
 
 root="$(consumer_root)"
 cd "$root"
@@ -13,6 +12,8 @@ if [ ! -d scripts ]; then
   log "lint-ci: no scripts/ directory in $root; nothing to lint"
   exit 0
 fi
+
+require_cmd mise
 
 if [ -d .github/workflows ]; then
   mise x "actionlint@$ACTIONLINT_VERSION" -- actionlint -color
