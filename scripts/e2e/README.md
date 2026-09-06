@@ -14,6 +14,17 @@ Two families, one env contract:
 All of them run from the repo that hosts these scripts and act on the *consumer*
 checkout resolved by `consumer_root` (`$GITHUB_WORKSPACE/$WORKING_DIRECTORY`).
 
+## Prerequisites
+
+On the machine running these scripts: `bash`, `pnpm`, `curl`, `jq`
+(`ios-simulator.sh pick` parses `simctl list -j`), `yq` (via
+`scripts/lib/expo-config.sh`), and `maestro` on `PATH` or in `~/.maestro/bin`
+(`scripts/ci/maestro-install.sh` puts it there). Platform-specific: `xcodebuild`
++ `xcrun` and CocoaPods (`pod`, or `bundle` when the consumer has a `Gemfile`)
+for iOS; `adb` and a JDK for Android. Optional: `xcbeautify` or `xcpretty` to
+format the Xcode log, `timeout`/`gtimeout` for `maestro-bound.sh` (there is a
+pure-bash fallback).
+
 ## Env contract
 
 | Variable | Default | Meaning |
@@ -31,6 +42,10 @@ checkout resolved by `consumer_root` (`$GITHUB_WORKSPACE/$WORKING_DIRECTORY`).
 | `RNW_E2E_SETUP_SCRIPT` | (none) | Consumer-relative script run before the suite (e.g. start a mock API). A missing file is fatal. |
 | `RNW_E2E_TEARDOWN_SCRIPT` | (none) | Consumer-relative script run after the suite, pass or fail. |
 | `RNW_ANDROID_ABIS` | `x86_64` | `-PreactNativeArchitectures` for `android-build.sh`. CI emulators are x86_64; set `arm64-v8a` to run against an Apple-silicon emulator locally. |
+
+`$RNW_OUT/run-start` is stamped once, by whichever script sources
+`scripts/lib/e2e-env.sh` first; `collect-forensics.sh` selects iOS crash reports
+newer than it.
 
 `RNW_SIM_UDID` is produced, not consumed: `ios-simulator.sh pick` writes it to
 `$GITHUB_ENV`, to `$GITHUB_OUTPUT` as `udid`, and to `$RNW_OUT/sim-udid` so a

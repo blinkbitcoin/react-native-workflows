@@ -17,11 +17,14 @@ cp "$RNW_OUT"/*.mp4 "$dest/" 2>/dev/null || true
 
 if [ "$platform" = ios ]; then
   # Only reports from this run: the folder accumulates across a developer's
-  # whole session and an unrelated crash log is a red herring.
+  # whole session and an unrelated crash log is a red herring. The reference is
+  # e2e-env.sh's run-start stamp, never metro.log - metro.log is appended all
+  # run long, so it would only ever select reports newer than the last bundle
+  # request. The hour window is the fallback when no stamp exists.
   if [ -d "$HOME/Library/Logs/DiagnosticReports" ]; then
-    if [ -f "$RNW_OUT/metro.log" ]; then
+    if [ -f "$RNW_RUN_START" ] && [ -z "$RNW_RUN_START_FRESH" ]; then
       find "$HOME/Library/Logs/DiagnosticReports" -maxdepth 1 -type f \
-        -newer "$RNW_OUT/metro.log" -exec cp {} "$dest/" \; 2>/dev/null || true
+        -newer "$RNW_RUN_START" -exec cp {} "$dest/" \; 2>/dev/null || true
     else
       find "$HOME/Library/Logs/DiagnosticReports" -maxdepth 1 -type f \
         -mmin -60 -exec cp {} "$dest/" \; 2>/dev/null || true

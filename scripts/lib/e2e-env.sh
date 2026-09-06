@@ -12,6 +12,20 @@ RNW_OUT="${RNW_OUT:-${RUNNER_TEMP:-/tmp}/rnw}"
 export RNW_DEV_CLIENT RNW_MAESTRO_FLOWS RNW_SUITE_TIMEOUT_MINUTES RNW_METRO_PORT RNW_OUT
 mkdir -p "$RNW_OUT"
 
+# Immutable "the run started here" stamp. collect-forensics.sh needs a fixed
+# instant to select crash reports from, and metro.log cannot serve: it is
+# appended throughout the run, so its mtime is the last Metro write. Created by
+# whichever script sources this file first, then never touched again.
+RNW_RUN_START="$RNW_OUT/run-start"
+RNW_RUN_START_FRESH=
+if [ ! -e "$RNW_RUN_START" ]; then
+  : > "$RNW_RUN_START" 2>/dev/null && RNW_RUN_START_FRESH=1
+fi
+# RNW_RUN_START_FRESH says "this process created the stamp", i.e. nothing ran
+# before it. A collector that stamps the run itself would select nothing at all,
+# so it falls back to a time window instead.
+export RNW_RUN_START RNW_RUN_START_FRESH
+
 # Directory holding scripts/lib, resolved from this file so callers in any
 # subdirectory (scripts/native, scripts/e2e) find expo-config.sh.
 RNW_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

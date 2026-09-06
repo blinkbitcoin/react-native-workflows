@@ -12,6 +12,11 @@ platform="$(rnw_platform "${1:-}")"
 require_cmd curl
 base="http://localhost:$RNW_METRO_PORT"
 
+tail_metro_log() {
+  log "--- tail of $RNW_OUT/metro.log ---"
+  tail -50 "$RNW_OUT/metro.log" >&2 || true
+}
+
 ready=false
 for i in $(seq 1 90); do
   if curl -s --max-time 5 "$base/status" | grep -q packager-status:running; then
@@ -19,11 +24,16 @@ for i in $(seq 1 90); do
     ready=true
     break
   fi
+  # Metro that died on a port clash or a config error is never coming back;
+  # waiting out the full 180s only hides the reason in a timeout message.
+  if [ -f "$RNW_OUT/metro.pid" ] && ! kill -0 "$(cat "$RNW_OUT/metro.pid")" 2>/dev/null; then
+    tail_metro_log
+    die "Metro (pid $(cat "$RNW_OUT/metro.pid")) exited before becoming ready"
+  fi
   sleep 2
 done
 if [ "$ready" != true ]; then
-  log "--- tail of $RNW_OUT/metro.log ---"
-  tail -50 "$RNW_OUT/metro.log" >&2 || true
+  tail_metro_log
   die "Metro did not report packager-status:running within 180s"
 fi
 
