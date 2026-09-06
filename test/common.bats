@@ -16,5 +16,6 @@ setup() { source "$REPO_ROOT/scripts/lib/common.sh"; }
 @test "consumer_root honours WORKING_DIRECTORY" {
   GITHUB_WORKSPACE="$BATS_TEST_TMPDIR"; WORKING_DIRECTORY=app; export GITHUB_WORKSPACE WORKING_DIRECTORY
   mkdir -p "$BATS_TEST_TMPDIR/app"
-  run consumer_root; [ "$output" = "$BATS_TEST_TMPDIR/app" ]
+  expected="$(cd "$BATS_TEST_TMPDIR/app" && pwd -P)"
+  run consumer_root; [ "$output" = "$expected" ]
 }
