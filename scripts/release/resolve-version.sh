@@ -14,10 +14,19 @@
 #
 # Version, first match wins:
 #   1. a `vX.Y.Z` tag pointing at HEAD (the tag build itself)
-#   2. a version inside $RELEASE_PR_TITLE (the release-please PR being built)
-#   3. a version inside the title of the open `autorelease: pending` PR (via gh)
-#   4. the newest stable `vX.Y.Z` tag with its patch component bumped by one
-#   5. 0.0.1 when the repo has no stable version tag at all (0.0.0, bumped)
+#   2. HEAD's own subject when it is release-please's release commit
+#      (`chore(main): release X.Y.Z`)
+#   3. a version inside $RELEASE_PR_TITLE (the release-please PR being built)
+#   4. a version inside the title of the open `autorelease: pending` PR (via gh)
+#   5. the newest stable `vX.Y.Z` tag with its patch component bumped by one
+#   6. 0.0.1 when the repo has no stable version tag at all (0.0.0, bumped)
+#
+# Source 2 exists because of a real gap: on the merge commit of a release-please
+# PR none of the other sources hit. The tag does not exist yet (release-please
+# creates it from that very push), there is no $RELEASE_PR_TITLE on a `push`
+# event, and the PR is closed so `autorelease: pending` finds nothing - so the
+# release build of `1.2.0` resolved as a patch bump of the *previous* tag,
+# 1.1.1, and shipped a store build labelled with a version nothing else knows.
 #
 # Prerelease tags (`v1.2.3-rc.1`) are ignored *entirely*, at every step: they
 # never win at HEAD and never seed the patch bump. A repository that has only
@@ -50,6 +59,23 @@ tag="$(git tag --points-at HEAD 2>/dev/null | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$
 if [ -n "$tag" ]; then
   version="${tag#v}"
   origin="tag at HEAD ($tag)"
+fi
+
+# release-please's own release commit, matched on its exact subject shape rather
+# than on any commit that happens to carry a version: `chore(main): release
+# 1.2.0`. The version is taken from that subject, not from a grep of the whole
+# message, so a body mentioning another version cannot win.
+if [ -z "$version" ]; then
+  subject="$(git log -1 --format='%s' 2>/dev/null || true)"
+  case "$subject" in
+    'chore(main): release '*)
+      candidate="$(printf '%s' "$subject" | sed -nE 's/^chore\(main\): release ([0-9]+\.[0-9]+\.[0-9]+).*$/\1/p')"
+      if [ -n "$candidate" ]; then
+        version="$candidate"
+        origin="release-please release commit ($subject)"
+      fi
+      ;;
+  esac
 fi
 
 if [ -z "$version" ] && [ -n "${RELEASE_PR_TITLE:-}" ]; then

@@ -41,6 +41,52 @@ resolve() { run bash "$REPO_ROOT/scripts/release/resolve-version.sh" "$REPO"; }
   contains "$output" "APP_VERSION=2.5.0" || fail "no APP_VERSION=2.5.0 in: $output"
 }
 
+# The gap this closes: on release-please's merge commit the tag does not exist
+# yet (it is created from that very push), a `push` event carries no
+# RELEASE_PR_TITLE, and the PR is closed so `autorelease: pending` finds
+# nothing - so the release build of 1.2.0 used to resolve as a patch bump of the
+# previous tag and shipped a store build labelled with a version nothing else
+# knew.
+@test "release-please's release commit supplies the version" {
+  commit
+  git -C "$REPO" tag v1.1.1
+  commit 'chore(main): release 1.2.0'
+  resolve
+  [ "$status" -eq 0 ] || fail "exited $status: $output"
+  contains "$output" "APP_VERSION=1.2.0" || fail "no APP_VERSION=1.2.0 in: $output"
+  contains "$output" "release-please release commit" || fail "unexpected origin: $output"
+}
+
+@test "a tag on HEAD still wins over the release commit subject" {
+  commit 'chore(main): release 1.2.0'
+  git -C "$REPO" tag v1.2.1
+  resolve
+  [ "$status" -eq 0 ] || fail "exited $status: $output"
+  contains "$output" "APP_VERSION=1.2.1" || fail "the subject beat the tag: $output"
+}
+
+@test "the release commit subject wins over RELEASE_PR_TITLE" {
+  commit 'chore(main): release 1.2.0'
+  RELEASE_PR_TITLE='chore(main): release 9.9.9' resolve
+  [ "$status" -eq 0 ] || fail "exited $status: $output"
+  contains "$output" "APP_VERSION=1.2.0" || fail "wrong precedence: $output"
+}
+
+# Matched on the exact subject shape, not on "a commit mentioning a version":
+# an ordinary commit that talks about a release must not set the version.
+@test "an ordinary commit subject carrying a version is not a version source" {
+  commit
+  git -C "$REPO" tag v0.4.9
+  commit 'fix: release 9.9.9 was wrong'
+  resolve
+  [ "$status" -eq 0 ] || fail "exited $status: $output"
+  contains "$output" "APP_VERSION=0.4.10" || fail "an ordinary subject was used as a source: $output"
+  commit 'chore(deps): release tooling bump'
+  resolve
+  [ "$status" -eq 0 ] || fail "exited $status: $output"
+  contains "$output" "APP_VERSION=0.4.10" || fail "a versionless chore subject changed the version: $output"
+}
+
 @test "falls back to a patch bump of the newest stable tag" {
   commit
   git -C "$REPO" tag v0.4.9
