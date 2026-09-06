@@ -26,6 +26,10 @@ on:
         description: Native cache key prefix (unused by this workflow; carried for input-set consistency across the family)
         type: string
         default: 'v1'
+    secrets:
+      consumer-token:
+        description: PAT with read access to a private consumer repository; falls back to the caller's github.token (works for a public consumer)
+        required: false
 permissions:
   contents: read
 jobs:
@@ -38,6 +42,7 @@ jobs:
         with:
           repository: ${{ inputs.repository || github.repository }}
           ref: ${{ inputs.ref }}
+          token: ${{ secrets.consumer-token || github.token }}
       - name: Checkout react-native-workflows
         uses: actions/checkout@v7
         with:

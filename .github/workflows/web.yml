@@ -58,6 +58,10 @@ on:
         description: Space-separated browser names passed to `playwright install`
         type: string
         default: 'chromium'
+    secrets:
+      consumer-token:
+        description: PAT with read access to a private consumer repository; falls back to the caller's github.token (works for a public consumer)
+        required: false
     outputs:
       page-url:
         description: 'URL of the deployed GitHub Pages site (empty unless deploy is true)'
@@ -74,6 +78,7 @@ jobs:
         with:
           repository: ${{ inputs.repository || github.repository }}
           ref: ${{ inputs.ref }}
+          token: ${{ secrets.consumer-token || github.token }}
       - name: Checkout react-native-workflows
         uses: actions/checkout@v7
         with:
@@ -114,6 +119,7 @@ jobs:
         with:
           repository: ${{ inputs.repository || github.repository }}
           ref: ${{ inputs.ref }}
+          token: ${{ secrets.consumer-token || github.token }}
       - name: Checkout react-native-workflows
         uses: actions/checkout@v7
         with:
@@ -159,6 +165,7 @@ jobs:
     runs-on: ${{ inputs.linux-runner }}
     timeout-minutes: 10
     permissions:
+      contents: read
       pages: write
       id-token: write
     environment:

@@ -90,6 +90,10 @@ on:
         description: Extra regex alternatives (POSIX ERE, '|'-joined) treated as docs for docs-only detection
         type: string
         default: ''
+    secrets:
+      consumer-token:
+        description: PAT with read access to a private consumer repository; falls back to the caller's github.token (works for a public consumer)
+        required: false
     outputs:
       docs-only:
         description: 'true when every changed file matched the docs globs (empty when docs-only-detection is disabled)'
@@ -109,6 +113,7 @@ jobs:
         with:
           repository: ${{ inputs.repository || github.repository }}
           ref: ${{ inputs.ref }}
+          token: ${{ secrets.consumer-token || github.token }}
           fetch-depth: 0
       # No setup here: changed-class.sh is pure git and doesn't need node/pnpm,
       # so this job skips it and reaches the script via the plain checkout path
@@ -136,6 +141,7 @@ jobs:
         with:
           repository: ${{ inputs.repository || github.repository }}
           ref: ${{ inputs.ref }}
+          token: ${{ secrets.consumer-token || github.token }}
       - name: Checkout react-native-workflows
         uses: actions/checkout@v7
         with:
@@ -202,6 +208,7 @@ jobs:
         with:
           repository: ${{ inputs.repository || github.repository }}
           ref: ${{ inputs.ref }}
+          token: ${{ secrets.consumer-token || github.token }}
           # fetch-depth: 0 so PR_COMMITS_RANGE below (base sha..head sha) can
           # resolve both endpoints when commitlint-commits is enabled.
           fetch-depth: 0

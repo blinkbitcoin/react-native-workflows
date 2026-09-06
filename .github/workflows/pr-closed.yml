@@ -10,6 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
+      contents: read
       actions: write
     steps:
       # No consumer checkout: cancel-runs.sh only calls the GitHub API with
