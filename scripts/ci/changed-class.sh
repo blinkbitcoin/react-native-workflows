@@ -12,7 +12,16 @@ if [ -z "$base" ]; then
   exit 0
 fi
 
-files=$(git diff --name-only "$base" "$head")
+# Use merge-base (three-dot) semantics so commits landed on the target branch
+# after the PR branch forked don't leak into the diff and flip a docs-only PR
+# to false. Fall back to a plain two-dot diff only when merge-base can't be
+# computed (e.g. a shallow clone missing the common ancestor).
+if git merge-base "$base" "$head" >/dev/null 2>&1; then
+  files=$(git diff --name-only "$base...$head")
+else
+  log "warning: git merge-base failed for $base..$head; falling back to two-dot diff (may include unrelated target-branch changes)"
+  files=$(git diff --name-only "$base" "$head")
+fi
 if [ -z "$files" ]; then
   gh_output docs-only false
   exit 0

@@ -58,6 +58,20 @@ commit_file() {
   [ "$output" = "docs-only=false" ]
 }
 
+@test "docs-only=true when base branch advances with a src/ change after the PR forked (merge-base semantics)" {
+  commit_file "README.md"
+  fork_point=$(git -C "$repo" rev-parse HEAD)
+  git -C "$repo" checkout -q -b pr "$fork_point"
+  commit_file "docs/x.md"
+  head=$(git -C "$repo" rev-parse HEAD)
+  git -C "$repo" checkout -q main
+  commit_file "src/unrelated.ts"
+  base=$(git -C "$repo" rev-parse HEAD)
+  cd "$repo" && run bash "$REPO_ROOT/scripts/ci/changed-class.sh" "$base" "$head"
+  [ "$status" -eq 0 ]
+  [ "$output" = "docs-only=true" ]
+}
+
 @test "docs-only=false when BASE is empty (push event)" {
   commit_file "docs/x.md"
   head=$(git -C "$repo" rev-parse HEAD)
