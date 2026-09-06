@@ -23,6 +23,13 @@ root="$(consumer_root)"
 mkdir -p "$RNW_RELEASE_META_DIR"
 cd "$root"
 
+# The locales are passed both ways on purpose: $NOTES_LOCALES is the older
+# contract and a generator may still read it, but a CLI flag is what a
+# hand-run of notes.mjs is debugged with, and it is what the template's
+# generator takes. Built as an array so an empty value contributes no argument.
+locale_args=()
+[ -z "${NOTES_LOCALES:-}" ] || locale_args=(--locales "$NOTES_LOCALES")
+
 group "release notes"
 if [ -f "scripts/release/notes.mjs" ]; then
   require_cmd node
@@ -32,11 +39,13 @@ if [ -f "scripts/release/notes.mjs" ]; then
     # actually use rather than the raw markdown.
     log "running the consumer's notes.mjs --from-body --body-section"
     NOTES_LOCALES="${NOTES_LOCALES:-en}" \
-      node scripts/release/notes.mjs --from-body "$RELEASE_BODY_FILE" --body-section --out "$RNW_RELEASE_META_DIR"
+      node scripts/release/notes.mjs --from-body "$RELEASE_BODY_FILE" --body-section \
+      "${locale_args[@]+"${locale_args[@]}"}" --out "$RNW_RELEASE_META_DIR"
   else
     log "running the consumer's notes.mjs --from-commits"
     NOTES_LOCALES="${NOTES_LOCALES:-en}" \
-      node scripts/release/notes.mjs --from-commits --out "$RNW_RELEASE_META_DIR"
+      node scripts/release/notes.mjs --from-commits \
+      "${locale_args[@]+"${locale_args[@]}"}" --out "$RNW_RELEASE_META_DIR"
   fi
 else
   printf '::warning::consumer has no scripts/release/notes.mjs - falling back to commit subjects; store listings will get generic notes\n' >&2
