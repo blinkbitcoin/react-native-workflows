@@ -97,8 +97,13 @@ merge_release_fixture() {
 # contract-identical, not byte-identical, so the case that differs most between
 # two implementations is compared output-to-output.
 @test "this copy and the template's agree on the merge-commit fixture" {
-  other="/Users/jonas/Dev/blink/react-native-mobile-template/scripts/release/resolve-version.sh"
-  [ -f "$other" ] || skip "the template is not checked out next to this repo"
+  # Set RNW_TEMPLATE_DIR to point this at another checkout; the default is where
+  # the template usually sits next to this repo.
+  template_dir="${RNW_TEMPLATE_DIR:-/Users/jonas/Dev/blink/react-native-mobile-template}"
+  other="$template_dir/scripts/release/resolve-version.sh"
+  # A skip here means parity with the template's copy was NOT verified by this
+  # run -- not that the two copies agree.
+  [ -f "$other" ] || skip "parity NOT verified: no template copy at $other (set RNW_TEMPLATE_DIR)"
   merge_release_fixture
   # Both halves of the contract: the APP_* lines on stdout, and the file both
   # copies append to when $GITHUB_OUTPUT is set. Only those are the contract -
