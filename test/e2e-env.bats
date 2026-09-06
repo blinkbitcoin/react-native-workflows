@@ -28,3 +28,15 @@ setup() {
   [ "$(grep -c '^RNW_OUT=' "$GITHUB_ENV")" -eq 1 ]
   [ "$(grep -c '^RNW_RUN_START=' "$GITHUB_ENV")" -eq 1 ]
 }
+
+@test "sourcing from separate processes sharing GITHUB_ENV appends each variable once" {
+  # Each GitHub Actions step is its own process; the dedupe guard must be
+  # file-based (grep $GITHUB_ENV itself), not a shell-variable flag that only
+  # survives within one process.
+  run bash -c "source '$REPO_ROOT/scripts/lib/common.sh'; source '$REPO_ROOT/scripts/lib/e2e-env.sh'"
+  [ "$status" -eq 0 ]
+  run bash -c "source '$REPO_ROOT/scripts/lib/common.sh'; source '$REPO_ROOT/scripts/lib/e2e-env.sh'"
+  [ "$status" -eq 0 ]
+  [ "$(grep -c '^RNW_OUT=' "$GITHUB_ENV")" -eq 1 ]
+  [ "$(grep -c '^RNW_RUN_START=' "$GITHUB_ENV")" -eq 1 ]
+}

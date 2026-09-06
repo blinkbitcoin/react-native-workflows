@@ -28,14 +28,12 @@ export RNW_RUN_START RNW_RUN_START_FRESH
 
 # Publish RNW_OUT/RNW_RUN_START to $GITHUB_ENV so every later step in the job
 # (including composite actions, e.g. `forensics`'s default `path` input) can
-# see them without re-sourcing this file. Guarded so re-sourcing this file
-# within the same process (or step) never appends duplicate lines.
-if [ -z "${_RNW_E2E_ENV_PUBLISHED:-}" ]; then
-  gh_env RNW_OUT "$RNW_OUT"
-  gh_env RNW_RUN_START "$RNW_RUN_START"
-  _RNW_E2E_ENV_PUBLISHED=1
-  export _RNW_E2E_ENV_PUBLISHED
-fi
+# see them without re-sourcing this file. gh_env_once's guard is file-based
+# (checks $GITHUB_ENV itself), so it dedupes across the many separate steps -
+# each its own process - that source this file within one job, not just
+# within one process.
+gh_env_once RNW_OUT "$RNW_OUT"
+gh_env_once RNW_RUN_START "$RNW_RUN_START"
 
 # Directory holding scripts/lib, resolved from this file so callers in any
 # subdirectory (scripts/native, scripts/e2e) find expo-config.sh.

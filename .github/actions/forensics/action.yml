@@ -37,4 +37,5 @@ runs:
       shell: bash
       env:
         NAME: ${{ inputs.name }}
-      run: bash "${{ github.action_path }}/../../../scripts/ci/artifact-summary.sh" "$NAME"
+        JUNIT: ${{ inputs.junit }}
+      run: bash "${{ github.action_path }}/../../../scripts/ci/artifact-summary.sh" "$NAME" "" "$JUNIT"

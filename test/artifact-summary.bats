@@ -37,3 +37,10 @@ load test_helper
   [ "$status" -eq 0 ]
   [[ "$output" == *"No forensics files were produced."* ]]
 }
+
+@test "still summarizes junit pass/fail counts when the url is empty" {
+  run bash "$REPO_ROOT/scripts/ci/artifact-summary.sh" "forensics" "" "$FIXTURES/junit-sample.xml"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"No forensics files were produced."* ]]
+  [[ "$output" == *"2 passed, 1 failed"* ]]
+}
