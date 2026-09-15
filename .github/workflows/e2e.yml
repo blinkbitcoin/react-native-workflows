@@ -166,10 +166,12 @@ jobs:
             pods-${{ runner.os }}-
       - name: Pod install
         if: ${{ steps.restore.outputs.cache-hit != 'true' }}
+        timeout-minutes: 20
         run: bash "$RNW/scripts/native/pods.sh"
       - name: Build iOS app
         id: build
         if: ${{ steps.restore.outputs.cache-hit != 'true' }}
+        timeout-minutes: 45
         run: bash "$RNW/scripts/native/ios-build.sh"
       - name: Save iOS app cache
         if: ${{ steps.restore.outputs.cache-hit != 'true' }}
@@ -236,6 +238,7 @@ jobs:
         with:
           working-directory: ${{ inputs.working-directory }}
       - name: Install Maestro
+        timeout-minutes: 10
         uses: ./.rnw/.github/actions/maestro
         with:
           version: ${{ inputs.maestro-version }}
@@ -256,6 +259,7 @@ jobs:
       - name: Install app
         run: bash "$RNW/scripts/e2e/ios-simulator.sh" install "$RNW_OUT"/*.app.tar
       - name: Wait for Metro
+        timeout-minutes: 10
         run: bash "$RNW/scripts/e2e/metro-wait.sh" ios
       - name: Start screen recording
         run: bash "$RNW/scripts/e2e/ios-simulator.sh" record start
@@ -389,6 +393,7 @@ jobs:
         with:
           working-directory: ${{ inputs.working-directory }}
       - name: Install Maestro
+        timeout-minutes: 10
         uses: ./.rnw/.github/actions/maestro
         with:
           version: ${{ inputs.maestro-version }}
@@ -408,6 +413,14 @@ jobs:
         with:
           name: ${{ inputs.android-artifact-name }}
           path: ${{ inputs.working-directory }}/android/app/build/outputs/apk/debug
+      # android-emulator-runner installs the `emulator` package itself and has
+      # no retry, so a download that lands corrupt kills the job before Maestro
+      # runs. Installing it here first buys two retries with a purge in
+      # between; the action then finds the package current and skips it - the
+      # same no-op property the system-image cache below relies on.
+      - name: Install Android emulator package
+        timeout-minutes: 15
+        run: bash "$RNW/scripts/ci/android-sdk-install.sh" emulator
       - name: Cache Android system image
         uses: actions/cache@v6
         with:
@@ -423,6 +436,7 @@ jobs:
           key: avd-v1-${{ inputs.android-api-level }}-x86_64-default-hidedialogs
       - name: Bake AVD snapshot
         if: ${{ steps.avd.outputs.cache-hit != 'true' }}
+        timeout-minutes: 20
         uses: ReactiveCircus/android-emulator-runner@v2
         with:
           api-level: ${{ inputs.android-api-level }}
@@ -433,6 +447,7 @@ jobs:
           disable-animations: false
           script: bash "$RNW/scripts/e2e/android-emulator.sh" snapshot-bake
       - name: Wait for Metro
+        timeout-minutes: 10
         run: bash "$RNW/scripts/e2e/metro-wait.sh" android
       - name: Maestro suite (Android)
         timeout-minutes: ${{ fromJSON(steps.timeout.outputs.minutes) }}

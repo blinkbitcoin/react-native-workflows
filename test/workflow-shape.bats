@@ -285,6 +285,55 @@ TEMPLATE_LANES="$FIXTURES/consumer-min/fastlane/lanes/shared.rb"
   done
 }
 
+# A job-level cap is a bound, not a diagnosis: when the 60-minute `android` job
+# dies there is nothing in the log saying *which* of its steps hung. These are
+# the steps that can hang on something outside our control (a CDN, a pod
+# resolve, an emulator boot), so each carries its own bound. The list is named
+# rather than derived: renaming a step would otherwise silently drop its
+# timeout and this test would still pass.
+#
+# Deliberately absent: the Maestro suite steps (theirs comes from
+# `suite-timeout-minutes` via step-timeout.sh) and download-artifact (it
+# retries internally, and a step timeout would cut a legitimate retry short).
+@test "e2e.yml's hang-prone steps each carry a step-level timeout-minutes" {
+  f="$REPO_ROOT/.github/workflows/e2e.yml"
+  for spec in \
+    "Pod install:20" \
+    "Build iOS app:45" \
+    "Install Maestro:10" \
+    "Wait for Metro:10" \
+    "Bake AVD snapshot:20" \
+    "Install Android emulator package:15"; do
+    name="${spec%:*}"
+    want="${spec##*:}"
+    found=$(yq -r "[.jobs[].steps[]? | select(.name == \"$name\")] | length" "$f")
+    [ "$found" -gt 0 ] || fail "e2e.yml has no step named '$name' - was it renamed?"
+    # Every occurrence: 'Install Maestro' and 'Wait for Metro' appear in both
+    # the ios and the android job.
+    bad=$(yq -r "[.jobs[].steps[]? | select(.name == \"$name\") | select(.\"timeout-minutes\" != $want)] | length" "$f")
+    [ "$bad" -eq 0 ] || fail "$bad of the $found '$name' steps lack timeout-minutes: $want"
+  done
+}
+
+# Forensics on a *green* run are what later turns "it passed that time" into a
+# diagnosis, and they cost ~50-100 MB per platform per run at the default
+# 7-day retention. The lever for that cost is `retention-days`, not `if:` - an
+# edit to `failure()` "to save storage" is the regression this pins.
+@test "every forensics step runs under always(), not failure()" {
+  select='[.jobs[].steps[]? | select(((.uses // "") | test("actions/forensics$")) or ((.run // "") | test("collect-forensics.sh")))]'
+  total=0
+  for w in "${WORKFLOWS[@]}"; do
+    found=$(yq -r "$select | length" "$w")
+    total=$((total + found))
+    bad=$(yq -r "$select | map(select(.if != \"always()\")) | length" "$w")
+    [ "$bad" -eq 0 ] || fail "$(basename "$w") has $bad forensics step(s) that are not 'if: always()'"
+  done
+  # e2e.yml: collect + upload on iOS, upload on Android. web.yml: one upload.
+  # Without this the selector could stop matching and the loop would pass by
+  # examining nothing.
+  [ "$total" -ge 4 ] || fail "the forensics selector matched only $total steps - has the action moved?"
+}
+
 @test "every run: step is a single 'bash ...' line" {
   for w in "${WORKFLOWS[@]}"; do
     bad=$(yq -r '[.jobs[].steps[]? | select(has("run")) | .run | select(test("^bash ") | not)] | length' "$w")

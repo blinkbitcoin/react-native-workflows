@@ -4,6 +4,17 @@ What `e2e.yml` and `web.yml` upload when something goes wrong, and how to read
 it. Every forensics step runs with `if: always()`, so it uploads on both pass
 and fail (a green run's artifact is usually small and worth skimming anyway).
 
+## What it costs
+
+Roughly **50–100 MB per platform per run** — mostly the screen recording and
+the per-command Maestro screenshots — kept for **7 days** (the `forensics`
+action's `retention-days` input). `test/workflow-shape.bats` pins the
+`if: always()` condition, because the tempting way to cut that bill is to
+switch it to `failure()`, and that throws away exactly the artifacts that turn
+a later "it passed that time" into a diagnosis. **The lever is
+`retention-days`, not `if:`** — pass a smaller number to the `forensics` action
+(or a larger one for a branch you are bisecting) and leave the condition alone.
+
 ## Where it comes from
 
 `scripts/e2e/collect-forensics.sh <ios|android>` always exits `0` (a forensics
