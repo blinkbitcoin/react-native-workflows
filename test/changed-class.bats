@@ -111,3 +111,64 @@ commit_file() {
   [ "$status" -eq 0 ]
   [ "$output" = "docs-only=false" ]
 }
+
+# checks.yml now passes github.event.before on a push, so the classifier sees
+# push-shaped ranges too. A merge to main that only moved docs must skip the
+# matrix exactly as the PR that preceded it did.
+@test "docs-only=true for a push-shaped range (previous tip -> new tip) of only docs/" {
+  commit_file "src/a.ts"
+  before=$(git -C "$repo" rev-parse HEAD)
+  commit_file "docs/guide.md"
+  commit_file "docs/other.md"
+  head=$(git -C "$repo" rev-parse HEAD)
+  cd "$repo" && run bash "$REPO_ROOT/scripts/ci/changed-class.sh" "$before" "$head"
+  [ "$status" -eq 0 ]
+  [ "$output" = "docs-only=true" ]
+}
+
+# `^LICENSE$` matched only the root copy, so a copyright bump across a
+# monorepo's per-package LICENSE files ran the whole native matrix.
+@test "docs-only=true for a per-package LICENSE, not just the root one" {
+  commit_file "other.txt"
+  base=$(git -C "$repo" rev-parse HEAD)
+  commit_file "LICENSE"
+  commit_file "packages/core/LICENSE"
+  head=$(git -C "$repo" rev-parse HEAD)
+  cd "$repo" && run bash "$REPO_ROOT/scripts/ci/changed-class.sh" "$base" "$head"
+  [ "$status" -eq 0 ]
+  [ "$output" = "docs-only=true" ]
+}
+
+@test "docs-only=false when a LICENSE-adjacent path is not a LICENSE file" {
+  commit_file "other.txt"
+  base=$(git -C "$repo" rev-parse HEAD)
+  commit_file "src/LICENSE.ts"
+  head=$(git -C "$repo" rev-parse HEAD)
+  cd "$repo" && run bash "$REPO_ROOT/scripts/ci/changed-class.sh" "$base" "$head"
+  [ "$status" -eq 0 ]
+  [ "$output" = "docs-only=false" ]
+}
+
+# github.event.before on the first push of a new branch. Failing open here
+# means docs-only=false and exit 0 - never an aborted step under `set -e`.
+@test "all-zero BASE fails open: docs-only=false, exit 0, with a notice" {
+  commit_file "docs/x.md"
+  head=$(git -C "$repo" rev-parse HEAD)
+  zero=0000000000000000000000000000000000000000
+  cd "$repo" && run bash "$REPO_ROOT/scripts/ci/changed-class.sh" "$zero" "$head"
+  [ "$status" -eq 0 ]
+  grep -qF "docs-only=false" <<<"$output" || fail "expected docs-only=false, got: $output"
+  grep -qF "::notice::" <<<"$output" || fail "expected a ::notice:: annotation, got: $output"
+}
+
+# A force-push or a shallow clone can leave the recorded base absent from the
+# checkout; `git diff` would exit non-zero and take the step with it.
+@test "unreachable BASE fails open: docs-only=false, exit 0, with a notice" {
+  commit_file "docs/x.md"
+  head=$(git -C "$repo" rev-parse HEAD)
+  missing=deadbeefdeadbeefdeadbeefdeadbeefdeadbeef
+  cd "$repo" && run bash "$REPO_ROOT/scripts/ci/changed-class.sh" "$missing" "$head"
+  [ "$status" -eq 0 ]
+  grep -qF "docs-only=false" <<<"$output" || fail "expected docs-only=false, got: $output"
+  grep -qF "::notice::" <<<"$output" || fail "expected a ::notice:: annotation, got: $output"
+}

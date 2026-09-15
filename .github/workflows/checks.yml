@@ -132,7 +132,14 @@ jobs:
       - name: Classify changed files
         id: classify
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          # One classifier for every event. `pull_request.base.sha` is empty on
+          # a push, so the old unconditional form classified only PRs and every
+          # merge to main ran the full matrix; `github.event.before` is the
+          # push's previous tip (all-zero on a branch's first push, which the
+          # script treats as "cannot classify" and fails open).
+          # Both operands of `&&` are non-empty, so the family's `cond && '' ||`
+          # pitfall (GitHub's `&&` yields its first falsy operand) cannot bite.
+          BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
           HEAD_SHA: ${{ github.sha }}
           # _EXTRA, not DOCS_GLOBS: the input is additive, so it must not
           # replace the built-in ^docs/|\.md$|... pattern.

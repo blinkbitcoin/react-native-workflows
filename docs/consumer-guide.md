@@ -37,7 +37,10 @@ name: ci
 on:
   push:
     branches: [main]
-    paths-ignore: [docs/**, "**.md"]
+    # No paths-ignore: it would be a second, narrower docs rule that already
+    # disagrees with the classifier's (it misses LICENSE and the issue/PR
+    # templates). checks.yml's `changes` job is the single source - it
+    # classifies pushes too, so a docs-only merge still skips unit and e2e.
   pull_request:
     types: [opened, synchronize, reopened, labeled]
   workflow_dispatch:
@@ -84,6 +87,19 @@ Notes:
   push after a merge should never be cancelled by the next one).
 - `docs-only` (from `checks.yml`'s `changes` job) lets `unit` and `e2e` skip
   entirely on a docs-only diff; wire it into any other downstream job you add.
+  A skipped job counts as passing for required checks, unlike a workflow that
+  never ran — which is exactly why the classifier, not the trigger, does the
+  skipping.
+- **No `paths-ignore` on `push`.** It used to be there, back when the
+  classifier only ever saw `pull_request.base.sha` and so classified nothing on
+  a push. `checks.yml` now derives its base from `github.event.before` on a
+  push, so one rule covers both events: a PR and the merge that follows it get
+  the same answer. A `paths-ignore` list would be a second, narrower docs rule
+  living next to it, and it already disagreed — it misses `LICENSE` and the
+  issue/PR templates, both of which the classifier counts as docs. Two rules
+  that disagree is worse than one rule, so the trigger fires on every push to
+  `main` and the `changes` job decides. Widen the docs definition with
+  `docs-globs`, never with a second list.
 
 ## `web.yml`, `pr-closed.yml`, `pr-title.yml` callers
 
@@ -234,11 +250,23 @@ mental model).
 | `actionlint` | `true` | Lint the consumer's `.github/workflows` |
 | `shellcheck` | `true` | Lint the consumer's `scripts/` |
 | `release-checks` | `false` | Install Ruby (`ruby/setup-ruby@v1`, `bundler-cache: true`) and run the consumer's `check:release` script — the Fastfile/Gemfile and release-config validation behind the template's `make check-release`. Off by default because a repo with no release setup has no such script |
-| `docs-only-detection` | `true` | Classify the PR as docs-only |
-| `docs-globs` | `''` | Extra `\|`-joined POSIX ERE alternatives **added to** the built-in docs pattern (`^docs/\|\.md$\|^LICENSE$\|^\.github/ISSUE_TEMPLATE/\|^\.github/PULL_REQUEST_TEMPLATE`), not a replacement for it |
+| `docs-only-detection` | `true` | Classify the change as docs-only — on a `pull_request` **and** on a `push` |
+| `docs-globs` | `''` | Extra `\|`-joined POSIX ERE alternatives **added to** the built-in docs pattern (`^docs/\|\.md$\|(^\|/)LICENSE$\|^\.github/ISSUE_TEMPLATE/\|^\.github/PULL_REQUEST_TEMPLATE`), not a replacement for it |
 
 Outputs: `docs-only` (`'true'` when every changed file matched the docs
 globs; empty when detection is disabled). Secrets: `consumer-token` (optional).
+
+The base of the diff is `github.event.pull_request.base.sha` on a
+`pull_request` and `github.event.before` on a `push`, so a PR and the merge
+that follows it are classified the same way — which is why a caller's `ci.yml`
+needs no `paths-ignore`. `LICENSE` matches anywhere in the tree, not just at
+the root, so a per-package copyright bump is docs too.
+
+The classifier **fails open**: when the range cannot be read at all — no base,
+the all-zero base of a branch's first push, or a base made unreachable by a
+force-push or a shallow clone — it emits `docs-only=false` and exits 0. The
+step stays green and the full pipeline runs; an unreadable diff is never read
+as "nothing but docs".
 
 ### `unit.yml`
 
@@ -1000,6 +1028,8 @@ each one lives so a future edit doesn't quietly regress it.
 | The AVD snapshot must have dialogs suppressed or the suite hangs on a first-boot dialog | `scripts/e2e/android-emulator.sh snapshot-bake` (`hide_error_dialogs 1`, `anr_show_background 0`), cache key suffix `-hidedialogs` documents the content, not a read value |
 | A crash-report scan must not pick up a stale crash from a previous job on the same runner | `scripts/e2e/collect-forensics.sh` filters iOS `DiagnosticReports` to files newer than `$RNW_RUN_START`, stamped once by `scripts/lib/e2e-env.sh` |
 | `docs-only` classification must use merge-base semantics, not raw two-dot diff, so a target-branch advance doesn't retroactively flip a PR to non-docs-only | `scripts/ci/changed-class.sh` (falls back to two-dot only when `git merge-base` itself fails, with a warning) |
+| One docs rule, not two: a caller's `paths-ignore` is a second, narrower list that drifts from the classifier's (it misses `LICENSE` and the issue/PR templates) | `checks.yml` derives `BASE_SHA` from `github.event.before` on a push, so `scripts/ci/changed-class.sh` classifies pushes too and the caller's `ci.yml` carries no `paths-ignore` |
+| An unclassifiable range must fail open, not abort the step under `set -euo pipefail` | `scripts/ci/changed-class.sh` guards an empty base, the all-zero base of a branch's first push and an unreachable base (`git cat-file -e`), each emitting `docs-only=false` and exiting 0 |
 | `sudo`-based Linux-runner scripts (free disk, KVM) must no-op safely everywhere else (macOS, a laptop, self-hosted with different env) | `scripts/ci/free-disk.sh` / `scripts/ci/enable-kvm.sh` guard on `GITHUB_ACTIONS=true && RUNNER_OS=Linux`, overridable with `RNW_FORCE_RUNNER_SCRIPTS=1` |
 | Forensics collection must never fail the job it's diagnosing | `scripts/e2e/collect-forensics.sh` (`set -uo pipefail`, no `-e`; explicit `exit 0`) |
 | E2E must never run against a production app id/scheme | `scripts/e2e/README.md`: "`APP_VARIANT` must not be `production` for E2E" |

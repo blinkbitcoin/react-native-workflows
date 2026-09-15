@@ -38,9 +38,9 @@ jobs:
     uses: blinkbitcoin/react-native-workflows/.github/workflows/e2e.yml@v0
 ```
 
-That is the trimmed version. The full one — `paths-ignore` on `push`,
-`workflow_dispatch`, the `labeled` PR type together with the `ios:` expression
-that is the only reason to have it, and the E2E mock-API hooks — is
+That is the trimmed version. The full one — `workflow_dispatch`, the `labeled`
+PR type together with the `ios:` expression that is the only reason to have it,
+and the E2E mock-API hooks — is
 [the consumer guide's `ci.yml`](docs/consumer-guide.md#consumer-ciyml), which is
 byte-identical to the first consumer's own caller and is kept that way by
 `test/consumer-contract.bats`.
