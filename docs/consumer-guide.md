@@ -352,6 +352,98 @@ above only adds `edited` (guarded by `github.event.changes.title != null`, since
 `on.workflow_call: {}` — no inputs, outputs or secrets. The caller must grant
 `permissions: actions: write` (on top of `contents: read`) for the cancel step.
 
+### `codeql.yml`
+
+| Input | Default | Meaning |
+| --- | --- | --- |
+| `repository`, `ref`, `linux-runner` | (as above) | — |
+| `working-directory` | `.` | Unused: CodeQL reads the whole checkout, and the config file's `paths-ignore` is what scopes it |
+| `macos-runner`, `native-cache-version` | (unused) | — |
+| `languages` | `javascript-typescript` | Comma-separated CodeQL languages; also the `category` the SARIF is uploaded under |
+| `config-file` | `./.github/codeql/codeql-config.yml` | Consumer-relative config: query suite, packs, `paths-ignore` |
+| `docs-globs` | `''` | Extra `\|`-joined POSIX ERE alternatives **added to** the built-in docs pattern, same as `checks.yml` |
+
+Outputs: `docs-only` (`'true'` when nothing but docs changed, so no analysis
+ran). Secrets: `consumer-token` (optional).
+
+Two jobs. `changes` runs the **same** classifier `checks.yml` does — the same
+`scripts/ci/changed-class.sh`, from the same `.rnw/` self-checkout, with a
+byte-identical `BASE_SHA` expression (`test/workflow-shape.bats` compares the
+two). `analyze` is gated on `docs-only != 'true'` and runs
+`github/codeql-action/init@v4` + `analyze@v4` with no build step: JS/TS is
+extracted from source. Permissions escalate on `analyze` only — `actions: read`
+for the workflow metadata and `security-events: write` for the SARIF upload,
+with `contents: read` re-declared because naming `permissions:` at all resets
+the scopes you do not name.
+
+A `schedule` event has no base sha, so the classifier fails open with
+`docs-only=false` and everything is analysed. That is the point of a weekly
+cron: a query published since the last push gets to run against an idle `main`.
+
+A caller wires it up like this — note the absence of `paths-ignore`, which would
+be a second, narrower docs rule beside the `changes` job (the same defect the
+family removed from `ci.yml`):
+
+```yaml
+# .github/workflows/codeql.yml
+name: codeql
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '17 6 * * 1'
+permissions:
+  contents: read
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  codeql:
+    uses: blinkbitcoin/react-native-workflows/.github/workflows/codeql.yml@v0
+```
+
+The calling job needs no `permissions:` block of its own: a reusable workflow's
+job-level `permissions:` is what the job actually gets, and this one declares
+all three scopes it needs.
+
+**Leave this out of the required-checks ruleset.** CodeQL here is
+informational: a pack download that times out, or an org-level Advanced
+Security toggle that is off, must not be able to block a merge. On a private
+repository the analysis needs GitHub Advanced Security enabled at the org
+level; on a public one it is free.
+
+#### The config file, and why an inline marker beats a dismissal
+
+The consumer owns `.github/codeql/codeql-config.yml`. Two entries carry the
+weight:
+
+```yaml
+queries:
+  - uses: security-and-quality
+packs:
+  - codeql/javascript-queries:AlertSuppression.ql
+```
+
+`AlertSuppression.ql` is what makes an inline
+
+```ts
+// codeql[js/some-rule-id]
+```
+
+comment — alone on its line, covering the line below it — actually suppress one
+finding. **Without that pack the marker is silently ignored**: the comment sits
+in the file looking like it works while the alert keeps re-opening (esign lost
+three rounds to the same JWT false positive that way).
+
+Prefer a marker over dismissing the alert through the API or the UI. A
+dismissal is keyed to the alert's fingerprint, so it evaporates the next time
+the file moves or the surrounding lines shift, and it is invisible in review. A
+marker travels with the code, is reviewed with the diff that adds it, and
+silences exactly one site rather than the whole query — a real finding of the
+same rule somewhere else still shows up.
+
 ## Release workflows
 
 Six more reusable workflows cover the release path: version/notes preparation,

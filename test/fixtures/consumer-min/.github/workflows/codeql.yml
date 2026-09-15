@@ -1,0 +1,16 @@
+name: codeql
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '17 6 * * 1'
+permissions:
+  contents: read
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  codeql:
+    uses: blinkbitcoin/react-native-workflows/.github/workflows/codeql.yml@v0

@@ -64,6 +64,7 @@ the exact ref/sha that defines the running job, then runs its scripts through
 | `web.yml` | Expo web export, Playwright suite, GitHub Pages deploy |
 | `pr-closed.yml` | cancels in-flight runs for a closed PR's head sha |
 | `pr-title.yml` | Conventional Commits lint on the PR title |
+| `codeql.yml` | CodeQL advanced setup: the consumer's query suite and config, gated on the same docs-only classifier; informational, never a required check |
 | `expo-prepare.yml` | resolves version/build number, fingerprints, `build-info.json` + store notes as the `release-meta` artifact (from a release body when given a `release-tag`) |
 | `expo-build-ios.yml` | prebuild, pods, `fastlane ios build`/`verify`, uploads `ios-ipa` + `ios-dsym` |
 | `expo-build-android.yml` | prebuild, `fastlane android build`/`verify`, uploads `android-aab`, `android-apk`, `android-mapping` |

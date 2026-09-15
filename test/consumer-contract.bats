@@ -94,9 +94,13 @@ guide_yaml_block() {
 }
 
 @test "the guide's caller examples match the fixture's workflow files byte for byte" {
-  n=0
-  for wf in ci web pr-closed pr-title; do
-    n=$((n + 1))
+  # `name:block` rather than a running counter: the guide has ```yaml blocks
+  # that are not caller examples (the secrets-policy snippet is block 5), so the
+  # index and the position in this list stopped being the same number once
+  # codeql.yml's section landed further down the page.
+  for spec in ci:1 web:2 pr-closed:3 pr-title:4 codeql:6; do
+    wf="${spec%:*}"
+    n="${spec##*:}"
     file="$FIXTURES/consumer-min/.github/workflows/$wf.yml"
     [ -f "$file" ] || fail "missing fixture caller $file"
     diff -u "$file" <(guide_yaml_block "$n") \
@@ -132,6 +136,25 @@ on_block() {
 # The guide's `docs-globs` row restates changed-class.sh's default pattern by
 # hand, with markdown pipe escaping. Two hand-maintained copies of a regex is
 # exactly the kind of drift this suite exists to catch.
+# Same rule as ci.yml above, for the same reason: codeql.yml's `changes` job is
+# the single docs classifier, so a `paths-ignore` on the caller's triggers would
+# be a second, narrower copy of it. esign's caller still carries one; ours must
+# not grow one back. The schedule trigger is asserted too - it is what makes a
+# newly published query re-scan an idle main, and it is the one trigger a
+# reviewer is most likely to think is redundant.
+@test "the consumer's codeql.yml has no paths-ignore and keeps its weekly schedule" {
+  require_consumer
+  file="$CONSUMER/.github/workflows/codeql.yml"
+  [ -f "$file" ] || fail "no codeql.yml at $file"
+  block="$(on_block "$file")"
+  [ "$(grep -c . <<<"$block")" -ge 5 ] \
+    || fail "read no trigger block from $file - the parser or the file shape changed"
+  ! grep -q 'paths-ignore' <<<"$block" \
+    || fail "$file's triggers carry a paths-ignore, a second docs rule beside codeql.yml's classifier"
+  grep -q 'schedule' <<<"$block" \
+    || fail "$file has no schedule trigger, so a new query never re-scans an idle main"
+}
+
 @test "the guide's docs-globs row quotes changed-class.sh's default pattern" {
   script=$(sed -n "s/^default_docs_globs='\(.*\)'$/\1/p" "$REPO_ROOT/scripts/ci/changed-class.sh")
   [ -n "$script" ] || fail "could not read default_docs_globs from scripts/ci/changed-class.sh"
@@ -146,7 +169,7 @@ on_block() {
 @test "every workflow_call input is documented in the guide's table for that workflow" {
   command -v yq >/dev/null || skip "yq not installed"
   missing=()
-  for wf in checks unit e2e web pr-title \
+  for wf in checks unit e2e web pr-title codeql \
     expo-prepare expo-build-ios expo-build-android \
     fastlane-lane github-release expo-ota-publish; do
     file="$REPO_ROOT/.github/workflows/$wf.yml"

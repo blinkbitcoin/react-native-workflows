@@ -1,0 +1,129 @@
+name: codeql
+# Advanced-setup CodeQL rather than GitHub's Default setup: the query suite,
+# the path exclusions and the alert-suppression mechanism then live in the
+# consumer's repository as reviewable files, instead of in a settings page.
+#
+# Informational by design. A caller must NOT make this a required check: a
+# runner hiccup or a transient pack download must never block a merge. Alerts
+# land under Security -> Code scanning.
+on:
+  workflow_call:
+    inputs:
+      repository:
+        description: Consumer repository to check out (defaults to the caller's repository)
+        type: string
+        default: ''
+      ref:
+        description: Consumer ref to check out (empty lets actions/checkout resolve the correct ref, including PR merge refs)
+        type: string
+        default: ''
+      working-directory:
+        description: Consumer directory relative to GITHUB_WORKSPACE (unused by this workflow; CodeQL reads the whole checkout and the config file's paths-ignore scopes it)
+        type: string
+        default: '.'
+      linux-runner:
+        description: Runner label for every job in this workflow
+        type: string
+        default: 'ubuntu-latest'
+      macos-runner:
+        description: Runner label for macOS jobs (unused by this workflow; carried for input-set consistency across the family)
+        type: string
+        default: 'macos-26'
+      native-cache-version:
+        description: Native cache key prefix (unused by this workflow; carried for input-set consistency across the family)
+        type: string
+        default: 'v1'
+      languages:
+        description: Comma-separated CodeQL languages to analyze
+        type: string
+        default: 'javascript-typescript'
+      config-file:
+        description: Consumer-relative CodeQL config file (query suite, packs, paths-ignore)
+        type: string
+        default: './.github/codeql/codeql-config.yml'
+      docs-globs:
+        description: Extra regex alternatives (POSIX ERE, '|'-joined) added to the built-in docs pattern for docs-only detection
+        type: string
+        default: ''
+    secrets:
+      consumer-token:
+        description: PAT with read access to a private consumer repository; falls back to the caller's github.token (works for a public consumer)
+        required: false
+    outputs:
+      docs-only:
+        description: "'true' when every changed file matched the docs globs, so no analysis ran"
+        value: ${{ jobs.changes.outputs.docs-only }}
+permissions:
+  contents: read
+jobs:
+  changes:
+    runs-on: ${{ inputs.linux-runner }}
+    timeout-minutes: 5
+    outputs:
+      docs-only: ${{ steps.classify.outputs.docs-only }}
+    steps:
+      - name: Checkout consumer
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ inputs.repository || github.repository }}
+          ref: ${{ inputs.ref }}
+          token: ${{ secrets.consumer-token || github.token }}
+          fetch-depth: 0
+      # No setup here, exactly as in checks.yml: changed-class.sh is pure git,
+      # so this job reaches it through the plain .rnw checkout ($RNW is
+      # published by the setup action, which never runs in this job).
+      - name: Checkout react-native-workflows
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .rnw
+          persist-credentials: false
+      - name: Classify changed files
+        id: classify
+        env:
+          # Byte-identical to checks.yml's expression on purpose: the classifier
+          # is the family's single source for "is this docs-only", and a second
+          # spelling of the base sha is a second rule. On a `schedule` event both
+          # operands are empty, the script logs "no base sha" and fails open with
+          # docs-only=false - which is exactly what the weekly re-scan of an idle
+          # main is for.
+          BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+          DOCS_GLOBS_EXTRA: ${{ inputs.docs-globs }}
+        run: bash ".rnw/scripts/ci/changed-class.sh" "$BASE_SHA" "$HEAD_SHA"
+  analyze:
+    needs: [changes]
+    # Nothing to analyse when no code moved. CodeQL is informational and must
+    # not be a required check, so a skip here blocks nothing.
+    if: ${{ needs.changes.outputs.docs-only != 'true' }}
+    runs-on: ${{ inputs.linux-runner }}
+    timeout-minutes: 30
+    # Naming `permissions:` at all resets the unnamed scopes to none, so
+    # `contents: read` is re-declared here or the checkout below loses it.
+    permissions:
+      contents: read
+      actions: read # workflow metadata for the SARIF upload
+      security-events: write # upload the SARIF results
+    steps:
+      # No .rnw checkout: this job runs no scripts of ours, and a second
+      # repository in the workspace would be extracted into the database.
+      - name: Checkout consumer
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ inputs.repository || github.repository }}
+          ref: ${{ inputs.ref }}
+          token: ${{ secrets.consumer-token || github.token }}
+      # No build step: JS/TS is extracted from source, so autobuild is not used.
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ inputs.languages }}
+          # The suite, the alert-suppression pack (what makes an inline
+          # `// codeql[rule-id]` marker count) and the path exclusions all live
+          # in the consumer's config file, so local and CI cannot diverge.
+          config-file: ${{ inputs.config-file }}
+      - name: Analyze
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: /language:${{ inputs.languages }}

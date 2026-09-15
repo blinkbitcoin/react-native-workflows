@@ -20,7 +20,7 @@ setup() {
 # deleted or renamed would otherwise just shrink WORKFLOWS and every other
 # assertion here would still pass.
 @test "every reusable workflow this family publishes is present" {
-  for w in checks unit e2e web pr-closed pr-title \
+  for w in checks unit e2e web pr-closed pr-title codeql \
     expo-prepare expo-build-ios expo-build-android \
     fastlane-lane github-release expo-ota-publish; do
     [ -f "$REPO_ROOT/.github/workflows/$w.yml" ] || {
@@ -72,6 +72,53 @@ setup() {
   # expression did, and it classified nothing on a push.
   grep -qF "github.event_name == 'pull_request'" <<<"$expr" \
     || fail "BASE_SHA must branch on github.event_name: $expr"
+}
+
+# codeql.yml asks the same question checks.yml does, and "the same" has to mean
+# character-for-character: two spellings of the base sha are two rules, and the
+# second one drifts. Comparing the two expressions is cheaper than restating the
+# right answer twice.
+@test "codeql.yml's BASE_SHA expression is byte-identical to checks.yml's" {
+  command -v yq >/dev/null || skip "yq not installed"
+  read_base_sha() {
+    yq -r '.jobs.changes.steps[] | select(.id == "classify") | .env.BASE_SHA // ""' \
+      "$REPO_ROOT/.github/workflows/$1.yml"
+  }
+  checks=$(read_base_sha checks)
+  codeql=$(read_base_sha codeql)
+  [ -n "$codeql" ] || fail "no BASE_SHA env on codeql.yml's classify step"
+  [ "$codeql" = "$checks" ] \
+    || fail "codeql.yml classifies with '$codeql' but checks.yml uses '$checks'"
+}
+
+# The whole point of the changes job: a docs-only change analyses nothing, and
+# a scheduled run (no base at all) analyses everything.
+@test "codeql.yml's analyze job is gated on the classifier" {
+  command -v yq >/dev/null || skip "yq not installed"
+  f="$REPO_ROOT/.github/workflows/codeql.yml"
+  cond=$(yq -r '.jobs.analyze.if' "$f")
+  [[ "$cond" == *"needs.changes.outputs.docs-only != 'true'"* ]] \
+    || fail "analyze's if does not gate on the classifier: $cond"
+  needs=$(yq -r '.jobs.analyze.needs | join(",")' "$f")
+  [ "$needs" = "changes" ] || fail "analyze needs '$needs', expected changes"
+}
+
+# The escalation is on the analyze job alone, and naming `permissions:` resets
+# the unnamed scopes to none - so dropping contents: read would break the
+# checkout rather than the upload. All three are asserted, and nothing more.
+@test "codeql.yml escalates permissions only on the analyze job" {
+  command -v yq >/dev/null || skip "yq not installed"
+  f="$REPO_ROOT/.github/workflows/codeql.yml"
+  [ "$(yq -r '.jobs.analyze.permissions.contents' "$f")" = "read" ] \
+    || fail "analyze does not re-declare contents: read"
+  [ "$(yq -r '.jobs.analyze.permissions.actions' "$f")" = "read" ] \
+    || fail "analyze does not declare actions: read"
+  [ "$(yq -r '.jobs.analyze.permissions."security-events"' "$f")" = "write" ] \
+    || fail "analyze does not declare security-events: write"
+  [ "$(yq -r '.jobs.analyze.permissions | keys | length' "$f")" -eq 3 ] \
+    || fail "analyze asks for more than three scopes: $(yq -r '.jobs.analyze.permissions' "$f")"
+  [ "$(yq -r '.jobs.changes | has("permissions")' "$f")" = "false" ] \
+    || fail "the changes job escalates permissions; only analyze may"
 }
 
 # The head half of the same range. changed-class.bats covers what the script
