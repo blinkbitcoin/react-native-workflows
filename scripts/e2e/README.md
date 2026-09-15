@@ -86,6 +86,16 @@ metro-start.sh → metro-wait.sh android
 - The Maestro suite is retried once on a real failure, never after a 124: a hung
   driver only burns the step's `timeout-minutes` a second time.
 - `collect-forensics.sh` always exits 0.
+- `metro-wait.sh` prewarms **the** bundle the app will ask for, not a
+  lookalike: it reads `launchAsset.url` out of the dev server's manifest
+  (`GET /` with `expo-platform` and `accept: application/json`) and re-anchors
+  its path on the local base. Metro keys its graph cache on the full option set
+  in the URL, so a hand-built one that omits `transform.bytecode`,
+  `transform.routerRoot` or `unstable_transformProfile` warms a second graph
+  and the first real launch still builds from cold. Without `jq`, or when the
+  manifest cannot be read, it falls back to the hand-built URL behind a
+  `::warning::`. Evidence it worked: one `Bundled` line in `metro.log` for the
+  prewarm, and a first launch served in tens of milliseconds.
 - Stop Metro with `kill -TERM -"$(cat "$RNW_OUT/metro.pid")"` (note the leading
   `-`: the pid is a process-group id). Killing the pid alone reaps the pnpm
   wrapper and leaves node holding the port.

@@ -1,0 +1,15 @@
+{
+  "id": "6e2cbbd1-0f0a-4a0e-9f2e-2a3bd1a0c9f1",
+  "createdAt": "2026-09-15T10:00:00.000Z",
+  "runtimeVersion": "exposdk:54.0.0",
+  "launchAsset": {
+    "key": "bundle",
+    "contentType": "application/javascript",
+    "url": "http://192.168.1.42:8081/.expo/.virtual-metro-entry.bundle?platform=ios&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.bytecode=1&transform.routerRoot=app&unstable_transformProfile=hermes-stable"
+  },
+  "assets": [],
+  "metadata": {},
+  "extra": {
+    "expoClient": { "slug": "rnw-fixture", "hostUri": "192.168.1.42:8081" }
+  }
+}
