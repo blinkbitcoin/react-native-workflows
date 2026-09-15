@@ -5,7 +5,11 @@
 #      row to the guide immediately becomes an assertion;
 #   2. every input a reusable workflow declares is documented in that workflow's
 #      own section of the guide;
-#   3. the guide's four caller examples are the files a consumer actually ships.
+#   3. the guide's four caller examples are the files a consumer actually ships;
+#   4. the real consumer's `ci.yml` keeps the fixture's trigger block, so a
+#      `paths-ignore` cannot come back as a second docs rule beside the
+#      classifier. (3) compares the guide to the fixture only — it would not
+#      catch that on its own.
 # Runs against test/fixtures/consumer-min by default, so all of this is asserted
 # on every push including self-ci. Set RNW_CONSUMER_ROOT to a real consumer
 # checkout (e.g. a react-native-mobile-template clone) to assert against that
@@ -98,6 +102,45 @@ guide_yaml_block() {
     diff -u "$file" <(guide_yaml_block "$n") \
       || fail "the guide's $wf.yml example has drifted from $file"
   done
+}
+
+# Everything from `on:` up to the next top-level key.
+on_block() {
+  awk '/^on:/ { inside = 1; print; next }
+       inside && /^[^[:space:]#]/ { exit }
+       inside { print }' "$1"
+}
+
+# The byte-identity case above compares the guide to the FIXTURE, and says
+# nothing about the real consumer - whose ci.yml legitimately diverges further
+# down (`release-checks: true`), so a whole-file diff is not available. The
+# `on:` block is the part that must not diverge: a `paths-ignore` there is a
+# second, narrower docs rule competing with checks.yml's classifier, which is
+# the exact defect PR 3 removed and the one thing nothing else here would
+# notice coming back.
+@test "the consumer's ci.yml trigger block matches the fixture's (no paths-ignore)" {
+  require_consumer
+  file="$CONSUMER/.github/workflows/ci.yml"
+  [ -f "$file" ] || fail "no ci.yml at $file"
+  fixture="$FIXTURES/consumer-min/.github/workflows/ci.yml"
+  [ "$(grep -c . <<<"$(on_block "$fixture")")" -ge 5 ] \
+    || fail "read no trigger block from $fixture - the parser or the file shape changed"
+  diff -u <(on_block "$fixture") <(on_block "$file") \
+    || fail "$file's trigger block has drifted from the fixture's; a paths-ignore here would be a second docs rule competing with checks.yml's classifier"
+}
+
+# The guide's `docs-globs` row restates changed-class.sh's default pattern by
+# hand, with markdown pipe escaping. Two hand-maintained copies of a regex is
+# exactly the kind of drift this suite exists to catch.
+@test "the guide's docs-globs row quotes changed-class.sh's default pattern" {
+  script=$(sed -n "s/^default_docs_globs='\(.*\)'$/\1/p" "$REPO_ROOT/scripts/ci/changed-class.sh")
+  [ -n "$script" ] || fail "could not read default_docs_globs from scripts/ci/changed-class.sh"
+  # The row's first backticked run starting with ^docs/, with \| unescaped.
+  row=$(grep -F '| `docs-globs` |' "$GUIDE" | head -1)
+  [ -n "$row" ] || fail "no docs-globs row in $GUIDE"
+  quoted=$(grep -oE '`\^docs/[^`]*`' <<<"$row" | head -1 | tr -d '`' | sed 's/\\|/|/g')
+  [ "$quoted" = "$script" ] \
+    || fail "the guide's docs-globs row quotes '$quoted' but changed-class.sh defaults to '$script'"
 }
 
 @test "every workflow_call input is documented in the guide's table for that workflow" {

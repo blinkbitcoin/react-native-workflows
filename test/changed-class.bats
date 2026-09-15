@@ -104,17 +104,27 @@ commit_file() {
   [ "$output" = "docs-only=false" ]
 }
 
-@test "docs-only=false when BASE is empty (push event)" {
+# workflow_dispatch (and, once PR 9 adds one, schedule) carries no base at all.
+# It fails open like the other unclassifiable paths, and says so: a maintainer
+# looking at a full matrix has to be able to tell "could not classify" from
+# "really not docs".
+@test "docs-only=false when BASE is empty (dispatch-shaped event), with a notice" {
   commit_file "docs/x.md"
   head=$(git -C "$repo" rev-parse HEAD)
   cd "$repo" && run bash "$REPO_ROOT/scripts/ci/changed-class.sh" "" "$head"
   [ "$status" -eq 0 ]
-  [ "$output" = "docs-only=false" ]
+  grep -qF "docs-only=false" <<<"$output" || fail "expected docs-only=false, got: $output"
+  grep -qF "::notice::" <<<"$output" || fail "expected a ::notice:: annotation, got: $output"
 }
 
 # checks.yml now passes github.event.before on a push, so the classifier sees
 # push-shaped ranges too. A merge to main that only moved docs must skip the
 # matrix exactly as the PR that preceded it did.
+#
+# Honest label: this case is documentation, not a guard. The script never cared
+# which event produced its two shas, so it passes against the pre-fix script
+# too. What actually has to hold is the BASE_SHA expression, and that is pinned
+# by workflow-shape.bats ("checks.yml classifies pushes too").
 @test "docs-only=true for a push-shaped range (previous tip -> new tip) of only docs/" {
   commit_file "src/a.ts"
   before=$(git -C "$repo" rev-parse HEAD)
@@ -163,12 +173,36 @@ commit_file() {
 
 # A force-push or a shallow clone can leave the recorded base absent from the
 # checkout; `git diff` would exit non-zero and take the step with it.
-@test "unreachable BASE fails open: docs-only=false, exit 0, with a notice" {
+@test "absent BASE fails open: docs-only=false, exit 0, with a notice" {
   commit_file "docs/x.md"
   head=$(git -C "$repo" rev-parse HEAD)
   missing=deadbeefdeadbeefdeadbeefdeadbeefdeadbeef
   cd "$repo" && run bash "$REPO_ROOT/scripts/ci/changed-class.sh" "$missing" "$head"
   [ "$status" -eq 0 ]
   grep -qF "docs-only=false" <<<"$output" || fail "expected docs-only=false, got: $output"
-  grep -qF "::notice::" <<<"$output" || fail "expected a ::notice:: annotation, got: $output"
+  grep -qF "::notice::base $missing" <<<"$output" || fail "expected a notice naming the base, got: $output"
+}
+
+# The head half of the range is just as able to be absent: HEAD_SHA is
+# github.sha, a commit of the *workflow's* repository, while the changes job
+# checks out inputs.repository at inputs.ref. A consumer that overrides either
+# hands the script a sha this checkout has never seen - and the step must stay
+# green, since "never fails the build" is this job's whole contract.
+@test "absent HEAD fails open: docs-only=false, exit 0, with a notice" {
+  commit_file "docs/x.md"
+  base=$(git -C "$repo" rev-parse HEAD)
+  missing=deadbeefdeadbeefdeadbeefdeadbeefdeadbeef
+  cd "$repo" && run bash "$REPO_ROOT/scripts/ci/changed-class.sh" "$base" "$missing"
+  [ "$status" -eq 0 ]
+  grep -qF "docs-only=false" <<<"$output" || fail "expected docs-only=false, got: $output"
+  grep -qF "::notice::head $missing" <<<"$output" || fail "expected a notice naming the head, got: $output"
+}
+
+@test "all-zero HEAD fails open too" {
+  commit_file "docs/x.md"
+  base=$(git -C "$repo" rev-parse HEAD)
+  zero=0000000000000000000000000000000000000000
+  cd "$repo" && run bash "$REPO_ROOT/scripts/ci/changed-class.sh" "$base" "$zero"
+  [ "$status" -eq 0 ]
+  grep -qF "docs-only=false" <<<"$output" || fail "expected docs-only=false, got: $output"
 }

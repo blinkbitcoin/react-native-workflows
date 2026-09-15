@@ -99,7 +99,16 @@ Notes:
   issue/PR templates, both of which the classifier counts as docs. Two rules
   that disagree is worse than one rule, so the trigger fires on every push to
   `main` and the `changes` job decides. Widen the docs definition with
-  `docs-globs`, never with a second list.
+  `docs-globs`, never with a second list. `test/consumer-contract.bats` holds
+  your `ci.yml`'s trigger block to the fixture's, so a `paths-ignore` cannot
+  come back unnoticed.
+- **What a docs-only change still costs.** Only `unit` and `e2e` skip.
+  `checks.yml`'s own `code` job has no `docs-only` gate, so a documentation
+  push to `main` still runs typecheck, lint, format, knip, spell and audit —
+  which is the point: those are the checks a documentation change can break
+  (a typo, a reflowed table, a dead link in a doc knip tracks). Before this
+  trigger lost its `paths-ignore` the workflow did not run at all on such a
+  push, so it also never caught them.
 
 ## `web.yml`, `pr-closed.yml`, `pr-title.yml` callers
 

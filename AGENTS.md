@@ -58,9 +58,12 @@ Every row is a make target; nothing here is run through a package manager.
 - **The consumer guide is the contract.** Adding, renaming or re-defaulting a
   workflow input, output or secret without the matching
   `docs/consumer-guide.md` row is a breaking change shipped silently.
-  `test/consumer-contract.bats` holds the guide, the fixtures under
-  `test/fixtures/consumer-min/` and the first consumer's real callers
-  byte-identical — when it fails, all copies move together or none do.
+  `test/consumer-contract.bats` holds the guide and the fixtures under
+  `test/fixtures/consumer-min/` byte-identical — when it fails, both copies
+  move together or neither does. A real consumer passes inputs of its own, so
+  it is held to the fixture only where it must not diverge: its `ci.yml`
+  trigger block, which is where a second docs rule (`paths-ignore`) would creep
+  back in beside `checks.yml`'s classifier.
 - **Shell lives in `scripts/`, never inline in a workflow.** A `run:` block of
   more than a couple of lines is unshellcheckable, untestable and unreadable in
   a run log; give it a file under the matching `scripts/<area>/` and a bats

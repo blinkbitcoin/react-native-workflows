@@ -27,7 +27,10 @@ fi
 # the caller runs the full pipeline. Under `set -euo pipefail` an abort here
 # would fail the step instead, and a red Checks job is a worse answer than a
 # needlessly complete matrix. An unreadable diff must never read as "docs".
+# Each path says why on stderr as a ::notice::, so a maintainer looking at a
+# full matrix can tell "could not classify" from "really not docs".
 if [ -z "$base" ]; then
+  log "::notice::no base sha for this event - running everything"
   gh_output docs-only false
   exit 0
 fi
@@ -43,10 +46,23 @@ case "$base" in
     ;;
 esac
 
-# A force-push can leave the recorded base unreachable, and a shallow clone can
-# leave it absent. `git diff` would then exit non-zero and take the step with it.
+# Both ends of the range have to be objects in THIS checkout, or `git diff`
+# exits non-zero and takes the step with it:
+#   - base: a force-push can strand the recorded `before`, and a shallow clone
+#     may never have fetched it;
+#   - head: `$HEAD_SHA` is `github.sha`, which names a commit of the *workflow's*
+#     repository, while the `changes` job checks out `inputs.repository` at
+#     `inputs.ref` - so a consumer that overrides either hands us a sha this
+#     repository has never seen.
+# `cat-file -e` tests that the object is PRESENT, not that it is reachable from
+# a ref; a dangling commit git has not gc'd yet passes and then diffs fine.
 if ! git cat-file -e "$base^{commit}" 2>/dev/null; then
-  log "::notice::base $base is not reachable in this checkout - running everything"
+  log "::notice::base $base is not present in this checkout - running everything"
+  gh_output docs-only false
+  exit 0
+fi
+if ! git cat-file -e "$head^{commit}" 2>/dev/null; then
+  log "::notice::head $head is not present in this checkout - running everything"
   gh_output docs-only false
   exit 0
 fi

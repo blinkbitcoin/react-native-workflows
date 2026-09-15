@@ -53,6 +53,38 @@ setup() {
   done
 }
 
+# The single-source rule has exactly one line of code behind it: the BASE_SHA
+# expression. Reverting it to a bare `github.event.pull_request.base.sha` leaves
+# the classifier blind on a push, which is the defect this family fixed - and
+# the caller's `paths-ignore`, which used to mask it, has been removed on
+# purpose, so the regression would now be silent AND unmasked.
+@test "checks.yml classifies pushes too: BASE_SHA names both base.sha and event.before" {
+  command -v yq >/dev/null || skip "yq not installed"
+  expr=$(yq -r '.jobs.changes.steps[] | select(.id == "classify") | .env.BASE_SHA // ""' \
+    "$REPO_ROOT/.github/workflows/checks.yml")
+  [ -n "$expr" ] || fail "no BASE_SHA env on checks.yml's classify step"
+  grep -qF 'github.event.pull_request.base.sha' <<<"$expr" \
+    || fail "BASE_SHA must use the PR base on a pull_request: $expr"
+  grep -qF 'github.event.before' <<<"$expr" \
+    || fail "BASE_SHA must fall back to github.event.before so a push is classified too: $expr"
+  # The fallback has to be reached by branching on the event, not by relying on
+  # base.sha being empty - relying on that is exactly what the pre-fix
+  # expression did, and it classified nothing on a push.
+  grep -qF "github.event_name == 'pull_request'" <<<"$expr" \
+    || fail "BASE_SHA must branch on github.event_name: $expr"
+}
+
+# The head half of the same range. changed-class.bats covers what the script
+# does when either end is absent from the consumer's checkout.
+@test "checks.yml's classify step passes both ends of the range to the script" {
+  command -v yq >/dev/null || skip "yq not installed"
+  run yq -r '.jobs.changes.steps[] | select(.id == "classify") | .run' \
+    "$REPO_ROOT/.github/workflows/checks.yml"
+  [ "$status" -eq 0 ]
+  grep -qF '"$BASE_SHA" "$HEAD_SHA"' <<<"$output" \
+    || fail "classify must call changed-class.sh with BASE_SHA and HEAD_SHA: $output"
+}
+
 lane_step_count() {
   yq -r '[.jobs[].steps[]? | select((.run? // "") | test("release/fastlane.sh"))] | length' "$1"
 }

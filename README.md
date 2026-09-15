@@ -40,10 +40,12 @@ jobs:
 
 That is the trimmed version. The full one — `workflow_dispatch`, the `labeled`
 PR type together with the `ios:` expression that is the only reason to have it,
-and the E2E mock-API hooks — is
-[the consumer guide's `ci.yml`](docs/consumer-guide.md#consumer-ciyml), which is
-byte-identical to the first consumer's own caller and is kept that way by
-`test/consumer-contract.bats`.
+and the E2E mock-API hooks — is [the consumer guide's
+`ci.yml`](docs/consumer-guide.md#consumer-ciyml), which is byte-identical to
+`test/fixtures/consumer-min/`'s caller and is kept that way by
+`test/consumer-contract.bats`. A real consumer adds inputs of its own (the
+template passes `release-checks: true`), so only its **trigger block** is held
+to the fixture — that is the half a second docs rule would creep back into.
 
 Every job checks your app out, then checks *this repo* out into `.rnw/` at
 the exact ref/sha that defines the running job, then runs its scripts through
