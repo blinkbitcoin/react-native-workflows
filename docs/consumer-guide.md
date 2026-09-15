@@ -426,14 +426,34 @@ packs:
   - codeql/javascript-queries:AlertSuppression.ql
 ```
 
+**If you pass more than one language**, two things in this shape stop being
+right, and neither fails loudly:
+
+- A **top-level `packs:` list is only valid for a single-language analysis**.
+  With two or more languages CodeQL wants the list keyed by language
+  (`packs: {javascript: [...], python: [...]}`), and `AlertSuppression.ql` above
+  is the *JavaScript* pack's query — each language needs its own.
+- The workflow's upload `category` is `/language:${{ inputs.languages }}`, so a
+  comma-separated input produces one category like
+  `/language:javascript-typescript,python`. Code scanning expects one category
+  per language, so a multi-language consumer should call this workflow once per
+  language (a matrix in the caller) rather than passing a list.
+
+The template passes one language and hits neither.
+
 `AlertSuppression.ql` is what makes an inline
 
 ```ts
+// Why this cannot happen here.
 // codeql[js/some-rule-id]
+const value = untrusted;
 ```
 
-comment — alone on its line, covering the line below it — actually suppress one
-finding. **Without that pack the marker is silently ignored**: the comment sits
+marker actually suppress one finding. A marker alone on its line covers that
+line **and the one immediately below it**, so it has to be the last line before
+the code: the reason belongs *above* the marker. Putting it between the marker
+and the code makes the marker cover the reason, and the finding quietly stays
+open. **Without that pack the marker is ignored either way**: the comment sits
 in the file looking like it works while the alert keeps re-opening (esign lost
 three rounds to the same JWT false positive that way).
 
