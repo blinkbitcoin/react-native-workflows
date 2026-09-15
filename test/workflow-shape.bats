@@ -394,6 +394,57 @@ TEMPLATE_LANES="$FIXTURES/consumer-min/fastlane/lanes/shared.rb"
   done
 }
 
+# The audit step's three-part policy, pinned because each part has already
+# failed somewhere in the family:
+#
+#   * `timeout-minutes` is the bound on a stalling advisories/bulk request;
+#   * `continue-on-error` is what makes the audit advisory on a PR and blocking
+#     on a push, and it must read the toggle, not just the event;
+#   * the fetch timeout must live on the *step*. esign aebdd28: a 60s
+#     NPM_CONFIG_FETCH_TIMEOUT set at workflow level for an installer's cold
+#     path was inherited by the audit step, silently overrode its 5-minute
+#     budget, and turned main red at 61s. Hoisting these two variables up to
+#     `env:` at workflow or job level is therefore the exact regression to
+#     catch: it looks like tidying and it re-arms that bug for any caller that
+#     sets a smaller value upstream.
+@test "checks.yml's audit step keeps its timeout, its soft-on-PR expression and a step-level fetch timeout" {
+  command -v yq >/dev/null || skip "yq not installed"
+  f="$REPO_ROOT/.github/workflows/checks.yml"
+  step='.jobs.code.steps[] | select(.name == "Audit")'
+
+  found=$(yq -r "[$step] | length" "$f")
+  [ "$found" -eq 1 ] || fail "expected exactly one 'Audit' step in checks.yml's code job, found $found"
+
+  t=$(yq -r "$step | .\"timeout-minutes\" // \"\"" "$f")
+  [ "$t" = "5" ] || fail "the Audit step must carry timeout-minutes: 5, got '$t'"
+
+  coe=$(yq -r "$step | .\"continue-on-error\" // \"\"" "$f")
+  grep -qF 'inputs.audit-soft-on-pr' <<<"$coe" \
+    || fail "continue-on-error must read the audit-soft-on-pr input: $coe"
+  grep -qF "github.event_name == 'pull_request'" <<<"$coe" \
+    || fail "continue-on-error must stay hard off a pull_request: $coe"
+
+  # PNPM_CONFIG_ is the one that does the work (audit.sh runs `pnpm audit`, and
+  # pnpm 11/12 read PNPM_CONFIG_*, not npm_config_*); NPM_CONFIG_ covers any
+  # npm/npx call in the same step. Both must exceed the 5-minute bound above,
+  # or the request dies inside the step budget instead of using it.
+  for v in PNPM_CONFIG_FETCH_TIMEOUT NPM_CONFIG_FETCH_TIMEOUT; do
+    got=$(yq -r "$step | .env.\"$v\" // \"\"" "$f")
+    [ -n "$got" ] || fail "the Audit step must set $v in its own env: block"
+    # Between "larger than the bound is useless" and "smaller than the bound
+    # re-creates the 61s failure": it has to sit just under the step's 300s.
+    if ! [ "$got" -ge 240000 ] || ! [ "$got" -le 300000 ]; then
+      fail "$v ($got) must sit just under the step's 5-minute timeout-minutes budget"
+    fi
+
+    # Workflow- and job-level are where the override bug lives.
+    wf=$(yq -r ".env.\"$v\" // \"\"" "$f")
+    [ -z "$wf" ] || fail "$v is set at workflow level in checks.yml ('$wf') - it must be step-level only (esign aebdd28)"
+    jobs=$(yq -r "[.jobs | to_entries[] | select(.value.env.\"$v\") | .key] | join(\", \")" "$f")
+    [ -z "$jobs" ] || fail "$v is set at job level in checks.yml (job(s): $jobs) - it must be step-level only (esign aebdd28)"
+  done
+}
+
 # Forensics on a *green* run are what later turns "it passed that time" into a
 # diagnosis, and they cost ~50-100 MB per platform per run at the default
 # 7-day retention. The lever for that cost is `retention-days`, not `if:` - an

@@ -254,6 +254,7 @@ mental model).
 | `expo-doctor` | `true` | Run `expo-doctor` (via `pnpm exec` if a devDependency, else `pnpm dlx`) |
 | `audit` | `true` | Run `pnpm audit --prod` at `audit-level` |
 | `audit-level` | `high` | Minimum severity that fails the audit |
+| `audit-soft-on-pr` | `true` | Make a failing audit advisory on a `pull_request` (`continue-on-error`). It stays blocking on `push`, `release` and `workflow_dispatch`. Set `false` to block PRs too |
 | `commitlint` | `true` | Lint the PR title (skipped for `dependabot[bot]`) |
 | `commitlint-commits` | `false` | Also lint every commit's message in the PR |
 | `actionlint` | `true` | Lint the consumer's `.github/workflows` |
@@ -276,6 +277,34 @@ the all-zero base of a branch's first push, or a base made unreachable by a
 force-push or a shallow clone — it emits `docs-only=false` and exits 0. The
 step stays green and the full pipeline runs; an unreadable diff is never read
 as "nothing but docs".
+
+#### The audit's failure policy
+
+`pnpm audit` makes one request to the registry's advisories endpoint, and that
+endpoint is the family's known staller — 5s to 102s for identical payloads has
+been measured on a day it was otherwise healthy. Three things follow, and all
+three are already set for you:
+
+- The step carries `timeout-minutes: 5`, so a stall is ended by a named step
+  rather than by a job-level cap that tells you nothing about which step hung.
+- The step sets its **own** `PNPM_CONFIG_FETCH_TIMEOUT` (and, for anything in
+  it that shells out to npm, `NPM_CONFIG_FETCH_TIMEOUT`) at `270000` — just
+  under its own 5-minute bound. That belongs on the step, not on the workflow:
+  a workflow-level fetch timeout is normally sized for an installer's cold
+  path, and when a sibling repo set one to 60s it silently overrode this step's
+  budget and turned `main` red at 61s with only `code undefined:` in the log.
+  If you set a fetch timeout in your own `ci.yml`'s `env:`, it will not reach
+  this step — that is deliberate.
+- `audit-soft-on-pr` (default `true`) makes a failing audit advisory on a
+  `pull_request` and blocking everywhere else. A new advisory published against
+  a transitive dependency should not stop a review that has nothing to do with
+  it, but it must still turn `main` red. Set it to `false` if your repo would
+  rather block the PR.
+
+A **soft** audit still prints its findings and still shows the step as failed
+in the run's summary; it just does not fail the job. If you suppress an
+advisory instead, suppress it where the dependency is — `auditConfig.ignoreGhsas`
+in your `pnpm-workspace.yaml` — with a per-entry reason next to the id.
 
 ### `unit.yml`
 

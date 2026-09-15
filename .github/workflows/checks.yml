@@ -66,6 +66,10 @@ on:
         description: Minimum severity that fails pnpm audit
         type: string
         default: 'high'
+      audit-soft-on-pr:
+        description: Let a failing audit be advisory on a pull_request (it stays blocking on push, release and dispatch)
+        type: boolean
+        default: true
       commitlint:
         description: Lint the PR title against Conventional Commits
         type: boolean
@@ -200,10 +204,37 @@ jobs:
       - name: Expo doctor
         if: ${{ inputs.expo-doctor }}
         run: bash "$RNW/scripts/checks/expo-doctor.sh"
+      # The audit is one registry request (the advisories/bulk endpoint), and
+      # that endpoint is the family's known staller: esign measured 5s-102s for
+      # identical payloads on a healthy day. So the step gets a bound of its
+      # own, and a fetch timeout that is *larger* than the bound, so a stall is
+      # ended by `timeout-minutes` with a step name in the log rather than by a
+      # network layer that reports `code undefined:`.
+      #
+      # The fetch timeouts are step-level on purpose, and that is the whole
+      # point of them: esign aebdd28 has a workflow-level 60s
+      # NPM_CONFIG_FETCH_TIMEOUT - set for an installer's cold path in a
+      # *different* workflow, inherited here - silently overriding this step's
+      # 5-minute budget and turning main red at 61s. A workflow-level value can
+      # only ever be the smaller one, so this step re-states its own.
+      #
+      # PNPM_CONFIG_ is the variable that does the work: measured on pnpm
+      # 11.27.0 and 12.3.4, neither reads `npm_config_*` from the environment
+      # (`PNPM_CONFIG_REGISTRY` moves `pnpm config get registry`, `NPM_CONFIG_
+      # REGISTRY` does not), and audit.sh runs `pnpm audit`. NPM_CONFIG_ is
+      # kept beside it so an inherited workflow-level npm cap cannot reach an
+      # npm/npx call made from this step either.
       - name: Audit
         if: ${{ inputs.audit }}
+        timeout-minutes: 5
+        # Advisory on a PR, blocking everywhere else: a dead advisory endpoint
+        # must not hold up review, but it must still turn main red. Callers
+        # that want the audit blocking on PRs too set audit-soft-on-pr: false.
+        continue-on-error: ${{ inputs.audit-soft-on-pr && github.event_name == 'pull_request' }}
         env:
           AUDIT_LEVEL: ${{ inputs.audit-level }}
+          PNPM_CONFIG_FETCH_TIMEOUT: '270000'
+          NPM_CONFIG_FETCH_TIMEOUT: '270000'
         run: bash "$RNW/scripts/checks/audit.sh"
       # Ruby is installed here rather than through the `setup` action's `ruby`
       # input so the 12 checks above never pay for a bundle install they do not
