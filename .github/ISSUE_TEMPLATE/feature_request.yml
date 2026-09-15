@@ -1,0 +1,45 @@
+name: Feature request
+description: Propose a change to a workflow, action or script
+labels: ['enhancement']
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: The situation today and why it is a problem. Not the solution.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Checks (typecheck, lint, spell, audit, codegen)
+        - Unit tests and coverage
+        - E2E (Maestro, simulators, emulators)
+        - Web (export, Playwright, Pages)
+        - Release (version, notes, fastlane, GitHub release)
+        - OTA
+        - This repo's own CI, hooks or bats suite
+        - Docs
+    validations:
+      required: true
+  - type: checkboxes
+    id: impact
+    attributes:
+      label: Impact on consumers
+      options:
+        - label: Adds or renames a workflow input, output or secret (consumer-guide change)
+        - label: Breaking for a repo pinned at `@v0`
+        - label: Changes a cache key (`docs/cache-keys.md`)
+        - label: Moves a pinned tool version (`scripts/lib/versions.sh`)
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered

@@ -1,0 +1,66 @@
+name: Bug report
+description: A reusable workflow, composite action or script misbehaves
+labels: ['bug']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Security vulnerabilities do **not** belong here — see
+        [SECURITY.md](https://github.com/blinkbitcoin/react-native-workflows/blob/main/SECURITY.md)
+        for the private channel.
+  - type: input
+    id: workflow
+    attributes:
+      label: Workflow, action or script
+      description: 'e.g. `.github/workflows/e2e.yml`, `.github/actions/maestro`, `scripts/release/notes.sh`.'
+    validations:
+      required: true
+  - type: input
+    id: ref
+    attributes:
+      label: Pinned ref
+      description: 'What your caller pins — `@v0`, a tag, or the sha.'
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: caller
+    attributes:
+      label: The calling job
+      description: The `uses:`/`with:` block from your own workflow, trimmed to what matters.
+      render: yaml
+    validations:
+      required: true
+  - type: dropdown
+    id: runner
+    attributes:
+      label: Runner
+      multiple: true
+      options:
+        - ubuntu-latest
+        - macos-26
+        - Self-hosted
+        - Local (`make check` / bats)
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Run log
+      description: A link to the failed run if it is public, plus the failing step's output.
+      render: shell
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before filing
+      options:
+        - label: I searched existing issues
+          required: true
+        - label: I read the relevant section of `docs/consumer-guide.md`
+          required: true

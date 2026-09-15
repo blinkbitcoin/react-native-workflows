@@ -1,0 +1,13 @@
+# Every PR needs a review from the mobile team.
+* @blinkbitcoin/mobile
+
+# The consumer contract: a change here changes every app that pins @v0, so it
+# needs someone who can judge the blast radius.
+/.github/workflows/  @blinkbitcoin/mobile-ci
+/.github/actions/    @blinkbitcoin/mobile-ci
+/docs/consumer-guide.md @blinkbitcoin/mobile-ci
+
+# Signing, store uploads and the release path.
+/scripts/release/ @blinkbitcoin/mobile-native
+/scripts/native/  @blinkbitcoin/mobile-native
+/scripts/ota/     @blinkbitcoin/mobile-native
