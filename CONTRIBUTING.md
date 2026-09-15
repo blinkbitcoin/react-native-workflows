@@ -7,9 +7,15 @@ table and the rules CI enforces. This file covers the workflow around a change.
 
 ```sh
 mise trust && mise install   # shellcheck, actionlint, bats, yq, node, typos, lefthook
-make hooks                   # install the git hooks
+make hooks                   # install the git hooks (once per clone, see below)
 make check                   # verify the toolchain by running every gate
 ```
+
+`make hooks` installs into `.git/hooks`, which a `git worktree` **shares with
+the main checkout**. So it is one command per clone rather than per worktree,
+and running it from a topic worktree makes these hooks live in every worktree
+of that clone — including the main one. `mise exec -- lefthook uninstall`
+reverses it.
 
 There is no `package.json` and nothing to `npm install`: every tool comes from
 `.mise.toml`, and the hooks call them through `mise exec --` so a hook and CI

@@ -34,7 +34,7 @@ Every row is a make target; nothing here is run through a package manager.
 
 | Target | |
 |---|---|
-| `make hooks` | Install the git hooks (lefthook, from `.mise.toml`) |
+| `make hooks` | Install the git hooks (lefthook, from `.mise.toml`) — clone-wide, see the worktree rule |
 | `make check` | Everything self-ci runs: the five gates below |
 | `make shellcheck` | shellcheck every script under `scripts/` (bash strict) |
 | `make actionlint` | Lint the workflows and composite actions |
@@ -49,7 +49,12 @@ Every row is a make target; nothing here is run through a package manager.
   (`git worktree add ../react-native-workflows-<topic> -b <branch> origin/main`),
   never by switching branches in the shared clone: several agent sessions share
   that checkout, and a commit made there lands on whatever branch another
-  session left checked out.
+  session left checked out. **`make hooks` is the one thing that is not
+  worktree-scoped:** a worktree shares `.git/hooks` with the main checkout, so
+  running it from a topic worktree makes these hooks live in every worktree of
+  the clone. That is intended once this is on `main` — one `make hooks` per
+  physical clone — but a branch that changes `lefthook.yml` changes what every
+  sibling worktree runs. `mise exec -- lefthook uninstall` reverses it.
 - **The consumer guide is the contract.** Adding, renaming or re-defaulting a
   workflow input, output or secret without the matching
   `docs/consumer-guide.md` row is a breaking change shipped silently.

@@ -13,7 +13,9 @@ check-versions: ## Fail when workflow defaults disagree with scripts/lib/version
 spell: ## typos over the whole repo
 	typos
 check: shellcheck actionlint test check-versions spell ## Everything self-ci runs
-hooks: ## Install the git hooks (lefthook)
+# Clone-wide, not worktree-scoped: a git worktree shares .git/hooks with the
+# main checkout, so this installs the hooks for every worktree of this clone.
+hooks: ## Install the git hooks (lefthook) - affects the whole clone, not just this worktree
 	mise exec -- lefthook install
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-16s\033[0m %s\n", $$1, $$2}'

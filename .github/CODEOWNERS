@@ -1,11 +1,12 @@
 # Every PR needs a review from the mobile team.
 * @blinkbitcoin/mobile
 
-# The consumer contract: a change here changes every app that pins @v0, so it
-# needs someone who can judge the blast radius.
-/.github/workflows/  @blinkbitcoin/mobile-ci
-/.github/actions/    @blinkbitcoin/mobile-ci
-/docs/consumer-guide.md @blinkbitcoin/mobile-ci
+# The consumer contract (/.github/workflows/, /.github/actions/,
+# /docs/consumer-guide.md) is deliberately left to the catch-all above: a change
+# there changes every app that pins @v0, but @blinkbitcoin/mobile is the only
+# team that exists for it today. Give it its own rule here if a dedicated CI
+# team is ever created — not before, because CODEOWNERS silently ignores a rule
+# naming a team that does not exist, which is worse than no rule at all.
 
 # Signing, store uploads and the release path.
 /scripts/release/ @blinkbitcoin/mobile-native
