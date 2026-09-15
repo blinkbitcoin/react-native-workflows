@@ -10,8 +10,20 @@ runs:
     - name: Cache Maestro
       uses: actions/cache@v6
       with:
-        path: ~/.maestro
-        key: maestro-${{ runner.os }}-${{ inputs.version }}
+        # The CLI only. `tests/` and `logs/` are per-run output the Maestro CLI
+        # writes under its own home; cached, they grow run over run and every
+        # later run restores a fat blob it never reads. Our scripts redirect
+        # their debug output with `--debug-output`, so this is hygiene against
+        # a consumer hook that calls `maestro` directly plus the CLI's own
+        # `logs/`.
+        path: |
+          ~/.maestro
+          !~/.maestro/tests
+          !~/.maestro/logs
+        # -v2: actions/cache only *saves* on a key miss, so an already-warm
+        # key would keep restoring the fat blob forever. Bump it with any
+        # future change to what this cache holds.
+        key: maestro-${{ runner.os }}-${{ inputs.version }}-v2
     - name: Install Maestro
       shell: bash
       env:

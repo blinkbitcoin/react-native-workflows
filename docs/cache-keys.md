@@ -37,7 +37,7 @@ waits on a dependency install. It folds together:
 | Android debug APK | `android-apk-{ver}-{hash}` (exact) | `native-key` action → `scripts/ci/native-keys.sh` (`android-key` output) | `e2e.yml` job `build-android`, restore + save |
 | CocoaPods (`ios/Pods`, `~/Library/Caches/CocoaPods`) | `pods-{os}-{hash}`, restore-keys prefix `pods-{os}-` | `native-key` action → `scripts/ci/native-keys.sh` (`pods-key` output) | `e2e.yml` job `build-ios`, `actions/cache@v6` (a prefix hit is fine: `pod install` reconciles) |
 | pnpm store | `pnpm-{os}-{hashFiles('**/pnpm-lock.yaml')}`, restore-keys prefix `pnpm-{os}-` | `setup` action (path from `scripts/ci/pnpm-store-path.sh`) | every workflow that runs `setup` |
-| Maestro CLI (`~/.maestro`) | `maestro-{os}-{version}` | `maestro` action (version = its `version` input, pinned to `MAESTRO_VERSION`) | `e2e.yml` jobs `ios`, `android` |
+| Maestro CLI (`~/.maestro`, excluding `tests/` and `logs/`) | `maestro-{os}-{version}-v2` | `maestro` action (version = its `version` input, pinned to `MAESTRO_VERSION`) | `e2e.yml` jobs `ios`, `android` |
 | Android system image | `sysimg-v1-{api}-default-x86_64` | `e2e.yml` job `android` (literal key; `{api}` = `android-api-level`) | `actions/cache@v6` over `$ANDROID_SDK_DIR/system-images/android-{api}` |
 | AVD + adb keys | `avd-v1-{api}-x86_64-default-hidedialogs` | `e2e.yml` job `android` (literal key) | `actions/cache@v6` over `~/.android/avd/*`, `~/.android/adb*`; a miss bakes a snapshot via `scripts/e2e/android-emulator.sh snapshot-bake` |
 | Playwright browsers | `playwright-{os}-{pwversion}` | `web.yml` job `playwright` (version from `scripts/web/playwright-cache-key.sh`, which wraps `scripts/web/playwright-version.sh`) | `web.yml` playwright job |
@@ -50,6 +50,12 @@ Notes:
   from anywhere: the cached snapshot has `hide_error_dialogs 1` and
   `anr_show_background 0` baked in. Change what `snapshot-bake` writes and bump
   the suffix.
+- The Maestro cache excludes `~/.maestro/tests` and `~/.maestro/logs`: both are
+  per-run CLI output, so a cache that carries them grows run over run and every
+  later job restores a blob it never reads. The `-v2` suffix is what makes the
+  exclusion take effect on an existing repo — `actions/cache` only *saves* on a
+  key miss, so a warm key would keep restoring the fat entry forever. Bump it
+  again with any future change to what this cache holds.
 - `{ver}` is the `native-cache-version` input, `{os}`/`{arch}` come from the
   runner, and `{hash}` is the native dependency hash above.
 - The iOS app cache carries the generated `ios/*.xcworkspace` alongside the
