@@ -62,7 +62,8 @@ the exact ref/sha that defines the running job, then runs its scripts through
 | `unit.yml` | jest with coverage upload |
 | `e2e.yml` | Maestro E2E on cached iOS simulator builds and Android emulator builds |
 | `web.yml` | Expo web export, Playwright suite, GitHub Pages deploy |
-| `pr-closed.yml` | cancels in-flight runs for a closed PR's head sha |
+| `badges.yml` | renders (via the consumer) and publishes per-branch CI badges to `gh-pages/badges/<branch>/` |
+| `pr-closed.yml` | cancels in-flight runs for a closed PR's head sha and drops its badge directory |
 | `pr-title.yml` | Conventional Commits lint on the PR title |
 | `codeql.yml` | CodeQL advanced setup: the consumer's query suite and config, gated on the same docs-only classifier; informational, never a required check |
 | `expo-prepare.yml` | resolves version/build number, fingerprints, `build-info.json` + store notes as the `release-meta` artifact (from a release body when given a `release-tag`) |

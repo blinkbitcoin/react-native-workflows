@@ -16,7 +16,7 @@ below drift apart.
 .github/workflows/  the reusable workflows (workflow_call) + this repo's self-* CI
 .github/actions/    composite actions (setup, maestro, forensics, free-disk, native-key)
 scripts/checks/     the checks.yml steps (audit, codegen, commitlint, expo-doctor, i18n)
-scripts/ci/         shared CI plumbing (changed-class, lint-ci, pnpm-install, tool-version)
+scripts/ci/         shared CI plumbing (changed-class, lint-ci, pnpm-install, tool-version, gh-pages badges)
 scripts/e2e/        simulators, emulators, Metro, Maestro, forensics collection
 scripts/native/     prebuild, pods, iOS/Android builds and packaging
 scripts/ota/        expo-updates export, fingerprint gate, publish, smoke

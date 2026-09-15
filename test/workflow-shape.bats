@@ -20,7 +20,7 @@ setup() {
 # deleted or renamed would otherwise just shrink WORKFLOWS and every other
 # assertion here would still pass.
 @test "every reusable workflow this family publishes is present" {
-  for w in checks unit e2e web pr-closed pr-title codeql \
+  for w in checks unit e2e web badges pr-closed pr-title codeql \
     expo-prepare expo-build-ios expo-build-android \
     fastlane-lane github-release expo-ota-publish; do
     [ -f "$REPO_ROOT/.github/workflows/$w.yml" ] || {
@@ -530,4 +530,81 @@ TEMPLATE_LANES="$FIXTURES/consumer-min/fastlane/lanes/shared.rb"
   cond=$(yq -r '.jobs."major-tag".if' "$f")
   # Job outputs are strings; the literal "false" is truthy in a bare expression.
   [[ "$cond" == *"release_created == 'true'"* ]] || fail "major-tag if does not compare to the string true: $cond"
+}
+
+# ---------------------------------------------------------------------------
+# badges.yml — the only write path in the family.
+# ---------------------------------------------------------------------------
+
+# A badge publish pushes a branch. Nearly every job in this repo is read-only,
+# so the write scope is pinned to the exact three jobs that need it - the two
+# gh-pages publishers and the one that cuts a GitHub release. Any new one has to
+# be added here deliberately.
+@test "contents: write is asked for by exactly the three jobs that write" {
+  got=""
+  for w in "${WORKFLOWS[@]}"; do
+    while read -r j; do
+      [ -n "$j" ] || continue
+      perm=$(yq -r ".jobs.\"$j\".permissions.contents // \"\"" "$w")
+      [ "$perm" = "write" ] && got="$got$(basename "$w"):$j "
+    done <<<"$(yq -r '.jobs | keys | .[]' "$w")"
+  done
+  [ "$got" = "badges.yml:badges github-release.yml:release pr-closed.yml:badges-cleanup " ] \
+    || fail "jobs asking for contents: write are now: $got"
+}
+
+@test "badges.yml keeps contents: read at the top and escalates only on its job" {
+  f="$REPO_ROOT/.github/workflows/badges.yml"
+  [ "$(yq -r '.permissions.contents' "$f")" = "read" ]
+  [ "$(yq -r '.jobs.badges.permissions | keys | join(",")' "$f")" = "contents" ] \
+    || fail "the badges job asks for more than contents: $(yq -r '.jobs.badges.permissions' "$f")"
+}
+
+# The four exclusions are the whole safety story of a job that runs under
+# always(): each one is a case where publishing would be wrong (a cancelled or
+# never-run upstream) or impossible (a fork's token). Two are re-asserted here
+# because the caller cannot be trusted to have copied them.
+@test "the badges job skips cancelled upstreams, docs-only changes, releases and fork PRs" {
+  cond=$(yq -r '.jobs.badges.if' "$REPO_ROOT/.github/workflows/badges.yml")
+  for needle in \
+    "inputs.unit-result != 'cancelled'" \
+    "inputs.e2e-result != 'cancelled'" \
+    "inputs.docs-only != 'true'" \
+    "github.event_name != 'release'" \
+    "github.event.pull_request.head.repo.full_name == github.repository"; do
+    grep -qF "$needle" <<<"$cond" || fail "badges.yml's guard no longer contains [$needle]: $cond"
+  done
+}
+
+# The rule that makes a docs-only or cancelled run harmless: the coverage
+# artifact is fetched only for a green Unit. A failed Unit renders the red
+# placeholder from no input at all, and a skipped one renders no coverage badge,
+# so the published one survives.
+@test "badges.yml downloads coverage only when the unit job succeeded" {
+  f="$REPO_ROOT/.github/workflows/badges.yml"
+  cond=$(yq -r '[.jobs.badges.steps[] | select((.uses // "") | test("download-artifact"))][0].if' "$f")
+  [ "$cond" = '${{ inputs.unit-result == '"'"'success'"'"' }}' ] \
+    || fail "the coverage download is gated on '$cond'"
+}
+
+@test "the badges job delegates rendering to the consumer, and only publishing is ours" {
+  f="$REPO_ROOT/.github/workflows/badges.yml"
+  render=$(yq -r '[.jobs.badges.steps[] | select(.name == "Render badges")][0]' "$f")
+  contains "$render" 'run-script.sh' \
+    || fail "the render step no longer goes through run-script.sh: $render"
+  [ "$(yq -r '.on.workflow_call.inputs."render-script".default' "$f")" = "badges:render" ]
+  n=$(yq -r '[.jobs.badges.steps[] | select((.run // "") | test("publish-badges.sh"))] | length' "$f")
+  [ "$n" -eq 1 ] || fail "badges.yml runs publish-badges.sh $n times"
+}
+
+# The caller half: without always() the job never runs on a red Unit, which is
+# precisely the run whose badge matters most.
+@test "the fixture caller runs badges under always() and passes both job results" {
+  f="$FIXTURES/consumer-min/.github/workflows/ci.yml"
+  cond=$(yq -r '.jobs.badges.if' "$f")
+  contains "$cond" "always()" || fail "the fixture's badges job is not under always(): $cond"
+  contains "$cond" "docs-only != 'true'" || fail "no docs-only guard on the caller: $cond"
+  [ "$(yq -r '.jobs.badges.with."unit-result"' "$f")" = '${{ needs.unit.result }}' ]
+  [ "$(yq -r '.jobs.badges.with."e2e-result"' "$f")" = '${{ needs.e2e.result }}' ]
+  [ "$(yq -r '.jobs.badges.permissions.contents' "$f")" = "write" ]
 }

@@ -79,6 +79,25 @@ jobs:
       dev-client: true
       e2e-setup-script: scripts/e2e/ci-mock-api-up.sh
       e2e-teardown-script: scripts/e2e/ci-mock-api-down.sh
+  badges:
+    needs: [checks, unit, e2e]
+    # always(), so a red Unit still gets a red badge. A cancelled upstream job
+    # says nothing about the branch, and a docs-only change never ran the jobs
+    # the badges describe - in both cases the published badges stay as they are.
+    # badges.yml itself also skips release events and fork PRs (no push token).
+    if: >-
+      always() &&
+      needs.checks.result != 'cancelled' &&
+      needs.unit.result != 'cancelled' &&
+      needs.e2e.result != 'cancelled' &&
+      needs.checks.outputs.docs-only != 'true'
+    permissions:
+      contents: write # publish-badges.sh pushes the gh-pages branch
+    uses: blinkbitcoin/react-native-workflows/.github/workflows/badges.yml@v0
+    with:
+      unit-result: ${{ needs.unit.result }}
+      e2e-result: ${{ needs.e2e.result }}
+      docs-only: ${{ needs.checks.outputs.docs-only }}
 ```
 
 Notes:
@@ -112,6 +131,11 @@ Notes:
   `docs-globs`, never with a second list. `test/consumer-contract.bats` holds
   your `ci.yml`'s trigger block to the fixture's, so a `paths-ignore` cannot
   come back unnoticed.
+- **The `badges` job is the one that writes.** It runs under `always()` so a
+  red Unit still gets a red badge, and it is the only job here that needs
+  `contents: write` (granted on the job, not at the top of the file). What it
+  publishes, what it skips and the GitHub Pages constraint that goes with it
+  are in [`badges.yml`](#badgesyml).
 - **What a docs-only change still costs.** Only `unit` and `e2e` skip.
   `checks.yml`'s own `code` job has no `docs-only` gate, so a documentation
   push to `main` still runs typecheck, lint, format, knip, spell, `check:docs`
@@ -182,7 +206,7 @@ on:
   pull_request:
     types: [closed]
 permissions:
-  contents: read
+  contents: write # required: pr-closed.yml's badges-cleanup job pushes the gh-pages branch
   actions: write # required: pr-closed.yml's cancel job needs this to cancel runs
 jobs:
   pr-closed:
@@ -207,8 +231,10 @@ jobs:
 ```
 
 `pr-closed.yml` is the one workflow in this family with no `inputs:` at all
-(`on.workflow_call: {}`) — it only calls the GitHub API with data from the
-`github` context, so it never checks the consumer out.
+(`on.workflow_call: {}`). Its `cancel` job only calls the GitHub API with data
+from the `github` context and checks nothing out; its `badges-cleanup` job does
+check the consumer out, because the gh-pages push goes through that checkout's
+`origin` — which is what `contents: write` above is for.
 
 ## Secrets policy
 
@@ -391,7 +417,81 @@ above only adds `edited` (guarded by `github.event.changes.title != null`, since
 ### `pr-closed.yml`
 
 `on.workflow_call: {}` — no inputs, outputs or secrets. The caller must grant
-`permissions: actions: write` (on top of `contents: read`) for the cancel step.
+`permissions: actions: write` for the cancel step and `contents: write` for the
+`badges-cleanup` job, which removes the closed branch's `badges/<branch>/`
+directory from `gh-pages` (see [`badges.yml`](#badgesyml)). A fork PR skips the
+cleanup job: its run has no token that could push to the base repository, and
+`badges.yml` skipped it on the way in for the same reason, so there is nothing
+to remove.
+
+### `badges.yml`
+
+Renders and publishes this branch's CI badges to the consumer's own `gh-pages`
+branch, as `badges/<branch>/{unit,e2e,coverage}.svg` (plus a `.json` sibling per
+badge, the shields.io endpoint shape). The README embeds `main`'s through
+`raw.githubusercontent.com/<owner>/<repo>/gh-pages/badges/main/coverage.svg`,
+the way a workflow-status badge takes `?branch=main`; every other branch gets
+its own directory, and `pr-closed.yml` drops it when the PR closes.
+
+**Rendering lives in the consumer, publishing lives here.** An SVG renderer
+needs a `package.json` and a test harness; this repo has neither by design. So
+`badges.yml` calls one named consumer script (`render-script`) through
+`scripts/checks/run-script.sh` — the same delegation `checks.yml` uses for
+typecheck and lint — and owns only `scripts/ci/publish-badges.sh` and the
+gh-pages mechanics behind it (`scripts/ci/gh-pages-lib.sh`: orphan creation on
+the first publish, rebase-retry when branches publish concurrently).
+
+| Input | Default | Meaning |
+| --- | --- | --- |
+| `repository`, `ref`, `working-directory`, `linux-runner`, `macos-runner`, `native-cache-version` | (as above) | — |
+| `unit-result` | **required** | The caller's `needs.unit.result` |
+| `e2e-result` | **required** | The caller's `needs.e2e.result` |
+| `docs-only` | `false` | `checks.yml`'s `docs-only` output; `'true'` skips the job |
+| `unit-label` / `e2e-label` | `Unit` / `E2E` | Text on the left half of each status badge |
+| `coverage-artifact` | `coverage` | Artifact holding the consumer's `coverage/` directory (`unit.yml` uploads it under this name). Downloaded only when `unit-result` is `success` |
+| `render-script` | `badges:render` | Consumer script that renders the badges into `badge-dir` |
+| `badge-dir` | `coverage/badge` | Consumer-relative directory the render script writes and `publish-badges.sh` copies from |
+
+No outputs. Secrets: `consumer-token` (optional). The calling job must grant
+`permissions: contents: write` — this is the only job in the family that
+writes, and the scope is declared on the job rather than at the top of the file
+for exactly that reason.
+
+**The environment the render script is handed** (so a consumer can implement its
+own): `BADGE_OUT_DIR`, `BADGE_UNIT`, `BADGE_E2E`, `BADGE_UNIT_LABEL`,
+`BADGE_E2E_LABEL`. `run-script.sh` runs `pnpm run NAME` with no arguments, which
+is why everything variable arrives as environment.
+
+**Guards.** The calling job runs under `always()`, so a *failed* Unit still
+publishes a red badge. Four cases are excluded, two by the caller and two by
+this workflow:
+
+| Case | Why |
+| --- | --- |
+| an upstream job was `cancelled` | a cancelled run says nothing about the branch |
+| the change was docs-only | the jobs the badges describe never ran |
+| `github.event_name == 'release'` | a release is not a branch |
+| the PR came from a fork | its token cannot push to the base repository |
+
+**Only a Unit *failure* writes a coverage placeholder.** A *skipped* Unit
+renders no coverage badge at all, and `publish-badges.sh` copies only what was
+rendered — so a docs-only PR leaves the branch's published coverage badge
+exactly as it was instead of blanking it.
+
+**Coexistence with GitHub Pages.** `web.yml`'s `deploy` job publishes the web
+export through `actions/deploy-pages`, which is an *artifact* deploy and reads
+no branch, and the badges are served from `raw.githubusercontent.com` rather
+than from the Pages site. The two therefore do not collide — **provided the
+repository's Pages source stays "GitHub Actions"**. Switching it to "Deploy
+from a branch → gh-pages" would put every badge commit in a fight with every
+web deploy and publish the badge directory as the site.
+
+**Two repository settings** go with this, both one-time: keep that Pages
+source, and exempt `gh-pages` from any ruleset that requires a pull request, so
+the default `GITHUB_TOKEN` can push to it. The branch itself needs no
+preparation — the first publish creates it as a true orphan (no parent, and
+no copy of the consumer's source tree) — unless a ruleset blocks branch
+creation outright.
 
 ### `codeql.yml`
 
@@ -1065,6 +1165,7 @@ line for line, both repos read on the same date):
 | `test:scripts` | `unit.yml` (`scripts-test-script`) | yes |
 | `build:web` | `web.yml` (`export-script`) | yes |
 | `check:release` | `checks.yml` (`release-checks` toggle, off by default) | **opt-in** — only a consumer with a release setup ships it; the toggle stays `false` otherwise |
+| `badges:render` | `badges.yml` (`render-script`) | yes (`node scripts/badges/render.mjs`, driven by the `BADGE_*` environment above) |
 | `test:e2e:web` | `web.yml` (`e2e-script`) | yes (`bash scripts/e2e/web.sh`, which honors `PLAYWRIGHT_SKIP_EXPORT` — see [the Playwright / export contract](#the-playwright--export-contract)) |
 
 The template also ships `lint:fix`, `format`, `i18n:check`, `codegen:check`,

@@ -2,7 +2,8 @@ name: pr-closed
 on:
   workflow_call: {}
   # The caller triggers this on `pull_request: [closed]` and grants
-  # `permissions: actions: write` so the cancel step below can cancel runs.
+  # `permissions: actions: write` so the cancel step below can cancel runs, plus
+  # `contents: write` so the badges-cleanup job can push the gh-pages branch.
 permissions:
   contents: read
 jobs:
@@ -33,3 +34,30 @@ jobs:
           REPO: ${{ github.repository }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: bash ".rnw/scripts/ci/cancel-runs.sh"
+  badges-cleanup:
+    # A fork PR's run has no token that can push to the base repository, and it
+    # never published a badge directory in the first place (badges.yml skips
+    # fork PRs for the same reason), so there is nothing here to clean up.
+    if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      # Unlike the cancel job this one does need the consumer checkout: it is
+      # that checkout's `origin` (and its persisted credentials) that the
+      # gh-pages push goes through. Setup never runs here either - the script is
+      # plain git - so it is reached through the .rnw/ path, not $RNW.
+      - name: Checkout consumer
+        uses: actions/checkout@v7
+      - name: Checkout react-native-workflows
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .rnw
+          persist-credentials: false
+      - name: Drop this branch's badges from gh-pages
+        env:
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: bash ".rnw/scripts/ci/badges-cleanup.sh"
