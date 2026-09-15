@@ -73,8 +73,9 @@ a gitignored `lefthook-local.yml` rather than in `lefthook.yml`.
 - **A workflow interface change** — an input, output, secret or env var — needs
   the matching row in [`docs/consumer-guide.md`](docs/consumer-guide.md), and
   the fixtures under `test/fixtures/consumer-min/` updated in the same commit.
-  `test/consumer-contract.bats` holds all copies byte-identical and is the
-  tripwire when one moves alone.
+  `test/consumer-contract.bats` keeps the guide's examples and the fixtures
+  byte-identical, and separately checks the live consumer's `on:` block when
+  `RNW_CONSUMER_ROOT` points at one.
 - **A tool version bump** moves `scripts/lib/versions.sh` *and* the mirrors in
   `.mise.toml` and the workflow defaults; `make check-versions` is what fails
   otherwise.
