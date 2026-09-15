@@ -1,0 +1,23 @@
+<!--
+The PR title becomes the commit message on main (squash merge) and feeds
+release-please, which cuts the tag consumers pin. Conventional Commits, closed
+scope enum — see CONTRIBUTING.md.
+-->
+
+## What and why
+
+<!-- One paragraph. Link the issue: Closes #123 -->
+
+## How to verify
+
+<!-- The commands a reviewer runs. `make check` is the baseline. -->
+
+## Checklist
+
+- [ ] PR title is a Conventional Commit with a valid scope (`actions checks ci deps docs e2e lib native ota release self test tooling web workflows`)
+- [ ] `make check` passes locally
+- [ ] bats coverage added or updated for the behaviour that changed (`test/`)
+- [ ] `docs/consumer-guide.md` updated — a new or renamed input, output, secret or env var is a contract change
+- [ ] Breaking for a consumer pinned at `@v0`? Say so here and mark the commit `!`
+- [ ] Version pins moved in `scripts/lib/versions.sh`, not only in a workflow default (`make check-versions`)
+- [ ] No secret, token or consumer-specific value hardcoded; nothing new reads `${{ secrets.* }}` outside a declared `secrets:` input

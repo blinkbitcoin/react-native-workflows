@@ -1,0 +1,51 @@
+# Git hooks (lefthook). Install them with `make hooks`.
+#
+# This repo has no package.json — lefthook and every tool a hook runs come from
+# .mise.toml, which is why each command is wrapped in `mise exec --`: the hook
+# then uses the pinned version rather than whatever happens to be on PATH.
+# commitlint is the exception; it is fetched by npx with the same doubled
+# `-p` invocation scripts/checks/commitlint.sh uses in CI, so a message that
+# passes locally passes there (test/hooks.bats keeps the two in step).
+#
+# These are fast local gates; self-ci.yml remains the authoritative check.
+# Escape hatches: `git commit --no-verify` / `LEFTHOOK=0 git push` for a
+# one-off skip, and personal tweaks go in lefthook-local.yml (gitignored).
+# Conventions are documented in CONTRIBUTING.md.
+
+min_version: 2.0.0
+
+pre-commit:
+  parallel: true
+  # Nothing to check on merge/rebase replays — those commits already passed.
+  skip:
+    - merge
+    - rebase
+  commands:
+    shellcheck:
+      glob: '*.sh'
+      # -x follows `source` lines, matching .shellcheckrc and scripts/ci/lint-ci.sh.
+      run: mise exec -- shellcheck -x {staged_files}
+    actionlint:
+      # actionlint takes no file list — it discovers .github/workflows itself —
+      # so the glob only decides *whether* to run it, and {staged_files} is
+      # deliberately not passed.
+      glob: '.github/**/*'
+      run: mise exec -- actionlint -color
+    typos:
+      # --force-exclude: typos.toml's extend-exclude otherwise governs only
+      # directory traversal, and naming a file explicitly on the command line
+      # bypasses it (test/fixtures/** is full of deliberate nonsense).
+      run: mise exec -- typos --force-exclude {staged_files}
+
+commit-msg:
+  commands:
+    # Conventional Commits with the closed scope enum in commitlint.config.mjs.
+    # pr-title.yml re-checks the PR title in CI, so --no-verify cannot slip a
+    # bad subject onto main through a squash merge.
+    commitlint:
+      run: npx --yes -p @commitlint/cli@21 -p @commitlint/config-conventional@21 commitlint --edit {1}
+
+pre-push:
+  commands:
+    check:
+      run: make check
