@@ -876,7 +876,16 @@ Rules, enforced by `scripts/lib/build-env.sh`:
 - Only key names are logged, never values.
 
 The same rules apply to `fastlane-lane.yml`'s `env-json` input
-(`scripts/release/env-json.sh`), except that its keys may be lower-case.
+(`scripts/release/env-json.sh`), except that its keys may be lower-case: they
+reach a fastlane lane, whose own option names (`track`, `lane`) are lower-case.
+
+"The same rules" is now one implementation rather than a promise:
+`scripts/lib/env-validate.mjs` is called by both, and the case difference above
+is the only thing it parameterises. It used to be a promise, and the two had
+drifted — `env-json` had no credential-name refusal at all, so a key like
+`SENTRY_AUTH_TOKEN` was published into `$GITHUB_ENV` from an input GitHub does
+not mask. Keys are upper-cased before the credential and reserved-name rules are
+applied, so `sentry_auth_token` is refused exactly as `SENTRY_AUTH_TOKEN` is.
 
 So `RELEASE_NOTES_LLM_PROVIDER` / `RELEASE_NOTES_LLM_MODEL` /
 `OPENAI_BASE_URL` / `STORE_NOTES_INCLUDE_CHANGELOG` go in `build-env`, while

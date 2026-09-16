@@ -6,10 +6,15 @@
 # Values are printed, so this is for configuration, never for credentials - a
 # secret belongs in `secrets:` and decode-secrets.sh.
 #
-# Key policy mirrors scripts/lib/build-env.sh (which is tested by the same
-# assertions in test/env-json.bats and test/build-env.bats, so the two cannot
-# drift): a name owned by this family or by the runner is refused, because
-# build-env's fingerprint-override hole is reachable through this input too.
+# Key policy is not merely mirrored from scripts/lib/build-env.sh, it is the same
+# code: both call scripts/lib/env-validate.mjs. The previous header claimed the
+# two could not drift because the same assertions covered both. They had already
+# drifted - this script had no credential-name refusal and no NEVER list, so a
+# key like SENTRY_AUTH_TOKEN was published from an unmasked workflow input - and
+# a claim of that kind is worth no more than the mechanism behind it.
+#
+# A name owned by this family or by the runner is refused too, because
+# build-env's fingerprint-override hole is reachable through this input as well.
 # Values reach $GITHUB_ENV through gh_env, which uses the heredoc form for a
 # value containing a newline rather than writing a second `KEY=` line the
 # runner would read as another variable.
@@ -30,37 +35,20 @@ require_cmd node
 
 # node, not yq: only node can reliably reject a non-object and coerce scalars to
 # the exact strings GitHub's env file expects.
-# shellcheck disable=SC2016  # the ${...} inside are JS template literals, not shell
-RNW_ENV_JSON="$json" node --input-type=module -e '
-const raw = process.env.RNW_ENV_JSON;
-let obj;
-try { obj = JSON.parse(raw); } catch (e) {
-  console.error(`::error::RNW_ENV_JSON is not valid JSON: ${e.message}`);
-  process.exit(1);
-}
-if (obj === null || typeof obj !== "object" || Array.isArray(obj)) {
-  console.error("::error::RNW_ENV_JSON must be a flat JSON object");
-  process.exit(1);
-}
-// Same set as scripts/lib/build-env.sh: this input reaches $GITHUB_ENV too.
-const RESERVED = /^(RNW_|GITHUB_|RUNNER_|ACTIONS_|LD_|DYLD_)|^(PATH|HOME|NODE_OPTIONS)$/;
-for (const [k, v] of Object.entries(obj)) {
-  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(k)) {
-    console.error(`::error::RNW_ENV_JSON key is not a valid env name: ${k}`);
-    process.exit(1);
-  }
-  if (RESERVED.test(k)) {
-    console.error(`::error::RNW_ENV_JSON key ${k} is reserved by react-native-workflows or by the runner; use the dedicated workflow input instead`);
-    process.exit(1);
-  }
-  if (v !== null && typeof v === "object") {
-    console.error(`::error::RNW_ENV_JSON value for ${k} must be a scalar`);
-    process.exit(1);
-  }
-  // NUL-separated, not line-separated - see scripts/lib/build-env.sh.
-  process.stdout.write(`${k}\0${v === null ? "" : String(v)}\0`);
-}
-' > "$env_file"
+#
+# The rules live in scripts/lib/env-validate.mjs, shared with build-env.sh. They
+# used to be a copy here, and the copy had drifted where it mattered most: no
+# credential-name refusal at all, so {"SENTRY_AUTH_TOKEN": "..."} was published
+# from an input GitHub does not mask.
+# ALLOW_LOWERCASE: these keys reach a fastlane lane, and fastlane's own option
+# names (`track`, `lane`) are lower-case. That difference from build-env is
+# documented in docs/consumer-guide.md and is the only one; the credential,
+# reserved-name and scalar rules are identical, and the validator upper-cases
+# each key before applying them so a lower-case name cannot dodge them.
+RNW_ENV_VALIDATE_JSON="$json" \
+  RNW_ENV_VALIDATE_LABEL=RNW_ENV_JSON \
+  RNW_ENV_VALIDATE_ALLOW_LOWERCASE=1 \
+  node "$(dirname "$0")/../lib/env-validate.mjs" > "$env_file"
 
 while IFS= read -r -d '' key && IFS= read -r -d '' value; do
   log "env-json: $key"

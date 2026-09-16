@@ -41,51 +41,15 @@ rnw_publish_build_env() {
   local env_file="${RUNNER_TEMP:-/tmp}/rnw-build-env.env"
   # `if !`, not a bare call: the scratch file must not survive a rejection
   # either, and errexit would abort before any cleanup could run.
-  # shellcheck disable=SC2016  # the ${...} inside are JS template literals
-  if ! RNW_BUILD_ENV="$json" node --input-type=module -e '
-const raw = process.env.RNW_BUILD_ENV;
-let obj;
-try { obj = JSON.parse(raw); } catch (e) {
-  console.error(`::error::build-env is not valid JSON: ${e.message}`);
-  process.exit(1);
-}
-if (obj === null || typeof obj !== "object" || Array.isArray(obj)) {
-  console.error("::error::build-env must be a flat JSON object");
-  process.exit(1);
-}
-// Anything that reads as a credential is refused rather than published: this
-// value is a workflow input, which GitHub neither masks nor hides.
-const SECRETISH = /(^|_)(KEY|TOKEN|PASSWORD|PASSPHRASE|SECRET|CREDENTIALS?)$/;
-const NEVER = new Set([
-  "PLAY_SERVICE_ACCOUNT_JSON", "ASC_KEY_P8_BASE64",
-  "ANDROID_UPLOAD_KEYSTORE_BASE64", "MATCH_GIT_BASIC_AUTHORIZATION",
-]);
-// Names owned by this family or by the runner: see the header. RNW_FP_IOS /
-// RNW_FP_ANDROID are the sharp end - they short-circuit the fingerprint the
-// OTA gate compares against.
-const RESERVED = /^(RNW_|GITHUB_|RUNNER_|ACTIONS_|LD_|DYLD_)|^(PATH|HOME|NODE_OPTIONS)$/;
-for (const [k, v] of Object.entries(obj)) {
-  if (!/^[A-Z][A-Z0-9_]*$/.test(k)) {
-    console.error(`::error::build-env key is not an upper-case env name: ${k}`);
-    process.exit(1);
-  }
-  if (SECRETISH.test(k) || NEVER.has(k)) {
-    console.error(`::error::build-env key ${k} looks like a credential; pass it as a secret instead - build-env is a workflow input and is not masked`);
-    process.exit(1);
-  }
-  if (RESERVED.test(k)) {
-    console.error(`::error::build-env key ${k} is reserved by react-native-workflows or by the runner; use the dedicated workflow input instead of build-env`);
-    process.exit(1);
-  }
-  if (v !== null && typeof v === "object") {
-    console.error(`::error::build-env value for ${k} must be a scalar`);
-    process.exit(1);
-  }
-  // NUL-separated, not line-separated: a value may legitimately contain a
-  // newline, and a line-based reader would split it into a second variable.
-  process.stdout.write(`${k}\0${v === null ? "" : String(v)}\0`);
-}
-' > "$env_file"; then
+  #
+  # The rules live in scripts/lib/env-validate.mjs, shared with
+  # scripts/release/env-json.sh so the two inputs cannot be validated differently
+  # - which is exactly what had happened.
+  local validator
+  validator="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/env-validate.mjs"
+  if ! RNW_ENV_VALIDATE_JSON="$json" \
+    RNW_ENV_VALIDATE_LABEL=build-env \
+    node "$validator" > "$env_file"; then
     rm -f "$env_file"
     exit 1
   fi

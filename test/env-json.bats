@@ -50,6 +50,59 @@ gh_env_keys() {
   [ "$status" -ne 0 ] || fail "accepted a key with a space: $output"
 }
 
+@test "a lower-case key is still accepted - that difference from build-env is by design" {
+  # These keys reach a fastlane lane, whose own option names (`track`, `lane`)
+  # are lower-case, and docs/consumer-guide.md says so. Sharing the validator
+  # with build-env must not quietly take that away.
+  RNW_ENV_JSON='{"track":"internal"}' publish
+  [ "$status" -eq 0 ] || fail "rejected a lower-case key: $output"
+  grep -qx 'track=internal' "$GITHUB_ENV" || fail "track missing: $(cat "$GITHUB_ENV")"
+}
+
+@test "a lower-case credential name is refused too" {
+  # The trap in allowing lower-case: a case-sensitive credential rule would wave
+  # `sentry_auth_token` straight through the check that exists to stop it. Keys
+  # are upper-cased before the credential and reserved rules are applied.
+  RNW_ENV_JSON='{"sentry_auth_token":"x"}' publish
+  [ "$status" -ne 0 ] || fail "published a lower-case credential name: $output"
+  contains "$output" "looks like a credential" || fail "unexpected message: $output"
+  RNW_ENV_JSON='{"rnw_fp_ios":"deadbeef"}' publish
+  [ "$status" -ne 0 ] || fail "published a lower-case reserved name: $output"
+  contains "$output" "reserved" || fail "unexpected message: $output"
+}
+
+# --- credential names, ported from build-env.bats ----------------------------
+#
+# These are the assertions env-json.sh never had. Its header claimed the two
+# inputs could not drift because the same tests covered both; in fact this file
+# had no credential case at all, so {"SENTRY_AUTH_TOKEN": "..."} was published
+# straight into $GITHUB_ENV from a workflow input GitHub does not mask.
+
+@test "a key that looks like a credential is refused" {
+  for k in SENTRY_AUTH_TOKEN SOME_API_KEY DB_PASSWORD MY_SECRET A_PASSPHRASE X_CREDENTIALS X_CREDENTIAL; do
+    RNW_ENV_JSON="{\"$k\":\"x\"}" publish
+    [ "$status" -ne 0 ] || fail "published $k, a credential-shaped name: $output"
+    contains "$output" "looks like a credential" || fail "unexpected message for $k: $output"
+    [ ! -s "$GITHUB_ENV" ] || fail "$k reached GITHUB_ENV: $(cat "$GITHUB_ENV")"
+  done
+}
+
+@test "a known credential name is refused even though it does not match the suffix rule" {
+  for k in PLAY_SERVICE_ACCOUNT_JSON ASC_KEY_P8_BASE64 ANDROID_UPLOAD_KEYSTORE_BASE64 MATCH_GIT_BASIC_AUTHORIZATION; do
+    RNW_ENV_JSON="{\"$k\":\"x\"}" publish
+    [ "$status" -ne 0 ] || fail "published $k: $output"
+    [ ! -s "$GITHUB_ENV" ] || fail "$k reached GITHUB_ENV: $(cat "$GITHUB_ENV")"
+  done
+}
+
+# The single mechanism behind the "these cannot drift" claim in both headers.
+@test "both inputs are validated by the one shared validator" {
+  grep -q 'env-validate.mjs' "$REPO_ROOT/scripts/release/env-json.sh" \
+    || fail "env-json.sh no longer calls the shared validator"
+  grep -q 'env-validate.mjs' "$REPO_ROOT/scripts/lib/build-env.sh" \
+    || fail "build-env.sh no longer calls the shared validator"
+}
+
 @test "a non-object or non-scalar value is rejected" {
   RNW_ENV_JSON='["a"]' publish
   [ "$status" -ne 0 ] || fail "accepted an array: $output"
