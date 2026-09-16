@@ -49,3 +49,18 @@ parity_skip() {
   fi
   skip "$*"
 }
+
+# The three variables that decide *where* a script writes, cleared for every
+# test in every file.
+#
+# A GitHub runner sets all three. Scripts in this repo branch on them -
+# artifact-summary.sh writes to $GITHUB_STEP_SUMMARY when set and stdout when
+# not, gh_output and gh_env do the same for their channels - so a test that
+# reads stdout sees nothing on a runner while passing on every laptop. Four
+# cases in artifact-summary.bats did exactly that, and only the first real
+# Actions run revealed it.
+#
+# Cleared here rather than per file so a new test file cannot reintroduce it.
+# A test that wants one of them set assigns it itself, and that assignment
+# still wins - several files rely on exactly that.
+unset GITHUB_STEP_SUMMARY GITHUB_OUTPUT GITHUB_ENV
