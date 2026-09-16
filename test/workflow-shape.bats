@@ -703,3 +703,33 @@ $(names "$real")"
   ids=$(yq -r '[.jobs[].steps[]? | select(.id == "build")] | length' "$f")
   [ "$ids" -ge 2 ] || fail "e2e.yml has $ids steps with id: build, expected one per platform"
 }
+
+# Two gates in checks.yml cost minutes rather than seconds: check-prebuild
+# prebuilds both platforms, and check:bundle-secrets runs a web export. They are
+# opt-in so a consumer decides where that wall clock is worth paying. Flipping
+# either default to true silently adds those minutes to every PR of every
+# consumer of this family, which is the kind of change nobody notices in review.
+@test "the expensive checks stay opt-in" {
+  command -v yq >/dev/null || skip "yq not installed"
+  f="$REPO_ROOT/.github/workflows/checks.yml"
+  for i in prebuild-check bundle-secrets; do
+    [ "$(yq -r ".on.workflow_call.inputs.\"$i\" | has(\"default\")" "$f")" = "true" ] \
+      || fail "checks.yml has no $i input"
+    [ "$(yq -r ".on.workflow_call.inputs.\"$i\".default" "$f")" = "false" ] \
+      || fail "$i defaults to $(yq -r ".on.workflow_call.inputs.\"$i\".default" "$f"), which adds minutes to every consumer's PR"
+  done
+  # The cheap one is on by default: it ran in no CI job at all before, while
+  # `make check-deps` ran it locally.
+  [ "$(yq -r '.on.workflow_call.inputs.licenses.default' "$f")" = "true" ] \
+    || fail "the licenses check is not on by default"
+}
+
+# A gate whose step can hang without the job cap being a useful diagnosis.
+@test "the two expensive checks carry their own step timeout" {
+  command -v yq >/dev/null || skip "yq not installed"
+  f="$REPO_ROOT/.github/workflows/checks.yml"
+  for name in "Prebuild check" "Bundle secrets"; do
+    t=$(yq -r ".jobs.code.steps[] | select(.name == \"$name\") | .\"timeout-minutes\" // \"\"" "$f")
+    [ -n "$t" ] || fail "the '$name' step has no timeout-minutes"
+  done
+}

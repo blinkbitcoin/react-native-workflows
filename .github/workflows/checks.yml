@@ -90,6 +90,24 @@ on:
         description: Lint the consumer's scripts/ with shellcheck
         type: boolean
         default: true
+      licenses:
+        description: Run the consumer's `deps:licenses` script (dependency licence policy)
+        type: boolean
+        default: true
+      prebuild-check:
+        description: >-
+          Run the consumer's `check-prebuild` script (prebuild both platforms into
+          a temp dir and assert the config plugins produced what they should).
+          Off by default: it is minutes, not seconds.
+        type: boolean
+        default: false
+      bundle-secrets:
+        description: >-
+          Run the consumer's `check:bundle-secrets` script (export the bundle and
+          assert no non-public key leaked into it). Off by default: it is minutes,
+          not seconds.
+        type: boolean
+        default: false
       release-checks:
         description: Run the consumer's `check:release` script (Fastfile/Gemfile lint, release config validation); needs Ruby, so it is off by default
         type: boolean
@@ -262,6 +280,29 @@ jobs:
         # deps:audit, not audit.sh: the template's script also runs its lockfile
         # provenance check, which likewise ran in no CI job.
         run: bash "$RNW/scripts/checks/run-consumer-or.sh" 'deps:audit' scripts/checks/audit.sh
+      # Cheap, and it ran in no CI job before this: `make check-deps` includes it
+      # locally, so a green local gate implied a licence check CI never made.
+      - name: Licenses
+        if: ${{ inputs.licenses }}
+        env:
+          SCRIPT_NAME: 'deps:licenses'
+        run: bash "$RNW/scripts/checks/run-script.sh" "$SCRIPT_NAME"
+      # The two expensive gates, both off by default. A prebuild of both
+      # platforms and a web export are minutes each, so they are opt-in for the
+      # consumers that decide the coverage is worth the wall clock - on main, on
+      # a release, or behind a label - rather than a cost every PR pays.
+      - name: Prebuild check
+        if: ${{ inputs.prebuild-check }}
+        timeout-minutes: 20
+        env:
+          SCRIPT_NAME: check-prebuild
+        run: bash "$RNW/scripts/checks/run-script.sh" "$SCRIPT_NAME"
+      - name: Bundle secrets
+        if: ${{ inputs.bundle-secrets }}
+        timeout-minutes: 15
+        env:
+          SCRIPT_NAME: 'check:bundle-secrets'
+        run: bash "$RNW/scripts/checks/run-script.sh" "$SCRIPT_NAME"
       # Ruby is installed here rather than through the `setup` action's `ruby`
       # input so the 12 checks above never pay for a bundle install they do not
       # use; `bundler-cache: true` makes the repeat cost near zero.

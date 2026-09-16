@@ -287,16 +287,19 @@ mental model).
 | `knip` | `true` | Run `knip` |
 | `spell` | `true` | Run `spell` |
 | `docs-check` | `true` | Run `check:docs` with `EVENT_NAME`, `BASE_REF` and `PR_AUTHOR` in the environment — the consumer's docs gate (freshness heuristic, command table, table widths, diagram parsing). `PR_AUTHOR` is what lets the consumer exempt a bot's dependency bump from a "docs not updated" warning |
-| `i18n` | `false` | Run `i18n:extract`, then fail if it produced uncommitted changes |
-| `graphql-codegen` | `false` | Run `codegen`, then fail if it produced uncommitted changes |
-| `expo-doctor` | `true` | Run `expo-doctor` (via `pnpm exec` if a devDependency, else `pnpm dlx`) |
-| `audit` | `true` | Run `pnpm audit --prod` at `audit-level` |
+| `i18n` | `false` | Run the consumer's `i18n:check`, or `i18n:extract` + a clean-tree assertion when it ships none |
+| `graphql-codegen` | `false` | Run the consumer's `codegen:check`, or `codegen` + a clean-tree assertion when it ships none |
+| `expo-doctor` | `true` | Run the consumer's `deps:check`, or `expo-doctor` alone when it ships none. The template's script is `expo install --check && expo-doctor`, and the SDK-drift half is exactly what CI used to miss |
+| `audit` | `true` | Run the consumer's `deps:audit`, or `pnpm audit --prod` at `audit-level` when it ships none |
 | `audit-level` | `high` | Minimum severity that fails the audit |
 | `audit-soft-on-pr` | `true` | Make a failing audit advisory on a `pull_request` (`continue-on-error`). It stays blocking on `push`, `release` and `workflow_dispatch`. Set `false` to block PRs too |
 | `commitlint` | `true` | Lint the PR title (skipped for `dependabot[bot]`) |
 | `commitlint-commits` | `false` | Also lint every commit's message in the PR |
-| `actionlint` | `true` | Lint the consumer's `.github/workflows` |
+| `actionlint` | `true` | Lint the consumer's `.github/workflows`. Reaches the built-in linter only; a consumer that ships `check:ci` owns this choice itself |
 | `shellcheck` | `true` | Lint the consumer's `scripts/` |
+| `licenses` | `true` | Run the consumer's `deps:licenses` (dependency licence policy) |
+| `prebuild-check` | `false` | Run the consumer's `check-prebuild`: prebuild both platforms into a temp dir and assert the config plugins produced what they should. **Minutes, not seconds** — enable it where the coverage earns the wall clock (on `main`, on a release, behind a label), not on every PR |
+| `bundle-secrets` | `false` | Run the consumer's `check:bundle-secrets`: export the bundle and assert no non-public key leaked into it. **Minutes, not seconds**, same advice as above |
 | `release-checks` | `false` | Install Ruby (`ruby/setup-ruby@v1`, `bundler-cache: true`) and run the consumer's `check:release` script — the Fastfile/Gemfile and release-config validation behind the template's `make check-release`. Off by default because a repo with no release setup has no such script |
 | `docs-only-detection` | `true` | Classify the change as docs-only — on a `pull_request` **and** on a `push` |
 | `docs-globs` | `''` | Extra `\|`-joined POSIX ERE alternatives **added to** the built-in docs pattern (`^docs/\|\.md$\|(^\|/)LICENSE$\|^\.github/ISSUE_TEMPLATE/\|^\.github/PULL_REQUEST_TEMPLATE`), not a replacement for it |
@@ -1210,6 +1213,9 @@ line for line, both repos read on the same date):
 | `test:coverage` | `unit.yml` (`coverage-script`, default path) | yes |
 | `test:scripts` | `unit.yml` (`scripts-test-script`) | yes |
 | `build:web` | `web.yml` (`export-script`) | yes |
+| `deps:licenses` | `checks.yml` (`licenses` toggle, on by default) | yes (`node scripts/check-licenses.mjs`) |
+| `check-prebuild` | `checks.yml` (`prebuild-check` toggle, **off** by default) | yes — expensive, so the template does not enable the toggle |
+| `check:bundle-secrets` | `checks.yml` (`bundle-secrets` toggle, **off** by default) | not yet in the template |
 | `check:release` | `checks.yml` (`release-checks` toggle, off by default) | **opt-in** — only a consumer with a release setup ships it; the toggle stays `false` otherwise |
 | `badges:render` | `badges.yml` (`render-script`) | yes (`node scripts/badges/render.mjs`, driven by the `BADGE_*` environment above) |
 | `test:e2e:web` | `web.yml` (`e2e-script`) | yes (`bash scripts/e2e/web.sh`, which honors `PLAYWRIGHT_SKIP_EXPORT` — see [the Playwright / export contract](#the-playwright--export-contract)) |
