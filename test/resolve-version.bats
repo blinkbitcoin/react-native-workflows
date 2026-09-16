@@ -97,9 +97,11 @@ merge_release_fixture() {
 # contract-identical, not byte-identical, so the case that differs most between
 # two implementations is compared output-to-output.
 @test "this copy and the template's agree on the merge-commit fixture" {
-  # Set RNW_TEMPLATE_DIR to point this at another checkout; the default is where
-  # the template usually sits next to this repo.
-  template_dir="${RNW_TEMPLATE_DIR:-/Users/jonas/Dev/blink/react-native-mobile-template}"
+  # RNW_TEMPLATE_DIR only: this repo serves any consumer, so it has no business
+  # guessing where one sits on a particular machine. CI and anyone wanting the
+  # parity check points it at a checkout; everyone else gets the skip below.
+  template_dir="${RNW_TEMPLATE_DIR:-}"
+  [ -n "$template_dir" ] || skip "parity NOT verified: set RNW_TEMPLATE_DIR to a template checkout"
   other="$template_dir/scripts/release/resolve-version.sh"
   # A skip here means parity with the template's copy was NOT verified by this
   # run -- not that the two copies agree.
