@@ -22,6 +22,13 @@ on:
         description: Runner label for macOS jobs (unused by this workflow; carried for input-set consistency across the family)
         type: string
         default: 'macos-26'
+      default-branch:
+        description: >-
+          Fully qualified ref of the branch allowed to WRITE the Gradle cache
+          (every other ref reads it). Only the default branch should write, or
+          concurrent branches would evict each other's entries.
+        type: string
+        default: 'refs/heads/main'
       native-cache-version:
         description: Native cache key prefix (unused by this workflow; carried for input-set consistency across the family)
         type: string
@@ -154,7 +161,10 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6
         with:
-          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+          # Compared against the input, not a literal: a consumer whose default
+          # branch is `master` never wrote the cache at all and paid a cold
+          # Gradle on every run, including on its own default branch.
+          cache-read-only: ${{ github.ref != inputs.default-branch }}
       - name: Decode secrets
         env:
           ANDROID_UPLOAD_KEYSTORE_BASE64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}

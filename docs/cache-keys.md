@@ -2,7 +2,9 @@
 
 Every cache this family writes, what produces the key, and what invalidates it.
 Bumping the `native-cache-version` input (default `v1`) invalidates every
-native cache at once.
+native cache at once — including the Android system-image and AVD caches, which
+used to bake `v1` in as a literal and so survived every bump, quietly outliving
+the stale-AVD failures people bumped it to clear.
 
 ## The native dependency hash
 

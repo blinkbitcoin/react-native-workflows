@@ -365,6 +365,7 @@ No outputs. Secrets: `consumer-token` (optional).
 | `linux-runner` | `ubuntu-latest` | Runner for the Android jobs |
 | `macos-runner` | `macos-26` | Runner for the iOS jobs |
 | `native-cache-version` | `v1` | Bump to invalidate every native cache at once |
+| `default-branch` | `refs/heads/main` | Fully qualified ref of the branch allowed to **write** the Gradle cache; every other ref reads it. Set it if your default branch is not `main`, or the cache is never written and every run pays a cold Gradle |
 | `native-extra-globs` | `''` | Space-separated consumer-relative shell globs whose file contents join the native dependency hash (see [`docs/cache-keys.md`](cache-keys.md)) |
 | `ios` | `false` | Run the iOS build + simulator suite (macOS runners bill at 10x) |
 | `android` | `true` | Run the Android build + emulator suite |
@@ -704,6 +705,7 @@ Prebuild → `fastlane android build` → `fastlane android verify`, on
 | Input | Default | Meaning |
 | --- | --- | --- |
 | `repository`, `ref`, `working-directory`, `linux-runner`, `macos-runner`, `native-cache-version` | (as above) | — |
+| `default-branch` | `refs/heads/main` | Fully qualified ref of the branch allowed to **write** the Gradle cache; every other ref reads it. Set it if your default branch is not `main`, or the cache is never written and every run pays a cold Gradle |
 | `environment` | `''` | GitHub Environment gating the build |
 | `version` / `build-number` | **required** | `APP_VERSION` / `APP_BUILD_NUMBER` |
 | `stage` | `internal` | `RNW_STAGE` |

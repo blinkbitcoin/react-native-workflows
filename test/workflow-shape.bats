@@ -646,3 +646,60 @@ $(names "$real")"
   [ "$(yq -r '.jobs.badges.with."e2e-result"' "$f")" = '${{ needs.e2e.result }}' ]
   [ "$(yq -r '.jobs.badges.permissions.contents' "$f")" = "write" ]
 }
+
+# --- values a workflow advertises as configurable must not be baked in --------
+
+@test "every native cache key interpolates native-cache-version, none bakes in a literal" {
+  command -v yq >/dev/null || skip "yq not installed"
+  # The input's own description, expo-build-ios.yml's, and docs/cache-keys.md all
+  # promise that bumping this invalidates *every* native cache. The Android
+  # system-image and AVD keys baked in `v1`, so someone chasing a stale-AVD
+  # failure bumped the input, those two caches stayed warm, and the failure
+  # outlived the fix.
+  for w in "${WORKFLOWS[@]}"; do
+    keys=$(yq -r '[.jobs[].steps[]? | select((.uses? // "") | test("actions/cache")) | .with.key // ""] | .[]' "$w")
+    while read -r k; do
+      [ -n "$k" ] || continue
+      case "$k" in
+        *'-v'[0-9]*)
+          contains "$k" 'inputs.native-cache-version' \
+            || fail "$(basename "$w") bakes a cache version into a key instead of using the input: $k"
+          ;;
+      esac
+    done <<<"$keys"
+  done
+}
+
+@test "the Gradle cache write branch comes from an input, not a hardcoded main" {
+  command -v yq >/dev/null || skip "yq not installed"
+  # A consumer whose default branch is `master` never wrote the cache at all and
+  # paid a cold Gradle on every run, including on its own default branch.
+  for w in e2e expo-build-android; do
+    f="$REPO_ROOT/.github/workflows/$w.yml"
+    [ "$(yq -r '.on.workflow_call.inputs | has("default-branch")' "$f")" = "true" ] \
+      || fail "$w.yml does not declare a default-branch input"
+    [ "$(yq -r '.on.workflow_call.inputs."default-branch".default' "$f")" = "refs/heads/main" ] \
+      || fail "$w.yml's default-branch default changed"
+    ! grep -qF "github.ref != 'refs/heads/main'" "$f" \
+      || fail "$w.yml still compares github.ref against a hardcoded refs/heads/main"
+    grep -qF 'github.ref != inputs.default-branch' "$f" \
+      || fail "$w.yml does not compare github.ref against the input"
+  done
+}
+
+@test "the iOS and Android artifact uploads in e2e.yml guard on the build the same way" {
+  command -v yq >/dev/null || skip "yq not installed"
+  # The Android upload ran under always() with if-no-files-found: error, so a
+  # failed build produced a second red step - a missing APK - stacked on top of
+  # the real error. The iOS twin already had the right condition.
+  f="$REPO_ROOT/.github/workflows/e2e.yml"
+  expected="\${{ !cancelled() && steps.build.conclusion != 'failure' }}"
+  for name in "Upload iOS app" "Upload APK"; do
+    cond=$(yq -r ".jobs[].steps[]? | select(.name == \"$name\") | .if // \"\"" "$f")
+    [ "$cond" = "$expected" ] \
+      || fail "'$name' guards on '$cond', expected '$expected'"
+  done
+  # The condition is meaningless without the id it names.
+  ids=$(yq -r '[.jobs[].steps[]? | select(.id == "build")] | length' "$f")
+  [ "$ids" -ge 2 ] || fail "e2e.yml has $ids steps with id: build, expected one per platform"
+}
