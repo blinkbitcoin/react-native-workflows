@@ -4,5 +4,13 @@ actionlint = "1.7.12"
 bats = "1.14.0"
 yq = "4.53.6"
 node = "24"
+# This repo ships no package.json, but a dozen of its scripts shell out to pnpm
+# on the consumer's behalf - run-script.sh, web-export.sh, playwright.sh,
+# expo-config.sh - and their tests exercise those paths. Without pnpm on PATH
+# every one of them fails `require_cmd pnpm`, which is what happened on the
+# first real runner: the whole suite passed on laptops, where pnpm is installed
+# globally, and twelve cases failed in CI. Major only, matching the template's
+# `pnpm = "12"`.
+pnpm = "12"
 typos = "1.50.1"
 lefthook = "2.1.14"
