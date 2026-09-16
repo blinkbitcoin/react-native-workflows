@@ -111,3 +111,32 @@ rnw_run_hook() {
   log "running $var: $path"
   (cd "$root" && bash "$path")
 }
+
+# rnw_assert_suite_ran JUNIT_PATH PLATFORM - fail when the suite ran no tests.
+#
+# Maestro exits 0 when its flow selection matches nothing at all: a tag filter
+# that no flow carries, a renamed .maestro/flows directory, a config.yaml whose
+# includeTags stopped matching. The job then goes green having tested nothing,
+# which is the most expensive kind of pass - it is indistinguishable from a real
+# one, and it stays green until someone ships a broken build.
+#
+# The junit report Maestro already writes carries the count, so no extra run is
+# needed. Only the `tests` attribute is read here; whether individual tests
+# failed is already in Maestro's own exit status.
+rnw_assert_suite_ran() {
+  local junit="$1" platform="$2" tests
+  if [ ! -f "$junit" ]; then
+    die "$platform: Maestro reported success but wrote no junit report at $junit - the suite cannot be shown to have run"
+  fi
+  # The attribute off the <testsuites>/<testsuite> element. sed rather than an
+  # XML parser: the runners have no xmllint guarantee, and this is one attribute
+  # in a file Maestro generates to a fixed shape.
+  tests="$(sed -n 's/.*[^a-zA-Z]tests="\([0-9][0-9]*\)".*/\1/p' "$junit" | head -1)"
+  if [ -z "$tests" ]; then
+    die "$platform: no tests= count in $junit - cannot confirm the suite ran"
+  fi
+  if [ "$tests" -eq 0 ]; then
+    die "$platform: Maestro exited 0 but ran 0 flows. Check the flows directory and the tag filters (RNW_MAESTRO_INCLUDE_TAGS='${RNW_MAESTRO_INCLUDE_TAGS:-}', RNW_MAESTRO_EXCLUDE_TAGS='${RNW_MAESTRO_EXCLUDE_TAGS:-}') - a suite that selects nothing passes without testing anything."
+  fi
+  log "$platform: Maestro ran $tests flow(s)"
+}

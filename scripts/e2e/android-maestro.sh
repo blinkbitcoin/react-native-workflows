@@ -65,4 +65,10 @@ if [ "$status" -ne 0 ] && [ "$status" -ne 124 ]; then
   bounded_maestro "$bound" maestro "${args[@]}" || status=$?
   endgroup
 fi
+# A green suite still has to have been a suite. Maestro exits 0 when its flow
+# selection matches nothing, so success is only success once the junit report
+# says how many flows actually ran.
+if [ "$status" -eq 0 ]; then
+  rnw_assert_suite_ran "$out/junit.xml" "Android"
+fi
 exit "$status"

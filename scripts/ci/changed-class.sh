@@ -19,7 +19,22 @@ default_docs_globs='^docs/|\.md$|(^|/)LICENSE$|^\.github/ISSUE_TEMPLATE/|^\.gith
 docs_globs="${DOCS_GLOBS:-$default_docs_globs}"
 # An `[ ... ] && x` one-liner would exit the script under `set -e` when the
 # variable is empty (the list's status is the failing test's), so: an if.
+#
+# An empty alternative is rejected rather than appended. `docs/|` means "docs/ OR
+# the empty string", and the empty string matches every line, so `grep -Ev` would
+# select nothing, $non_docs would come back empty, and the classifier would
+# report docs-only=true for a pure code change - the whole matrix skipping green.
+# A trailing `|` is the easy way to write that by accident, in YAML especially.
 if [ -n "${DOCS_GLOBS_EXTRA:-}" ]; then
+  # Unlike the runtime paths below, a malformed *input* is a hard error. It is a
+  # human mistake in a workflow file, it is fixable in one edit, and failing open
+  # on it would mean quietly ignoring what the operator asked for on every run
+  # from here on.
+  case "$DOCS_GLOBS_EXTRA" in
+    '|'* | *'|' | *'||'*)
+      die "DOCS_GLOBS_EXTRA has an empty alternative ('$DOCS_GLOBS_EXTRA'): an empty alternative matches every path, which would classify every change as docs-only and skip the whole matrix"
+      ;;
+  esac
   docs_globs="$docs_globs|$DOCS_GLOBS_EXTRA"
 fi
 
@@ -82,8 +97,29 @@ if [ -z "$files" ]; then
   exit 0
 fi
 
-non_docs=$(printf '%s\n' "$files" | grep -Ev "$docs_globs" || true)
-if [ -z "$non_docs" ]; then
+# `|| true` would swallow the one case that matters. grep has three outcomes,
+# and only two of them are answers:
+#
+#   0  some path is not a doc      -> not docs-only
+#   1  every path is a doc         -> docs-only
+#   2+ the pattern did not compile -> no answer at all
+#
+# On 2 grep also prints nothing, so an unswallowed `$non_docs` is empty and
+# indistinguishable from "every path is a doc" - which is how a malformed
+# `docs-globs` used to classify a pure code change as docs-only and skip the
+# entire matrix green. The status has to be read, not the output.
+set +e
+non_docs=$(printf '%s\n' "$files" | grep -Ev "$docs_globs")
+grep_status=$?
+set -e
+if [ "$grep_status" -ge 2 ]; then
+  # Fail open, like every other "cannot classify" path above: a needlessly
+  # complete matrix is a far better answer than a silently skipped one.
+  log "::notice::could not apply the docs pattern (grep exited $grep_status; pattern: $docs_globs) - running everything"
+  gh_output docs-only false
+  exit 0
+fi
+if [ "$grep_status" -eq 1 ] && [ -z "$non_docs" ]; then
   gh_output docs-only true
 else
   gh_output docs-only false

@@ -91,12 +91,65 @@ sha256_of() {
   if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1"; else sha256sum "$1"; fi
 }
 
-release_exists() { gh release view "$tag" >/dev/null 2>&1; }
+# `gh release view >/dev/null 2>&1` collapses three different answers into one
+# failing status: the release is genuinely absent, the API refused us (403), we
+# were rate-limited (429), or the network dropped. Treating all of those as
+# "absent" is what let a blip read as "already promoted and deleted" and carry a
+# promote straight past the guard that refuses to publish an empty release.
+#
+# So: a 404 is an answer, and anything else is not. The message is matched rather
+# than the status because `gh release view` exits 1 for every failure; the
+# spellings below cover gh's own wording and the raw API's.
+#
+# Prints `present` or `absent` and returns 0 when it could tell; returns 1 when
+# it could not, leaving the caller to decide (every caller here treats that as
+# fatal, because guessing is what caused the problem).
+release_state() {
+  local t="$1" err rc
+  err="$(gh release view "$t" 2>&1 >/dev/null)"
+  rc=$?
+  if [ "$rc" -eq 0 ]; then
+    printf 'present\n'
+    return 0
+  fi
+  case "$err" in
+    *'release not found'* | *'Release not found'* | *'Not Found'* | *'HTTP 404'*)
+      printf 'absent\n'
+      return 0
+      ;;
+  esac
+  log "::error::could not determine whether release $t exists: $err"
+  return 1
+}
 
+# True only when the release is known to exist. A lookup that could not be made
+# is fatal here rather than false: "we could not ask" must never become "it is
+# not there".
+release_exists() {
+  local state
+  state="$(release_state "$tag")" ||
+    die "could not check whether release $tag exists - refusing to guess"
+  [ "$state" = present ]
+}
+
+# upload_assets [required]
+#
+# With `required`, an empty asset set is fatal. `promote` and `latest` pass it:
+# both take a release out of pre-release, and doing that with no binaries
+# attached publishes an empty release to users - and under promote's
+# DELETE_SOURCE the tested bytes are deleted right afterwards. There was a guard
+# for exactly this, but it sat inside the carry-forward branch, so any path that
+# skipped that branch (including a failed $FROM_TAG lookup) walked past it.
+#
+# create-prerelease stays permissive: it legitimately runs before a platform has
+# finished building, and the assets arrive on a later re-run with --clobber.
 upload_assets() {
-  local a
+  local required="${1:-}" a
   collect_assets
   if [ "${#assets[@]}" -eq 0 ]; then
+    if [ "$required" = required ]; then
+      die "no release assets found in $assets_dir; refusing to publish $tag as an empty release"
+    fi
     log "no release assets found in $assets_dir - nothing to upload"
     return 0
   fi
@@ -147,8 +200,12 @@ case "$mode" in
       mkdir -p "$assets_dir"
       # A re-run of a promote that already deleted its source must not fail:
       # the assets are on the target release by then, so a missing source is
-      # information, not an error.
-      if gh release view "$FROM_TAG" >/dev/null 2>&1; then
+      # information, not an error. A lookup that *failed* is a different thing
+      # entirely and is fatal - taking that branch skips the empty-release guard
+      # below and publishes whatever happens to be lying in $assets_dir.
+      from_state="$(release_state "$FROM_TAG")" ||
+        die "could not check whether $FROM_TAG exists - refusing to promote on a guess"
+      if [ "$from_state" = present ]; then
         group "carry assets forward from $FROM_TAG"
         rm -rf "$carry_dir"
         mkdir -p "$carry_dir"
@@ -180,11 +237,13 @@ case "$mode" in
     gh release edit "$tag" --prerelease=false --latest=false "${title_args[@]+"${title_args[@]}"}"
     # SHA256SUMS is regenerated here over the merged set (carried-forward assets
     # plus this run's), so it describes the release that actually exists.
-    upload_assets
+    upload_assets required
     # Only after the upload succeeded: deleting the source first would leave no
     # copy of the binaries anywhere if the upload then failed.
     if [ -n "${FROM_TAG:-}" ] && [ "${DELETE_SOURCE:-false}" = "true" ]; then
-      if gh release view "$FROM_TAG" >/dev/null 2>&1; then
+      from_state="$(release_state "$FROM_TAG")" ||
+        die "could not check whether $FROM_TAG still exists - refusing to guess before a delete"
+      if [ "$from_state" = present ]; then
         group "delete source pre-release $FROM_TAG"
         gh release delete "$FROM_TAG" --yes --cleanup-tag
         endgroup
@@ -196,7 +255,7 @@ case "$mode" in
   latest)
     release_exists || die "release $tag does not exist - run create-prerelease first"
     gh release edit "$tag" --prerelease=false --latest "${title_args[@]+"${title_args[@]}"}"
-    upload_assets
+    upload_assets required
     ;;
   append)
     release_exists || die "release $tag does not exist - nothing to append to"

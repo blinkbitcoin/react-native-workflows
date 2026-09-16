@@ -13,7 +13,12 @@ require_cmd git
 : "${BRANCH:?BRANCH is required}"
 gh_pages_assert_branch "$BRANCH"
 
-cd "$(consumer_root)"
+# Two steps: a command substitution used as an argument does not propagate its
+# exit status, and `cd ""` is a successful no-op. This script deletes a branch
+# directory and pushes, so running it in the wrong repository is the worst of
+# the three places this pattern appeared.
+root="$(consumer_root)"
+cd "$root"
 # The unit of work, re-runnable on a moved tip - see gh_pages_push. Modify/delete
 # is the conflict a replayed commit can never resolve, which is why this is a
 # function and not a straight line.

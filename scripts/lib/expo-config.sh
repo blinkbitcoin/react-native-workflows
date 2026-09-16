@@ -22,10 +22,32 @@ if [ -n "${EXPO_CONFIG_JSON:-}" ]; then
 else
   require_cmd pnpm yq shasum
   root="$(consumer_root)"
-  cache_key=$(printf '%s' "$root" | shasum -a 256 | cut -c1-16)
+  # The commit is part of the key, not just the path. app.config.ts reads the
+  # git state and the environment, so the same directory at two different
+  # commits is two different configs - and in CI that directory keeps its name
+  # across a re-checkout, so a path-only key served the previous commit's answer.
+  cache_key=$(printf '%s\n%s' "$root" "${GITHUB_SHA:-nosha}" | shasum -a 256 | cut -c1-16)
   json_file="${RUNNER_TEMP:-/tmp}/rnw-expo-config-$cache_key.json"
   if [ "$refresh" = true ] || [ ! -f "$json_file" ]; then
-    (cd "$root" && pnpm exec expo config --json --type public) > "$json_file"
+    # Written to a temp file and moved into place only on success. A plain
+    # redirect creates $json_file *before* expo runs, so a failed run left a
+    # zero-byte file behind - which the `[ ! -f ]` test above then accepted as a
+    # warm cache, and every later call in the job read an empty config and
+    # reported a missing key instead of the real failure.
+    tmp_file="$json_file.$$.tmp"
+    if (cd "$root" && pnpm exec expo config --json --type public) > "$tmp_file"; then
+      # Exit 0 with no output is the same trap one step further on: it would be
+      # cached and read as a config with no keys in it.
+      if [ ! -s "$tmp_file" ]; then
+        rm -f "$tmp_file"
+        die "expo config produced no output in $root; no cache was written"
+      fi
+      mv "$tmp_file" "$json_file"
+    else
+      status=$?
+      rm -f "$tmp_file"
+      die "expo config failed in $root (exit $status); no cache was written"
+    fi
   fi
 fi
 

@@ -16,6 +16,9 @@ setup() {
   export RNW_TEST_SOURCE_EXISTS="$BATS_TEST_TMPDIR/source-exists"
   export RNW_TEST_SOURCE_TAG="v1.2.3-build.42"
   export RNW_TEST_SOURCE_ASSETS="$BATS_TEST_TMPDIR/source-assets"
+  # Touched by a test to make every `gh release view` fail the way a 403, a 429
+  # or a dropped connection does: non-zero, but not a 404.
+  export RNW_TEST_LOOKUP_FAILS="$BATS_TEST_TMPDIR/lookup-fails"
   mkdir -p "$RNW_TEST_SOURCE_ASSETS"
   : > "$RNW_TEST_LOG"
   printf 'Initial release notes.\n' > "$RNW_TEST_BODY"
@@ -28,11 +31,18 @@ case "$1 $2" in
       *"--json url"*) printf 'https://example.test/releases/%s\n' "$3"; exit 0 ;;
       *"--json body"*) cat "$RNW_TEST_BODY"; exit 0 ;;
     esac
+    # gh's real wording for a missing release, on stderr. The script matches the
+    # message, not the status, because `gh release view` exits 1 for a 404, a
+    # 403, a 429 and a dropped connection alike - and only the 404 is an answer.
+    if [ -f "$RNW_TEST_LOOKUP_FAILS" ]; then
+      echo "error connecting to api.github.com (HTTP 403)" >&2
+      exit 1
+    fi
     if [ "$3" = "$RNW_TEST_SOURCE_TAG" ]; then
-      [ -f "$RNW_TEST_SOURCE_EXISTS" ] || exit 1
+      [ -f "$RNW_TEST_SOURCE_EXISTS" ] || { echo "release not found" >&2; exit 1; }
       exit 0
     fi
-    [ -f "$RNW_TEST_EXISTS" ] || exit 1
+    [ -f "$RNW_TEST_EXISTS" ] || { echo "release not found" >&2; exit 1; }
     exit 0
     ;;
   "release create") : > "$RNW_TEST_EXISTS"; exit 0 ;;
@@ -112,6 +122,9 @@ release() { run bash "$REPO_ROOT/scripts/release/release-assets.sh" "$@"; }
 
 @test "promote leaves the release out of latest, latest marks it" {
   : > "$RNW_TEST_EXISTS"
+  # Both modes now refuse to publish an empty release, and this case is about
+  # the --latest flags, so give it something to publish.
+  printf 'ipa\n' > "$ASSETS/app.ipa"
   TAG=v1.2.3 release promote
   [ "$status" -eq 0 ] || fail "promote exited $status: $output"
   grep -q -- "release edit v1.2.3 --prerelease=false --latest=false" "$RNW_TEST_LOG" \
@@ -357,10 +370,65 @@ EOF
   contains "$output" "unknown mode" || fail "unexpected message: $output"
 }
 
-@test "no assets in the directory is not an error" {
-  : > "$RNW_TEST_EXISTS"
-  TAG=v1.2.3 release latest
+@test "no assets is not an error while the release is still a pre-release" {
+  # create-prerelease legitimately runs before a platform has finished building;
+  # the binaries arrive on a later re-run, which uploads with --clobber.
+  TAG=v1.2.3 release create-prerelease
   [ "$status" -eq 0 ] || fail "exited $status with an empty assets dir: $output"
   contains "$output" "no release assets found" || fail "unexpected message: $output"
   ! grep -q '^release upload' "$RNW_TEST_LOG" || fail "uploaded with nothing to upload"
+}
+
+@test "publishing an empty release is fatal, not a shrug" {
+  # `latest` and `promote` take a release out of pre-release. Doing that with no
+  # binaries attached publishes an empty release to users - and under promote's
+  # DELETE_SOURCE the tested bytes are deleted right after. A guard for this
+  # existed but sat inside the carry-forward branch, so every path that skipped
+  # that branch walked straight past it.
+  : > "$RNW_TEST_EXISTS"
+  TAG=v1.2.3 release latest
+  [ "$status" -ne 0 ] || fail "published an empty release: $output"
+  contains "$output" "refusing to publish" || fail "unexpected message: $output"
+  ! grep -q '^release upload' "$RNW_TEST_LOG" || fail "uploaded anyway"
+}
+
+@test "promoting an empty release is fatal even with no FROM_TAG at all" {
+  : > "$RNW_TEST_EXISTS"
+  TAG=v1.2.3 release promote
+  [ "$status" -ne 0 ] || fail "promoted an empty release: $output"
+  contains "$output" "refusing to publish" || fail "unexpected message: $output"
+}
+
+# --- a failed lookup is not evidence of absence ------------------------------
+#
+# `gh release view >/dev/null 2>&1` exits 1 for a 404, a 403, a 429 and a
+# dropped connection alike. Reading all of those as "the release is gone" is
+# what let a blip take the "already promoted and deleted?" branch, skip the
+# empty-release guard that lived inside the other branch, and publish.
+
+@test "a failed FROM_TAG lookup stops the promote instead of guessing" {
+  : > "$RNW_TEST_EXISTS"
+  : > "$RNW_TEST_SOURCE_EXISTS"
+  cp "$RNW_TEST_BODY" "$RNW_TEST_SOURCE_ASSETS/notes.md"
+  : > "$RNW_TEST_LOOKUP_FAILS"
+  TAG=v1.2.3 FROM_TAG="$RNW_TEST_SOURCE_TAG" release promote
+  [ "$status" -ne 0 ] || fail "a 403 was read as 'the source is gone': $output"
+  contains "$output" "refusing" || fail "unexpected message: $output"
+  ! grep -q '^release edit' "$RNW_TEST_LOG" || fail "took the release out of pre-release on a guess"
+}
+
+@test "a failed lookup of the target release stops every mode" {
+  : > "$RNW_TEST_LOOKUP_FAILS"
+  for mode in create-prerelease promote latest append; do
+    TAG=v1.2.3 release "$mode"
+    [ "$status" -ne 0 ] || fail "$mode continued after a failed lookup: $output"
+  done
+}
+
+@test "a genuine 404 is still read as absent" {
+  # The fix must not turn "not found" into an error: create-prerelease depends
+  # on telling those apart, and so does the promote re-run path.
+  TAG=v1.2.3 release create-prerelease
+  [ "$status" -eq 0 ] || fail "a missing release was treated as a lookup failure: $output"
+  grep -q '^release create' "$RNW_TEST_LOG" || fail "it did not create the release: $(cat "$RNW_TEST_LOG")"
 }

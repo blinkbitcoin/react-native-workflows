@@ -206,3 +206,72 @@ commit_file() {
   [ "$status" -eq 0 ]
   grep -qF "docs-only=false" <<<"$output" || fail "expected docs-only=false, got: $output"
 }
+
+# --- a pattern that does not compile must not read as "everything is docs" ----
+#
+# grep prints nothing on exit 2 (a bad ERE) exactly as it does on exit 1 (no
+# match), so a `|| true` made the two indistinguishable: $non_docs came back
+# empty, the classifier said docs-only=true, and every job in the matrix skipped
+# green on a pure code change. Verified against the pre-fix script, which really
+# did answer `docs-only=true` here.
+
+@test "a docs pattern that does not compile fails open, it does not skip the matrix" {
+  commit_file "README.md"
+  base=$(git -C "$repo" rev-parse HEAD)
+  commit_file "src/a.ts"
+  head=$(git -C "$repo" rev-parse HEAD)
+  cd "$repo" && DOCS_GLOBS='[' run bash "$REPO_ROOT/scripts/ci/changed-class.sh" "$base" "$head"
+  [ "$status" -eq 0 ] || fail "a bad pattern failed the step instead of failing open: $output"
+  contains "$output" "docs-only=false" || fail "a bad pattern classified a code change as docs: $output"
+  contains "$output" "::notice::" || fail "no ::notice:: explaining why the matrix ran in full: $output"
+}
+
+@test "a docs pattern that does not compile fails open even on a docs-only change" {
+  # The answer is still "run everything": with no working pattern the script has
+  # no basis to call anything docs, and over-running is the safe direction.
+  commit_file "README.md"
+  base=$(git -C "$repo" rev-parse HEAD)
+  commit_file "docs/x.md"
+  head=$(git -C "$repo" rev-parse HEAD)
+  cd "$repo" && DOCS_GLOBS='[' run bash "$REPO_ROOT/scripts/ci/changed-class.sh" "$base" "$head"
+  [ "$status" -eq 0 ] || fail "exited $status: $output"
+  contains "$output" "docs-only=false" || fail "a bad pattern still classified: $output"
+}
+
+@test "a trailing pipe in DOCS_GLOBS_EXTRA is refused, not appended" {
+  # `docs/|` is "docs/ OR the empty string", and the empty string matches every
+  # path - so every change would classify as docs-only. A trailing pipe is the
+  # easy way to write that by accident, in YAML especially. Unlike the runtime
+  # paths, a malformed input is a hard error: it is a human mistake, fixable in
+  # one edit, and failing open on it would ignore the operator silently forever.
+  commit_file "README.md"
+  base=$(git -C "$repo" rev-parse HEAD)
+  commit_file "src/a.ts"
+  head=$(git -C "$repo" rev-parse HEAD)
+  cd "$repo" && DOCS_GLOBS_EXTRA='foo/|' run bash "$REPO_ROOT/scripts/ci/changed-class.sh" "$base" "$head"
+  [ "$status" -ne 0 ] || fail "an empty alternative was accepted: $output"
+  contains "$output" "empty alternative" || fail "the error does not say what is wrong: $output"
+  not_contains "$output" "docs-only=true" || fail "it classified anyway: $output"
+}
+
+@test "a leading pipe and a doubled pipe in DOCS_GLOBS_EXTRA are refused too" {
+  commit_file "README.md"
+  base=$(git -C "$repo" rev-parse HEAD)
+  commit_file "src/a.ts"
+  head=$(git -C "$repo" rev-parse HEAD)
+  for bad in '|foo/' 'foo/||bar/'; do
+    cd "$repo" && DOCS_GLOBS_EXTRA="$bad" run bash "$REPO_ROOT/scripts/ci/changed-class.sh" "$base" "$head"
+    [ "$status" -ne 0 ] || fail "DOCS_GLOBS_EXTRA='$bad' was accepted: $output"
+  done
+}
+
+@test "a well-formed DOCS_GLOBS_EXTRA still adds alternatives" {
+  # The guard must reject only the empty alternative, not the feature.
+  commit_file "README.md"
+  base=$(git -C "$repo" rev-parse HEAD)
+  commit_file "handbook/x.txt"
+  head=$(git -C "$repo" rev-parse HEAD)
+  cd "$repo" && DOCS_GLOBS_EXTRA='^handbook/' run bash "$REPO_ROOT/scripts/ci/changed-class.sh" "$base" "$head"
+  [ "$status" -eq 0 ] || fail "exited $status: $output"
+  [ "$output" = "docs-only=true" ] || fail "the extra alternative was not applied: $output"
+}
