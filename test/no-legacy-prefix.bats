@@ -22,19 +22,20 @@ load test_helper
 # match today's names would make them lie about their own past.
 legacy_hits() {
   cd "$REPO_ROOT" || return 1
-  # -I skips binary files; the lockfile fixture is excluded because base64
-  # integrity hashes contain the letters by coincidence, not as an identifier.
-  # This file is excluded from its own search: it names the old prefix on
-  # purpose, to explain what was renamed and why. A check that reads its own
-  # explanation as a violation is a false positive waiting to happen.
-  grep -rnIi 'rnw' \
-    --exclude-dir=.git \
-    --exclude-dir=.superpowers \
-    --exclude-dir=node_modules \
-    --exclude=no-legacy-prefix.bats \
-    . 2>/dev/null |
-    grep -v '^\./docs/superpowers/' |
-    grep -v 'integrity: sha512' || true
+  # `git ls-files`, not a directory walk: self-ci.yml's parity job checks the
+  # consumer repository out into .template/ *inside* this workspace, and a walk
+  # then reads another repository's files - including its dated plan archives,
+  # which name the old prefix on purpose. Tracked files are exactly this repo.
+  #
+  # This file is excluded from its own search: it names the old prefix to
+  # explain what was renamed. A check that reads its own explanation as a
+  # violation is a false positive waiting to happen. The archives below are
+  # dated records of what was planned at the time.
+  git ls-files -z |
+    grep -zv '^docs/superpowers/' |
+    grep -zv '^test/no-legacy-prefix.bats$' |
+    grep -zv '^test/fixtures/consumer/pnpm-lock.yaml$' |
+    xargs -0 grep -nIi 'rnw' 2>/dev/null || true
 }
 
 @test "no RNW_ variable, \$RNW or .rnw path survives outside the archives" {
@@ -45,7 +46,8 @@ $hits"
 
 @test "no file or directory is named with the old prefix" {
   cd "$REPO_ROOT" || fail "cannot reach the repo root"
-  found="$(find . -path ./.git -prune -o -iname '*rnw*' -print 2>/dev/null || true)"
+  # Tracked paths only, for the same reason as above.
+  found="$(git ls-files | grep -i 'rnw' || true)"
   [ -z "$found" ] || fail "these paths still carry the old prefix: $found"
 }
 
