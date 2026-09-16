@@ -3,7 +3,7 @@
 # React Native Workflows
 
 Shared GitHub Actions workflows for building, testing and releasing<br>
-the team's React Native (Expo) apps.
+React Native (Expo) apps.
 
 [![CI](https://github.com/blinkbitcoin/react-native-workflows/actions/workflows/self-ci.yml/badge.svg?branch=main)](https://github.com/blinkbitcoin/react-native-workflows/actions/workflows/self-ci.yml?query=branch%3Amain)
 [![Smoke](https://github.com/blinkbitcoin/react-native-workflows/actions/workflows/self-smoke.yml/badge.svg?branch=main)](https://github.com/blinkbitcoin/react-native-workflows/actions/workflows/self-smoke.yml?query=branch%3Amain)
