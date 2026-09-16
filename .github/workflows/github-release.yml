@@ -58,6 +58,15 @@ on:
         description: Heading for the section added in `append` mode
         type: string
         default: 'Update'
+      body-note:
+        description: >-
+          Text placed at the top of the release body, as a Markdown note
+          admonition, when the release is created. For saying something about
+          the release that its notes cannot know - that store uploads were off
+          and this build never reached a store, for instance. Empty adds
+          nothing.
+        type: string
+        default: ''
       from-tag:
         description: '`promote` mode only: pre-release tag (e.g. v1.2.3-build.42) whose assets are carried forward to `tag`, so the promoted release ships the exact binaries that were tested rather than a rebuild'
         type: string
@@ -160,4 +169,5 @@ jobs:
           FROM_TAG: ${{ inputs.from-tag }}
           DELETE_SOURCE: ${{ inputs.delete-source }}
           NOTES_FILE: ${{ env.WORKFLOWS_ASSETS_DIR }}/${{ inputs.notes-file }}
+          BODY_NOTE: ${{ inputs.body-note }}
         run: bash ".workflows/scripts/release/release-assets.sh" "$MODE"

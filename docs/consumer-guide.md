@@ -780,6 +780,7 @@ Creates or moves a GitHub release and attaches the fixed asset set.
 | `notes-artifact` | `release-meta` | Artifact carrying the notes file |
 | `notes-file` | `notes.md` | File inside that artifact used as the body (or, in `append` mode, as the appended section) |
 | `assets-artifacts` | `''` | Artifact name or glob pattern whose files are attached |
+| `body-note` | `''` | Text placed at the top of the release body as a Markdown note admonition, at creation time. For a fact the notes cannot know — that store uploads were off and this build never reached a store, say. With no notes file of its own it is prepended to gh's generated notes rather than replacing them |
 | `append-title` | `Update` | Heading for the section added in `append` mode |
 | `from-tag` | `''` | `promote` only: pre-release tag (e.g. `v1.2.3-build.42`) whose assets are downloaded and re-uploaded to `tag`, so the promoted release ships **the exact binaries that were tested** rather than a rebuild. `SHA256SUMS` is regenerated over the merged set |
 | `delete-source` | `false` | `promote` only: delete the `from-tag` pre-release **and its tag** (`gh release delete --cleanup-tag`) — after the upload succeeded, never before, so a failed upload cannot leave the binaries nowhere. A re-run whose source is already gone continues instead of failing |

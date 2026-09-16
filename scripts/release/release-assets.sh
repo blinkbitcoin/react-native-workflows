@@ -51,7 +51,7 @@ body_file="${RUNNER_TEMP:-/tmp}/workflows-release-body.md"
 stripped_file="$body_file.stripped"
 # Where a $FROM_TAG release's assets are staged before being merged in.
 carry_dir="${RUNNER_TEMP:-/tmp}/workflows-carry-assets"
-trap 'rm -f "$body_file" "$stripped_file"; rm -rf "$carry_dir"' EXIT
+trap 'rm -f "$body_file" "$stripped_file" "${RUNNER_TEMP:-/tmp}/workflows-release-note.md"; rm -rf "$carry_dir"' EXIT
 
 # The fixed asset set, as basename globs. Anything else in the directory is
 # deliberately ignored rather than silently published.
@@ -174,6 +174,40 @@ notes_args=()
 if [ -n "${NOTES_FILE:-}" ] && [ -f "$NOTES_FILE" ]; then
   notes_args=(--notes-file "$NOTES_FILE")
 fi
+
+# $BODY_NOTE goes at the top of the body, at creation time. It exists so a
+# release can say something about itself that the notes cannot know - today,
+# that store uploads were switched off and this build never reached a store.
+#
+# At creation rather than through a follow-up `append`: an appended marker
+# leaves a window, however short, in which the release reads as an ordinary
+# store build, and anyone watching the releases page during that window is
+# misled by a release we deliberately marked.
+#
+# With no notes file, `--generate-notes` and a notes file combine: gh prepends
+# the provided notes to the ones it generates, which is exactly the shape
+# wanted here ("Additional release notes can be prepended", gh release create
+# --help). So both paths end up with the note first and the real notes below.
+# Recorded before $BODY_NOTE rewrites notes_args below: the create path decides
+# whether to ask gh to generate notes by checking whether any were supplied, and
+# a note alone must not be mistaken for supplied notes.
+had_notes_file=false
+[ "${#notes_args[@]}" -eq 0 ] || had_notes_file=true
+
+if [ -n "${BODY_NOTE:-}" ]; then
+  note_file="${RUNNER_TEMP:-/tmp}/workflows-release-note.md"
+  {
+    printf '> [!NOTE]\n'
+    # One blockquote line per input line, so a multi-line note stays inside the
+    # admonition rather than half of it falling out into the body.
+    while IFS= read -r line; do printf '> %s\n' "$line"; done <<< "$BODY_NOTE"
+    printf '\n'
+  } > "$note_file"
+  if [ "$had_notes_file" = true ]; then
+    cat "$NOTES_FILE" >> "$note_file"
+  fi
+  notes_args=(--notes-file "$note_file")
+fi
 target_args=()
 [ -z "${TARGET_SHA:-}" ] || target_args=(--target "$TARGET_SHA")
 
@@ -184,8 +218,11 @@ case "$mode" in
       gh release edit "$tag" --prerelease --draft=false "${title_args[@]+"${title_args[@]}"}" \
         "${notes_args[@]+"${notes_args[@]}"}"
     else
-      if [ "${#notes_args[@]}" -eq 0 ]; then
-        notes_args=(--generate-notes)
+      # `--generate-notes` alongside a notes file is deliberate, not a conflict:
+      # gh prepends the supplied notes to the generated ones, so a body note
+      # lands above real release notes instead of replacing them.
+      if [ "$had_notes_file" = false ]; then
+        notes_args+=(--generate-notes)
       fi
       gh release create "$tag" --prerelease \
         "${title_args[@]+"${title_args[@]}"}" \

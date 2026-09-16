@@ -432,3 +432,67 @@ EOF
   [ "$status" -eq 0 ] || fail "a missing release was treated as a lookup failure: $output"
   grep -q '^release create' "$WORKFLOWS_TEST_LOG" || fail "it did not create the release: $(cat "$WORKFLOWS_TEST_LOG")"
 }
+
+# --- a release can say something about itself -------------------------------
+#
+# $BODY_NOTE puts a Markdown note admonition at the top of the body at creation
+# time. It exists so a release can carry a fact its notes cannot know - today,
+# that store uploads were switched off and this build never reached a store.
+#
+# At creation rather than through a follow-up `append`: an appended marker
+# leaves a window in which the release reads as an ordinary store build.
+
+body_of() { sed -n 's/^release create [^ ]* //p' "$WORKFLOWS_TEST_LOG"; }
+
+@test "a body note is written to the notes file the release is created from" {
+  printf 'ipa\n' > "$ASSETS/app.ipa"
+  TAG=v1.2.3 BODY_NOTE='Store uploads were off for this build.' release create-prerelease
+  [ "$status" -eq 0 ] || fail "exited $status: $output"
+  note="$RUNNER_TEMP/workflows-release-note.md"
+  # The script cleans up on exit, so the assertion is on what gh was handed.
+  grep -q -- '--notes-file' "$WORKFLOWS_TEST_LOG" || fail "no notes file was passed: $(cat "$WORKFLOWS_TEST_LOG")"
+  grep -q -- 'workflows-release-note.md' "$WORKFLOWS_TEST_LOG" \
+    || fail "gh was not handed the note file: $(cat "$WORKFLOWS_TEST_LOG")"
+  [ ! -f "$note" ] || fail "the scratch note survived the run"
+}
+
+@test "with no notes of its own, the note is prepended to generated notes" {
+  # gh prepends supplied notes to the ones it generates, so the two combine
+  # rather than conflict - the note lands above real release notes.
+  printf 'ipa\n' > "$ASSETS/app.ipa"
+  TAG=v1.2.3 BODY_NOTE='No store upload.' release create-prerelease
+  [ "$status" -eq 0 ] || fail "exited $status: $output"
+  grep -q -- '--generate-notes' "$WORKFLOWS_TEST_LOG" \
+    || fail "a body note suppressed generated notes: $(cat "$WORKFLOWS_TEST_LOG")"
+}
+
+@test "a supplied notes file keeps its content, with the note above it" {
+  printf 'ipa\n' > "$ASSETS/app.ipa"
+  printf 'The real release notes.\n' > "$ASSETS/notes.md"
+  TAG=v1.2.3 NOTES_FILE="$ASSETS/notes.md" BODY_NOTE='No store upload.' \
+ release create-prerelease
+  [ "$status" -eq 0 ] || fail "exited $status: $output"
+  # Supplied notes are not generated ones, so gh must not be asked to generate.
+  ! grep -q -- '--generate-notes' "$WORKFLOWS_TEST_LOG" \
+    || fail "asked gh to generate notes over a supplied file: $(cat "$WORKFLOWS_TEST_LOG")"
+}
+
+@test "no body note leaves the notes arguments exactly as they were" {
+  printf 'ipa\n' > "$ASSETS/app.ipa"
+  printf 'The real release notes.\n' > "$ASSETS/notes.md"
+  TAG=v1.2.3 NOTES_FILE="$ASSETS/notes.md" release create-prerelease
+  [ "$status" -eq 0 ] || fail "exited $status: $output"
+  grep -q -- "--notes-file $ASSETS/notes.md" "$WORKFLOWS_TEST_LOG" \
+    || fail "the supplied notes file was not used verbatim: $(cat "$WORKFLOWS_TEST_LOG")"
+  ! grep -q -- 'workflows-release-note.md' "$WORKFLOWS_TEST_LOG" \
+    || fail "a note file appeared without a body note"
+}
+
+@test "every mode that creates or promotes a release accepts a body note" {
+  # `latest` publishes to users just as `create-prerelease` does, so it must be
+  # able to carry the same marker.
+  printf 'ipa\n' > "$ASSETS/app.ipa"
+  : > "$WORKFLOWS_TEST_EXISTS"
+  TAG=v1.2.3 BODY_NOTE='No store upload.' release latest
+  [ "$status" -eq 0 ] || fail "latest exited $status: $output"
+}
