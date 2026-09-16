@@ -212,15 +212,22 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
         run: bash "$RNW/scripts/checks/run-script.sh" "$SCRIPT_NAME"
+      # The consumer's own script wins when it ships one; the script in this
+      # repo is the fallback. See scripts/checks/run-consumer-or.sh for why -
+      # in short, a gate the consumer defines and a gate CI runs must be the
+      # same gate, and for these five they were not.
       - name: i18n
         if: ${{ inputs.i18n }}
-        run: bash "$RNW/scripts/checks/i18n.sh"
+        run: bash "$RNW/scripts/checks/run-consumer-or.sh" 'i18n:check' scripts/checks/i18n.sh
       - name: GraphQL codegen
         if: ${{ inputs.graphql-codegen }}
-        run: bash "$RNW/scripts/checks/codegen.sh"
+        run: bash "$RNW/scripts/checks/run-consumer-or.sh" 'codegen:check' scripts/checks/codegen.sh
+      # deps:check, not expo-doctor: the template's script is
+      # `expo install --check && expo-doctor`, and the `expo install --check`
+      # half - SDK version drift - ran on laptops and in no CI job at all.
       - name: Expo doctor
         if: ${{ inputs.expo-doctor }}
-        run: bash "$RNW/scripts/checks/expo-doctor.sh"
+        run: bash "$RNW/scripts/checks/run-consumer-or.sh" 'deps:check' scripts/checks/expo-doctor.sh
       # The audit is one registry request (the advisories/bulk endpoint), and
       # that endpoint is the family's known staller: esign measured 5s-102s for
       # identical payloads on a healthy day. So the step gets a bound of its
@@ -252,7 +259,9 @@ jobs:
           AUDIT_LEVEL: ${{ inputs.audit-level }}
           PNPM_CONFIG_FETCH_TIMEOUT: '270000'
           NPM_CONFIG_FETCH_TIMEOUT: '270000'
-        run: bash "$RNW/scripts/checks/audit.sh"
+        # deps:audit, not audit.sh: the template's script also runs its lockfile
+        # provenance check, which likewise ran in no CI job.
+        run: bash "$RNW/scripts/checks/run-consumer-or.sh" 'deps:audit' scripts/checks/audit.sh
       # Ruby is installed here rather than through the `setup` action's `ruby`
       # input so the 12 checks above never pay for a bundle install they do not
       # use; `bundler-cache: true` makes the repeat cost near zero.
@@ -272,12 +281,14 @@ jobs:
         env:
           SCRIPT_NAME: 'check:release'
         run: bash "$RNW/scripts/checks/run-script.sh" "$SCRIPT_NAME"
+      # RNW_ACTIONLINT / RNW_SHELLCHECK reach the fallback only. A consumer that
+      # ships check:ci owns that decision itself, which is the point of the seam.
       - name: Lint CI (actionlint / shellcheck)
         if: ${{ inputs.actionlint || inputs.shellcheck }}
         env:
           RNW_ACTIONLINT: ${{ inputs.actionlint }}
           RNW_SHELLCHECK: ${{ inputs.shellcheck }}
-        run: bash "$RNW/scripts/ci/lint-ci.sh"
+        run: bash "$RNW/scripts/checks/run-consumer-or.sh" 'check:ci' scripts/ci/lint-ci.sh
   commits:
     if: ${{ inputs.commitlint && github.event_name == 'pull_request' && github.actor != 'dependabot[bot]' }}
     runs-on: ${{ inputs.linux-runner }}

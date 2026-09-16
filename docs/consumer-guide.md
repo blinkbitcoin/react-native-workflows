@@ -1171,10 +1171,21 @@ is the first-parent commit count plus `BUILD_NUMBER_OFFSET` in both copies.
 Every toggle above calls `scripts/checks/run-script.sh NAME`, which does
 `pnpm run NAME` when `package.json` has that script, else `pnpm exec NAME`
 when `node_modules/.bin/NAME` exists, else fails with a message pointing back
-to this doc. `i18n`, `graphql-codegen`, `expo-doctor`, `audit` and
-`commitlint` have their own small wrapper scripts (also documented below) that
-call a fixed name or shell out directly — their consumer-facing name is not
-configurable.
+to this doc. `commitlint` has its own small wrapper that shells out directly —
+its consumer-facing name is not configurable.
+
+**Your script wins.** Five gates — i18n, codegen, Expo doctor, audit and the CI
+linters — go through `scripts/checks/run-consumer-or.sh NAME FALLBACK`: it runs
+your `NAME` script when you ship one, and this repo's own implementation when
+you do not. Which branch it took is in the run log.
+
+That seam exists because the two implementations had already drifted. This
+repo's `expo-doctor.sh` ran `expo-doctor`, while the template's `deps:check`
+runs `expo install --check && expo-doctor` — so SDK version drift was checked on
+developer machines and in no CI job. `audit.sh` likewise ran `pnpm audit` while
+the template's `deps:audit` also checks lockfile provenance. A gate you define
+and the gate CI runs have to be the same gate, or a green `make check` is a
+claim about coverage CI does not have.
 
 Verified against `react-native-mobile-template`'s `package.json` (`pnpm run`
 line for line, both repos read on the same date):
@@ -1187,10 +1198,13 @@ line for line, both repos read on the same date):
 | `knip` | `checks.yml` (`knip`) | **no package script; binary fallback** — falls back to the `knip` binary in `node_modules/.bin` (present: `knip` is a devDependency), so the toggle still works via the binary path. This is deliberate: a `package.json` script literally named `knip` fails `expo-doctor`'s "Check package.json for common issues" ("scripts in package.json conflict with the contents of node_modules/.bin"), and `checks.yml` runs expo-doctor too |
 | `spell` | `checks.yml` (`spell`) | yes (`typos`) |
 | `check:docs` | `checks.yml` (`docs-check` toggle, on by default) | yes (`make check-docs`) — the consumer owns what "docs are in order" means; this family only decides when to ask |
-| `i18n:extract` | `scripts/checks/i18n.sh` (`i18n` toggle, off by default) | yes |
-| `codegen` | `scripts/checks/codegen.sh` (`graphql-codegen` toggle, off by default) | yes |
-| `expo-doctor` binary | `scripts/checks/expo-doctor.sh` (`expo-doctor` toggle) | n/a — `pnpm exec expo-doctor` (devDependency present) |
-| `pnpm audit --prod` | `scripts/checks/audit.sh` (`audit` toggle) | n/a — not a package.json script, calls pnpm directly |
+| `i18n:check` | `checks.yml` (`i18n` toggle, off by default) — preferred over `scripts/checks/i18n.sh` | yes |
+| `i18n:extract` | `scripts/checks/i18n.sh`, the fallback when a consumer ships no `i18n:check` | yes |
+| `codegen:check` | `checks.yml` (`graphql-codegen` toggle, off by default) — preferred over `scripts/checks/codegen.sh` | yes |
+| `codegen` | `scripts/checks/codegen.sh`, the fallback when a consumer ships no `codegen:check` | yes |
+| `deps:check` | `checks.yml` (`expo-doctor` toggle) — preferred over `scripts/checks/expo-doctor.sh` | yes (`expo install --check && expo-doctor`) — the SDK-drift half is why the consumer's script is preferred |
+| `deps:audit` | `checks.yml` (`audit` toggle) — preferred over `scripts/checks/audit.sh` | yes (`pnpm audit --prod` + lockfile provenance) |
+| `check:ci` | `checks.yml` (`actionlint`/`shellcheck` toggles) — preferred over `scripts/ci/lint-ci.sh` | not yet in the template; the fallback runs |
 | commitlint binary | `scripts/checks/commitlint.sh` (`commitlint` toggle, `pr-title.yml`) | n/a — `pnpm exec commitlint` when `@commitlint/cli` is a devDependency (it is), else `npx` with a pinned fallback config |
 | `test` | `unit.yml` (`test-script`, used when `coverage: false`) | yes |
 | `test:coverage` | `unit.yml` (`coverage-script`, default path) | yes |
