@@ -61,6 +61,15 @@ on:
         description: Xcode scheme passed to the lanes as IOS_SCHEME. Required for the same reason as `ios-bundle-id`
         type: string
         required: true
+      android-signing:
+        description: >-
+          Sign with the upload keystore. Off lets the release build fall back to
+          the debug keystore (the consumer's signing config plugin does this and
+          warns that it did), which still produces an .aab, a universal .apk and
+          a mapping file and needs no Play credentials. Nothing signed this way
+          can be uploaded to a store.
+        type: boolean
+        default: true
       verify:
         description: Run the `android verify` lane after `android build`
         type: boolean
@@ -203,6 +212,10 @@ jobs:
           ANDROID_UPLOAD_KEY_ALIAS: ${{ secrets.ANDROID_UPLOAD_KEY_ALIAS }}
           ANDROID_UPLOAD_KEY_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEY_PASSWORD }}
           PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          # Non-empty value in the `&&` slot: GitHub's `&&` yields its first
+          # falsy operand, so `cond && '' || X` would be X on both branches.
+          # fastlane.sh appends $LANE_ARGS to the lane arguments.
+          LANE_ARGS: ${{ !inputs.android-signing && 'skip_signing:true' || '' }}
         run: bash "$WORKFLOWS_DIR/scripts/release/fastlane.sh" android build
       # Between build and verify: the digests describe what the lane just
       # produced, and verify is the step that checks the apk it is about to
@@ -234,6 +247,10 @@ jobs:
           ANDROID_UPLOAD_KEY_ALIAS: ${{ secrets.ANDROID_UPLOAD_KEY_ALIAS }}
           ANDROID_UPLOAD_KEY_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEY_PASSWORD }}
           PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          # Non-empty value in the `&&` slot: GitHub's `&&` yields its first
+          # falsy operand, so `cond && '' || X` would be X on both branches.
+          # fastlane.sh appends $LANE_ARGS to the lane arguments.
+          LANE_ARGS: ${{ !inputs.android-signing && 'skip_signing:true' || '' }}
         run: bash "$WORKFLOWS_DIR/scripts/release/fastlane.sh" android verify
       - name: Upload android-aab
         uses: actions/upload-artifact@v7

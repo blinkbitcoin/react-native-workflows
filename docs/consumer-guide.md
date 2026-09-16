@@ -691,7 +691,8 @@ Prebuild → pods → `fastlane ios build` → `fastlane ios verify`, on
 | `version` / `build-number` | **required** | `APP_VERSION` / `APP_BUILD_NUMBER`; wire them to `expo-prepare`'s outputs |
 | `stage` | `internal` | Passed through as `WORKFLOWS_STAGE` |
 | `ios-bundle-id` / `ios-scheme` / `android-package` | **required** | `IOS_BUNDLE_ID` / `IOS_SCHEME` / `ANDROID_PACKAGE`. All three are required **on the iOS build too** — see [The five Fastfile contract variables](#the-five-fastfile-contract-variables) |
-| `verify` | `true` | Run the `ios verify` lane after `build` |
+| `ios-signing` | `true` | Sign the build and export an `.ipa`. **Off** archives without signing instead:<br>it still compiles and still runs the verify gate, but needs no Apple account and produces no `.ipa`,<br>so the `ios-ipa` upload is skipped too. This is the tier a repository sits in before its certificates exist |
+| `verify` | `true` | Run the `ios verify` lane after `build`. Works in either signing mode —<br>the lane verifies the `.app` inside the archive when there is no `.ipa`, with the signature check reported as `skip` |
 | `release-meta-artifact` | `release-meta` | Artifact downloaded for `build-info.json` and the store notes |
 | `ipa-artifact` / `dsym-artifact` | `ios-ipa` / `ios-dsym` | Upload names |
 | `build-env` | `{}` | Non-secret build environment, published before prebuild — see [`build-env`](#build-env) |
@@ -713,7 +714,8 @@ Prebuild → `fastlane android build` → `fastlane android verify`, on
 | `version` / `build-number` | **required** | `APP_VERSION` / `APP_BUILD_NUMBER` |
 | `stage` | `internal` | `WORKFLOWS_STAGE` |
 | `android-package` / `ios-bundle-id` / `ios-scheme` | **required** | `ANDROID_PACKAGE` / `IOS_BUNDLE_ID` / `IOS_SCHEME`. The two iOS ids are required **on the Android build too** — see [The five Fastfile contract variables](#the-five-fastfile-contract-variables) |
-| `verify` | `true` | Run the `android verify` lane after `build` |
+| `android-signing` | `true` | Sign with the upload keystore. **Off** falls back to the debug keystore,<br>which still produces the `.aab`, the universal `.apk` and the mapping file and needs no Play credentials.<br>Nothing signed that way can be uploaded to a store. The tier a repository sits in before its keystore exists |
+| `verify` | `true` | Run the `android verify` lane after `build`. Works in either signing mode —<br>the signature check reports `skip` when `ANDROID_UPLOAD_CERT_SHA256` is unset |
 | `release-meta-artifact` | `release-meta` | Artifact downloaded for `build-info.json` and the store notes |
 | `aab-artifact` / `apk-artifact` / `mapping-artifact` | `android-aab` / `android-apk` / `android-mapping` | Upload names |
 | `mapping-path` | `android/app/build/outputs/mapping/**/mapping.txt` | Consumer-relative glob for the mapping file. Override it when the consumer uses a non-default variant output directory — the upload is `if-no-files-found: warn`, so a wrong path yields a green build and permanently unreadable Play crash reports |

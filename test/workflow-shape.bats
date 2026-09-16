@@ -733,3 +733,35 @@ $(names "$real")"
     [ -n "$t" ] || fail "the '$name' step has no timeout-minutes"
   done
 }
+
+# --- a build that does not need a store account ------------------------------
+#
+# Both build lanes used to require store credentials before they compiled
+# anything, so a consumer with none had a red pipeline from its first push -
+# on a template, that lands on every app created from it. The lanes already
+# supported an unsigned mode; no workflow could reach it.
+
+@test "the platform builds can run without signing credentials" {
+  command -v yq >/dev/null || skip "yq not installed"
+  for pair in "expo-build-ios|ios-signing" "expo-build-android|android-signing"; do
+    w="${pair%%|*}"
+    input="${pair##*|}"
+    f="$REPO_ROOT/.github/workflows/$w.yml"
+    [ -f "$f" ] || continue
+    [ "$(yq -r ".on.workflow_call.inputs.\"$input\" | has(\"default\")" "$f")" = "true" ] \
+      || fail "$w.yml has no $input input"
+    # Default true: an existing consumer that says nothing keeps signing.
+    [ "$(yq -r ".on.workflow_call.inputs.\"$input\".default" "$f")" = "true" ] \
+      || fail "$w.yml's $input does not default to true, which changes behaviour for consumers that never asked"
+    grep -qF "skip_signing:true" "$f" \
+      || fail "$w.yml declares $input but never passes skip_signing to the lane"
+  done
+}
+
+@test "an unsigned iOS build does not try to upload an .ipa it never packaged" {
+  command -v yq >/dev/null || skip "yq not installed"
+  f="$REPO_ROOT/.github/workflows/expo-build-ios.yml"
+  cond=$(yq -r '.jobs[].steps[] | select(.name == "Upload ios-ipa") | .if // ""' "$f")
+  contains "$cond" "inputs.ios-signing" \
+    || fail "the ios-ipa upload is not gated on ios-signing, and its if-no-files-found is error: $cond"
+}

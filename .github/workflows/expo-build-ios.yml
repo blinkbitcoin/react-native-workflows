@@ -62,6 +62,15 @@ on:
         description: Application id passed to the lanes as ANDROID_PACKAGE. Required even on the iOS build - the consumer's Fastfile asserts all five contract variables in `before_all`, for every lane on both platforms
         type: string
         required: true
+      ios-signing:
+        description: >-
+          Sign the build and export an .ipa. Off produces an unsigned archive
+          instead, which still compiles, still runs the verify gate and needs no
+          Apple account at all - the tier a repository sits in before its
+          certificates exist. Off also produces no .ipa, so nothing can be
+          uploaded to a store.
+        type: boolean
+        default: true
       verify:
         description: Run the `ios verify` lane after `ios build`
         type: boolean
@@ -198,6 +207,10 @@ jobs:
           # key_content + is_key_content_base64), so passing only the decoded
           # file path is not enough - the Fastfile's ENV.fetch would raise.
           ASC_KEY_P8_BASE64: ${{ secrets.ASC_KEY_P8_BASE64 }}
+          # Non-empty value in the `&&` slot: GitHub's `&&` yields its first
+          # falsy operand, so `cond && '' || X` would be X on both branches.
+          # fastlane.sh appends $LANE_ARGS to the lane arguments.
+          LANE_ARGS: ${{ !inputs.ios-signing && 'skip_signing:true' || '' }}
         run: bash "$WORKFLOWS_DIR/scripts/release/fastlane.sh" ios build
       - name: Fastlane ios verify
         if: ${{ inputs.verify }}
@@ -211,12 +224,20 @@ jobs:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
           ASC_KEY_P8_BASE64: ${{ secrets.ASC_KEY_P8_BASE64 }}
+          # Non-empty value in the `&&` slot: GitHub's `&&` yields its first
+          # falsy operand, so `cond && '' || X` would be X on both branches.
+          # fastlane.sh appends $LANE_ARGS to the lane arguments.
+          LANE_ARGS: ${{ !inputs.ios-signing && 'skip_signing:true' || '' }}
         run: bash "$WORKFLOWS_DIR/scripts/release/fastlane.sh" ios verify
       - name: Upload ios-ipa
         # `!cancelled()`, like the Android apk and mapping uploads: a failed
         # `verify` is exactly when a human needs the .ipa to reproduce it, and
         # without this the artifact dies with the runner.
-        if: ${{ !cancelled() }}
+        #
+        # Gated on ios-signing as well: an unsigned build packages no .ipa, and
+        # this step's `if-no-files-found: error` would turn that into a red step
+        # on a run that did exactly what it was asked to.
+        if: ${{ !cancelled() && inputs.ios-signing }}
         uses: actions/upload-artifact@v7
         with:
           name: ${{ inputs.ipa-artifact }}
