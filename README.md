@@ -38,13 +38,19 @@ flowchart LR
   caller --> prepare
 ```
 
-**Where to start** — three ways through this repository:
+**Where to start.** Three ways through this repository:
 
-| Task | Where to look |
-| --- | --- |
-| **Adopting it**<br>in an app repo | [Calling it](#calling-it) — the caller to copy<br>[Pinning](#pinning) — why `@v0` moves<br>[What a consumer provides](#what-a-consumer-provides) — no secrets, two variables |
-| **Debugging**<br>a red run | [Every workflow and its jobs](#every-workflow-and-its-jobs) — which job owns the failure<br>[forensics.md](docs/forensics.md) — what a failed E2E run left behind<br>[cache-keys.md](docs/cache-keys.md) — why the cache missed |
-| **Changing**<br>this repo | [Repository layout](#repository-layout) — where a change belongs<br>[CONTRIBUTING.md](CONTRIBUTING.md) — worktrees, commits, what a change carries<br>[consumer-guide.md](docs/consumer-guide.md) — the contract callers rely on |
+- **Adopting it in an app repo** — [Calling it](#calling-it) is the caller to
+  copy, [Pinning](#pinning) explains why `@v0` moves, [What a consumer
+  provides](#what-a-consumer-provides) is the short list of settings.
+- **Debugging a red run** — [Every workflow and its
+  jobs](#every-workflow-and-its-jobs) says which job owns the failure,
+  [forensics.md](docs/forensics.md) is what a failed E2E run left behind,
+  [cache-keys.md](docs/cache-keys.md) is why the cache missed.
+- **Changing this repo** — [Repository layout](#repository-layout) says where a
+  change belongs, [CONTRIBUTING.md](CONTRIBUTING.md) covers worktrees and
+  commits, [consumer-guide.md](docs/consumer-guide.md) is the contract callers
+  rely on.
 
 ## Calling it
 
@@ -100,70 +106,72 @@ Job names are what the Actions graph shows, so they are listed here next to
 what makes them fail. A consumer's run renders `<caller job name> / <job name
 below>` — `Checks / Dependencies`, `E2E / Build Android`.
 
-### On a pull request or a push
+### `checks.yml` — the gates
 
-| Workflow | Jobs | Each job's responsibility |
-| --- | --- | --- |
-| `checks.yml` | `Changes` | Classifies the diff. Its `docs-only` output is what lets every other job skip |
-| | `Code` | Typecheck, lint, format, knip, spell — the fast gates `make check-code` runs |
-| | `Generated` | i18n catalogs and GraphQL codegen are committed and match their sources |
-| | `Docs` | Doc freshness, command tables, table widths, mermaid blocks parse |
-| | `Dependencies` | Expo SDK drift, vulnerability audit, lockfile provenance, licences |
-| | `Prebuild` | Prebuilds both platforms and asserts the config plugins produced what they claim |
-| | `Bundle secrets` | Exports the JS bundle and fails if a non-public key is in it |
-| | `Release` | Ruby syntax, fastlane lane parse, lane unit tests — before a release needs them |
-| | `Tooling` | actionlint and shellcheck over the CI itself |
-| | `Commits` | commitlint over the PR's commits |
-| `unit.yml` | `Tests` | Jest with coverage thresholds; uploads the coverage report |
-| `e2e.yml` | `Build iOS`<br>`Build Android` | One native build each, cached on a hash of the native inputs |
-| | `iOS`<br>`Android` | Boot simulator or emulator, start Metro, run the Maestro flows, collect forensics |
-| `web.yml` | `Build` | Expo web export |
-| | `Playwright` | The browser suite against that export |
-| | `Deploy` | Publishes to GitHub Pages |
-| `badges.yml` | `Publish` | Renders unit, E2E and coverage badges and pushes `gh-pages/badges/<branch>/` |
-| `codeql.yml` | `Changes`<br>`Analyze` | Same docs-only classifier, then CodeQL on the consumer's query suite. Informational, never required |
-| `pr-title.yml` | `Title` | Conventional Commits lint on the PR title |
-| `pr-closed.yml` | `Cancel runs`<br>`Clean badges` | Cancels the closed PR's in-flight runs, deletes its badge directory |
+| Job              | What it checks                                                               |
+| ---------------- | ---------------------------------------------------------------------------- |
+| `Changes`        | Classifies the diff. Its `docs-only` output is what lets the other jobs skip |
+| `Code`           | Typecheck, lint, format, knip, spell — what `make check-code` runs           |
+| `Generated`      | i18n catalogs and GraphQL codegen match the sources they come from           |
+| `Docs`           | Doc freshness, command tables, table widths, mermaid blocks parse            |
+| `Dependencies`   | Expo SDK drift, vulnerability audit, lockfile provenance, licences           |
+| `Prebuild`       | Both platforms prebuild, and the config plugins emit what they claim         |
+| `Bundle secrets` | No non-public key reaches the exported JS bundle                             |
+| `Release`        | Ruby syntax, fastlane lane parse, lane unit tests                            |
+| `Tooling`        | actionlint and shellcheck over the CI itself                                 |
+| `Commits`        | commitlint over the PR's commits                                             |
+
+### The rest, on a pull request or a push
+
+| Workflow        | Jobs                                               | What it does                                                             |
+| --------------- | -------------------------------------------------- | ------------------------------------------------------------------------ |
+| `unit.yml`      | `Tests`                                            | Jest with coverage thresholds; uploads the report                        |
+| `e2e.yml`       | `Build iOS` → `iOS`<br>`Build Android` → `Android` | A cached native build per platform, then boot, Metro, Maestro, forensics |
+| `web.yml`       | `Build`<br>`Playwright`<br>`Deploy`                | Expo web export, the browser suite against it, GitHub Pages              |
+| `badges.yml`    | `Publish`                                          | Unit, E2E and coverage badges pushed to `gh-pages/badges/<branch>/`      |
+| `codeql.yml`    | `Changes`<br>`Analyze`                             | CodeQL on the consumer's query suite. Informational, never required      |
+| `pr-title.yml`  | `Title`                                            | Conventional Commits lint on the PR title                                |
+| `pr-closed.yml` | `Cancel runs`<br>`Clean badges`                    | Cancels the closed PR's in-flight runs, deletes its badges               |
 
 ### On the way to a store
 
-| Workflow | Jobs | Each job's responsibility |
-| --- | --- | --- |
-| `expo-prepare.yml` | `Prepare` | Resolves version and build number, fingerprints the native inputs,<br>writes `build-info.json` and store notes as one `release-meta` artifact.<br>Optionally blocks until a named CI workflow is green for the sha |
-| `expo-build-ios.yml` | `Build` | Prebuild, pods, `fastlane ios build` then `verify`; uploads the IPA and dSYMs |
-| `expo-build-android.yml` | `Build` | Prebuild, `fastlane android build` then `verify`; uploads the AAB, APK and mapping |
-| `fastlane-lane.yml` | *named for its inputs* | One lane — upload, promote, staged rollout, halt. The job takes<br>the lane's name so four operations do not look identical in the graph |
-| `github-release.yml` | `Release` | Creates or moves a release with a fixed asset set and `SHA256SUMS`; `promote` carries a pre-release's assets forward |
-| `expo-ota-publish.yml` | `Publish` | Compares fingerprints and publishes an OTA update only when the native side is unchanged |
+| Workflow                 | Jobs                 | What it does                                                                                                 |
+| ------------------------ | -------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `expo-prepare.yml`       | `Prepare`            | Version, build number, native fingerprint, `build-info.json` and store notes, as one `release-meta` artifact |
+| `expo-build-ios.yml`     | `Build`              | Prebuild, pods, `fastlane ios build` then `verify`; uploads the IPA and dSYMs                                |
+| `expo-build-android.yml` | `Build`              | Prebuild, `fastlane android build` then `verify`; uploads the AAB, APK and mapping                           |
+| `fastlane-lane.yml`      | named for its inputs | One lane: upload, promote, staged rollout or halt. The job is named for the lane it runs                     |
+| `github-release.yml`     | `Release`            | Creates or moves a release with a fixed asset set and `SHA256SUMS`                                           |
+| `expo-ota-publish.yml`   | `Publish`            | Publishes an OTA update only when the native fingerprint is unchanged                                        |
+
+`expo-prepare.yml` can also block until a named CI workflow is green for the
+same sha, which is how a release refuses to build on a red `main`.
 
 ### This repo's own
 
-| Workflow | Jobs | Each job's responsibility |
-| --- | --- | --- |
-| `self-ci.yml` | `Check` | actionlint, shellcheck, the bats suite, version agreement, spell |
-| | `Parity` | Checks this repo against a real consumer checkout: the guide's examples, the fixture and the template must agree |
-| | `PR title` | Conventional Commits, on itself |
-| `self-smoke.yml` | `Checks`<br>`Unit`<br>`E2E` | Runs the family against a real consumer repo. Weekly, and on dispatch |
-| `self-release.yml` | `Release PR` | release-please opens and maintains the version PR |
-| | `Major tag` | On release, re-points `v0` and `v0.1` at the new tag |
+| Workflow           | Jobs                              | What it does                                                                                   |
+| ------------------ | --------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `self-ci.yml`      | `Check`<br>`Parity`<br>`PR title` | actionlint, shellcheck, bats, version agreement, spell; then this repo against a real consumer |
+| `self-smoke.yml`   | `Checks`<br>`Unit`<br>`E2E`       | Runs the family against a real consumer repo. Weekly, and on dispatch                          |
+| `self-release.yml` | `Release PR`<br>`Major tag`       | release-please maintains the version PR; on release, `v0` and `v0.1` move                      |
 
 ## Repository layout
 
-| Path | Responsibility |
-| --- | --- |
-| `.github/workflows/` | The 17 workflows above. Thin: a workflow wires inputs and calls a script |
-| `.github/actions/` | Five composite actions — `setup`, `maestro`, `native-key`, `free-disk`, `forensics` — the steps repeated across workflows |
-| `scripts/checks/` | One gate each: audit, codegen, commitlint, expo-doctor, i18n.<br>Plus `run-script.sh` and `run-consumer-or.sh`, which decide<br>between the consumer's script and this repo's |
-| `scripts/ci/` | Runner plumbing: Android SDK, KVM, disk pressure, pnpm store, badges, cancel-runs, tool versions |
-| `scripts/e2e/` | The E2E machine: simulator and emulator boot, Metro start and wait, Maestro run, timeouts, forensics collection |
-| `scripts/native/` | Prebuild, pods, and the iOS and Android build and packaging steps |
-| `scripts/release/` | Version resolution, fingerprints, build info, store notes,<br>release assets and hashes, secret decoding, the green-run gate |
-| `scripts/ota/` | Fingerprint baseline and gate, export, publish, smoke |
-| `scripts/web/` | Expo web export, Playwright install, cache keys, run |
-| `scripts/lib/` | Shared bash: common helpers, env building and validation, git cleanliness, the single pinned tool-version table |
-| `scripts/self/` | This repo's own upkeep: version agreement, moving the major tag |
-| `test/` | 51 bats files, 435 tests, plus `fixtures/consumer-min/` — the caller the docs are held to |
-| `docs/` | The consumer guide and the three explainers |
+| Path                 | Responsibility                                                                                                            |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `.github/workflows/` | The 17 workflows above. Thin: a workflow wires inputs and calls a script                                                  |
+| `.github/actions/`   | Five composite actions — `setup`, `maestro`, `native-key`, `free-disk`, `forensics` — the steps repeated across workflows |
+| `scripts/checks/`    | A gate each: audit, codegen, commitlint, expo-doctor, i18n; plus the scripts that pick the consumer's over this repo's    |
+| `scripts/ci/`        | Runner plumbing: Android SDK, KVM, disk pressure, pnpm store, badges, cancel-runs, tool versions                          |
+| `scripts/e2e/`       | The E2E machine: simulator and emulator boot, Metro start and wait, Maestro run, timeouts, forensics collection           |
+| `scripts/native/`    | Prebuild, pods, and the iOS and Android build and packaging steps                                                         |
+| `scripts/release/`   | Version resolution, fingerprints, build info, store notes, assets, hashes, secret decoding, the green-run gate            |
+| `scripts/ota/`       | Fingerprint baseline and gate, export, publish, smoke                                                                     |
+| `scripts/web/`       | Expo web export, Playwright install, cache keys, run                                                                      |
+| `scripts/lib/`       | Shared bash: common helpers, env building and validation, git cleanliness, the single pinned tool-version table           |
+| `scripts/self/`      | This repo's own upkeep: version agreement, moving the major tag                                                           |
+| `test/`              | 51 bats files, 435 tests, plus `fixtures/consumer-min/` — the caller the docs are held to                                 |
+| `docs/`              | The consumer guide and the three explainers                                                                               |
 
 ## Pinning
 
