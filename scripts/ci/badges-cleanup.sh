@@ -14,19 +14,22 @@ require_cmd git
 gh_pages_assert_branch "$BRANCH"
 
 cd "$(consumer_root)"
-# The unit of work, re-runnable on a moved tip - see gh_pages_push. Returns
-# non-zero when the directory is not there: either nothing was ever published
-# for this branch, or a competing cleanup already removed it. Modify/delete is
-# the conflict a replayed commit can never resolve, which is why this is a
+# The unit of work, re-runnable on a moved tip - see gh_pages_push. Modify/delete
+# is the conflict a replayed commit can never resolve, which is why this is a
 # function and not a straight line.
+#
+# GH_PAGES_NOOP means the directory is not there: either nothing was ever
+# published for this branch, or a competing cleanup already removed it. Any
+# other non-zero exit is a real failure and is fatal at the call site - a
+# removal that could not be committed must not read as "already gone".
 drop_badges() {
   local wt="$1"
   if [ ! -d "$wt/badges/$BRANCH" ]; then
     log "gh-pages: no badges published for $BRANCH - nothing to clean"
-    return 1
+    return "$GH_PAGES_NOOP"
   fi
-  git -C "$wt" rm -rq "badges/$BRANCH"
-  git -C "$wt" commit -qm "chore(ci): drop badges for closed branch $BRANCH"
+  git -C "$wt" rm -rq "badges/$BRANCH" || return 2
+  git -C "$wt" commit -qm "chore(ci): drop badges for closed branch $BRANCH" || return 2
 }
 
 wt="${RUNNER_TEMP:-/tmp}/gh-pages"
@@ -37,7 +40,13 @@ if ! CREATE=0 gh_pages_worktree "$wt"; then
   log "gh-pages: no such branch - nothing to clean"
   exit 0
 fi
-if drop_badges "$wt"; then
-  gh_pages_push "$wt" drop_badges
-  log "gh-pages: removed badges/$BRANCH"
-fi
+rc=0
+drop_badges "$wt" || rc=$?
+case "$rc" in
+  0)
+    gh_pages_push "$wt" drop_badges
+    log "gh-pages: removed badges/$BRANCH"
+    ;;
+  "$GH_PAGES_NOOP") ;;
+  *) die "could not remove badges/$BRANCH (exit $rc)" ;;
+esac

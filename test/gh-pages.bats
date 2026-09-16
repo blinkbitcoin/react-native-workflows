@@ -271,6 +271,53 @@ HOOK
   [ -f "$out/badges/main/unit.svg" ] || fail "the recovered publish wrote nothing"
 }
 
+# "Nothing to do" and "the commit failed" must not be the same signal. A linked
+# worktree shares $GIT_COMMON_DIR/hooks with the checkout it hangs off, so any
+# pre-commit hook in the consumer's clone applies to the gh-pages worktree too -
+# the most realistic way for the commit inside the callback to fail. Reporting
+# success here would leave the branch's badge silently stale while CI stayed
+# green, which is the exact class this file exists to rule out.
+@test "a commit the consumer's hooks refuse fails loudly, not silently" {
+  BRANCH=main bash "$PUBLISH"
+  before="$(git -C "$REMOTE" rev-parse gh-pages)"
+  cat > "$CONSUMER/.git/hooks/pre-commit" <<'HOOK'
+#!/bin/sh
+echo "refusing" >&2
+exit 1
+HOOK
+  chmod +x "$CONSUMER/.git/hooks/pre-commit"
+  render_badges "$CONSUMER" 77%
+  BRANCH=main run bash "$PUBLISH"
+  [ "$status" -ne 0 ] || fail "publishing nothing reported success: $output"
+  contains "$output" "could not stage the badges" || fail "no diagnosis in: $output"
+  [ "$(git -C "$REMOTE" rev-parse gh-pages)" = "$before" ] || fail "the branch moved anyway"
+  out="$(gh_pages_checkout)"
+  contains "$(cat "$out/badges/main/coverage.svg")" "100%" \
+    || fail "the stale badge is not the one still published"
+}
+
+# The same distinction inside the retry: the first commit succeeds, the push is
+# rejected, and the re-apply's commit then fails. That must die, not be read as
+# "the competing commit already did it".
+@test "a re-apply that fails is fatal, not mistaken for nothing left to do" {
+  BRANCH=main bash "$PUBLISH"
+  rival="$(rival_commit main "chore(ci): badges for main (rival)")"
+  arm_race "$rival"
+  # Refuses every commit except the first, so the initial apply gets through and
+  # only the re-apply on the new tip is rejected.
+  cat > "$CONSUMER/.git/hooks/pre-commit" <<HOOK
+#!/bin/sh
+[ -f "$TMP/commit-seen" ] && { echo "refusing" >&2; exit 1; }
+: > "$TMP/commit-seen"
+exit 0
+HOOK
+  chmod +x "$CONSUMER/.git/hooks/pre-commit"
+  render_badges "$CONSUMER" 77%
+  BRANCH=main run bash "$PUBLISH"
+  [ "$status" -ne 0 ] || fail "a failed re-apply reported success: $output"
+  contains "$output" "re-apply step failed" || fail "no diagnosis in: $output"
+}
+
 @test "publish refuses a branch name that is not a safe path segment" {
   for bad in "../../etc" "a b" "" "/abs" "x/../y"; do
     BRANCH="$bad" run bash "$PUBLISH"

@@ -21,6 +21,15 @@
 # The consumer's own checkout stays on its own ref throughout: gh-pages is only
 # ever a separate worktree.
 
+# The one non-zero exit a re-apply callback may use to mean "there is nothing
+# left to do here" - the ordinary no-op, or a competing commit that already did
+# the work. Every OTHER non-zero exit is a real failure and is fatal. Keeping
+# those two apart is the whole point: "nothing to do" and "the commit was
+# rejected" look identical from a bare exit status, and treating the second as
+# the first publishes nothing, exits 0 and leaves the branch's badge silently
+# stale - which is the failure mode this file's header warns about.
+GH_PAGES_NOOP=3
+
 # gh_pages_assert_branch NAME - a branch name that is safe as a path segment.
 # BRANCH reaches these scripts from github.head_ref / github.ref_name, which a
 # PR author controls, and it is used to build a directory that is then `git rm`'d
@@ -90,14 +99,15 @@ gh_pages_worktree() {
 # the semantics a badge should have: last writer wins, per file, without
 # discarding anything the other job wrote.
 #
-# REDO returns non-zero to mean "nothing left to do on this tip" - the competing
-# commit already did it - which ends the run green rather than pushing an empty
-# commit or burning the retry budget.
+# REDO returns GH_PAGES_NOOP to mean "nothing left to do on this tip" - the
+# competing commit already did it - which ends the run green rather than pushing
+# an empty commit or burning the retry budget. Any other non-zero exit is a real
+# failure (a refused commit, an unwritable path) and is fatal here.
 #
 # GH_PAGES_PUSH_ATTEMPTS / GH_PAGES_RETRY_DELAY exist so the bats suite does not
 # have to sleep through the real backoff.
 gh_pages_push() {
-  local dir="$1" redo="$2" attempt attempts="${GH_PAGES_PUSH_ATTEMPTS:-5}" delay="${GH_PAGES_RETRY_DELAY:-2}"
+  local dir="$1" redo="$2" attempt rc attempts="${GH_PAGES_PUSH_ATTEMPTS:-5}" delay="${GH_PAGES_RETRY_DELAY:-2}"
   for ((attempt = 1; attempt <= attempts; attempt++)); do
     if git -C "$dir" push -q origin gh-pages; then
       return 0
@@ -106,10 +116,18 @@ gh_pages_push() {
     sleep "$((attempt * delay))"
     git -C "$dir" fetch -q origin gh-pages || continue
     git -C "$dir" reset -q --hard origin/gh-pages
-    if ! "$redo" "$dir"; then
-      log "gh-pages: nothing left to do on the new tip"
-      return 0
-    fi
+    # `|| rc=$?` rather than `; rc=$?`: a bare simple command would abort the
+    # whole script under errexit before its status could be inspected.
+    rc=0
+    "$redo" "$dir" || rc=$?
+    case "$rc" in
+      0) ;;
+      "$GH_PAGES_NOOP")
+        log "gh-pages: nothing left to do on the new tip"
+        return 0
+        ;;
+      *) die "the gh-pages re-apply step failed (exit $rc)" ;;
+    esac
   done
   die "could not push gh-pages in $attempts attempts"
 }
