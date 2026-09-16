@@ -1,4 +1,4 @@
-name: github-release
+name: GitHub Release
 on:
   workflow_call:
     inputs:
@@ -90,6 +90,7 @@ permissions:
   contents: read
 jobs:
   release:
+    name: Release
     runs-on: ${{ inputs.linux-runner }}
     timeout-minutes: 15
     permissions:

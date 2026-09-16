@@ -765,3 +765,29 @@ $(names "$real")"
   contains "$cond" "inputs.ios-signing" \
     || fail "the ios-ipa upload is not gated on ios-signing, and its if-no-files-found is error: $cond"
 }
+
+# --- a run should read as sentences, not job ids ------------------------------
+#
+# GitHub falls back to the job *id* when a job has no `name:`, and a reusable
+# call renders as `<caller job> / <called job>`. With neither side named, a
+# consumer's run graph read `checks / code` where esign reads `Checks / Code` -
+# the machinery leaking into the UI. The called half is this repo's to fix.
+#
+# The companion rule for steps ("every step has a name") has existed since the
+# beginning; jobs were simply never covered.
+@test "every job in every workflow has a name" {
+  command -v yq >/dev/null || skip "yq not installed"
+  for w in "$REPO_ROOT"/.github/workflows/*.yml; do
+    unnamed=$(yq -r '.jobs | to_entries[] | select((.value.name // "") == "") | .key' "$w")
+    [ -z "$unnamed" ] \
+      || fail "$(basename "$w") has jobs with no name, so they show as raw ids: $(tr '\n' ' ' <<<"$unnamed")"
+  done
+}
+
+# One workflow serves upload, promote, rollout and halt. A fixed name would make
+# four different store operations indistinguishable in a caller's run graph.
+@test "the fastlane lane job names itself from its inputs" {
+  command -v yq >/dev/null || skip "yq not installed"
+  n=$(yq -r '.jobs.lane.name' "$REPO_ROOT/.github/workflows/fastlane-lane.yml")
+  contains "$n" 'inputs.lane' || fail "fastlane-lane's job name does not vary with the lane: $n"
+}

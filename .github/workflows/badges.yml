@@ -1,4 +1,4 @@
-name: badges
+name: Badges
 # Publishes a consumer's per-branch CI badges to its own `gh-pages` branch:
 # `badges/<branch>/{unit,e2e,coverage}.svg`. The README embeds main's the way a
 # workflow-status badge takes `?branch=main`, and every other branch gets its
@@ -77,6 +77,7 @@ permissions:
   contents: read
 jobs:
   badges:
+    name: Publish
     # The caller runs this job under always() so a red Unit still gets a red
     # badge. These are the cases where publishing would be wrong or impossible,
     # re-asserted here so a caller that forgets one still cannot do damage: a

@@ -1,4 +1,4 @@
-name: pr-title
+name: PR Title
 on:
   workflow_call:
     inputs:
@@ -34,6 +34,7 @@ permissions:
   contents: read
 jobs:
   title:
+    name: Title
     runs-on: ${{ inputs.linux-runner }}
     timeout-minutes: 5
     steps:

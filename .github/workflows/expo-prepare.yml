@@ -1,4 +1,4 @@
-name: expo-prepare
+name: Prepare
 on:
   workflow_call:
     inputs:
@@ -88,6 +88,7 @@ permissions:
   contents: read
 jobs:
   prepare:
+    name: Prepare
     runs-on: ${{ inputs.linux-runner }}
     timeout-minutes: 60
     permissions:

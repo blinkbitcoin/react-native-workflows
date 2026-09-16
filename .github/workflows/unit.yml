@@ -1,4 +1,4 @@
-name: unit
+name: Unit
 on:
   workflow_call:
     inputs:
@@ -54,6 +54,7 @@ permissions:
   contents: read
 jobs:
   unit:
+    name: Tests
     runs-on: ${{ inputs.linux-runner }}
     timeout-minutes: 20
     steps:

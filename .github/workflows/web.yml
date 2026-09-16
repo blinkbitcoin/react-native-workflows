@@ -1,4 +1,4 @@
-name: web
+name: Web
 on:
   workflow_call:
     inputs:
@@ -70,6 +70,7 @@ permissions:
   contents: read
 jobs:
   build:
+    name: Build
     runs-on: ${{ inputs.linux-runner }}
     timeout-minutes: 15
     steps:
@@ -113,6 +114,7 @@ jobs:
         with:
           path: ${{ inputs.working-directory }}/${{ inputs.output-dir }}
   playwright:
+    name: Playwright
     needs: build
     if: ${{ inputs.playwright }}
     runs-on: ${{ inputs.linux-runner }}
@@ -164,6 +166,7 @@ jobs:
           name: playwright-report
           path: ${{ inputs.working-directory }}/playwright-report
   deploy:
+    name: Deploy
     needs: [build, playwright]
     if: ${{ always() && inputs.deploy && needs.build.result == 'success' && (needs.playwright.result == 'success' || needs.playwright.result == 'skipped') }}
     runs-on: ${{ inputs.linux-runner }}

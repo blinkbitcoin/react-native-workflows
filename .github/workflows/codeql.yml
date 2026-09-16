@@ -1,4 +1,4 @@
-name: codeql
+name: CodeQL
 # Advanced-setup CodeQL rather than GitHub's Default setup: the query suite,
 # the path exclusions and the alert-suppression mechanism then live in the
 # consumer's repository as reviewable files, instead of in a settings page.
@@ -57,6 +57,7 @@ permissions:
   contents: read
 jobs:
   changes:
+    name: Changes
     runs-on: ${{ inputs.linux-runner }}
     timeout-minutes: 5
     outputs:
@@ -93,6 +94,7 @@ jobs:
           DOCS_GLOBS_EXTRA: ${{ inputs.docs-globs }}
         run: bash ".workflows/scripts/ci/changed-class.sh" "$BASE_SHA" "$HEAD_SHA"
   analyze:
+    name: Analyze
     needs: [changes]
     # Nothing to analyse when no code moved. CodeQL is informational and must
     # not be a required check, so a skip here blocks nothing.

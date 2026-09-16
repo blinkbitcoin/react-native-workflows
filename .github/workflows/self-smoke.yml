@@ -1,4 +1,4 @@
-name: self-smoke
+name: Smoke
 on:
   workflow_dispatch:
     inputs:
@@ -36,16 +36,19 @@ permissions:
   contents: read
 jobs:
   checks:
+    name: Checks
     uses: ./.github/workflows/checks.yml
     with:
       repository: ${{ inputs.repository || 'blinkbitcoin/react-native-mobile-template' }}
       ref: ${{ inputs.ref || 'main' }}
   unit:
+    name: Unit
     uses: ./.github/workflows/unit.yml
     with:
       repository: ${{ inputs.repository || 'blinkbitcoin/react-native-mobile-template' }}
       ref: ${{ inputs.ref || 'main' }}
   e2e:
+    name: E2E
     uses: ./.github/workflows/e2e.yml
     with:
       repository: ${{ inputs.repository || 'blinkbitcoin/react-native-mobile-template' }}

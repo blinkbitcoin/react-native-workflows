@@ -1,4 +1,4 @@
-name: expo-ota-publish
+name: OTA Publish
 on:
   workflow_call:
     inputs:
@@ -69,6 +69,7 @@ permissions:
   contents: read
 jobs:
   publish:
+    name: Publish
     # OTA is off unless a caller deliberately turns it on: an accidental update
     # reaches every installed app immediately and cannot be recalled.
     if: ${{ inputs.ota-enabled }}

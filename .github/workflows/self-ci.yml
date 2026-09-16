@@ -1,4 +1,4 @@
-name: Self CI
+name: CI
 on:
   push: { branches: [main] }
   pull_request:
@@ -8,6 +8,7 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 jobs:
   check:
+    name: Check
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -26,6 +27,7 @@ jobs:
   # rather than quietly reverting the suite to its skip branch and reporting
   # green - which is the very failure this job exists to prevent.
   parity:
+    name: Parity
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -50,6 +52,7 @@ jobs:
         run: mise exec -- bats test/
 
   pr-title:
+    name: PR title
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 5

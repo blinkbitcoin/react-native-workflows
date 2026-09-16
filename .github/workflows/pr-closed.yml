@@ -1,4 +1,4 @@
-name: pr-closed
+name: PR Closed
 on:
   workflow_call: {}
   # The caller triggers this on `pull_request: [closed]` and grants
@@ -8,6 +8,7 @@ permissions:
   contents: read
 jobs:
   cancel:
+    name: Cancel runs
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -35,6 +36,7 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: bash ".workflows/scripts/ci/cancel-runs.sh"
   badges-cleanup:
+    name: Clean badges
     # A fork PR's run has no token that can push to the base repository, and it
     # never published a badge directory in the first place (badges.yml skips
     # fork PRs for the same reason), so there is nothing here to clean up.

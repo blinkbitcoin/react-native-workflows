@@ -1,4 +1,4 @@
-name: e2e
+name: E2E
 on:
   workflow_call:
     inputs:
@@ -108,6 +108,7 @@ permissions:
   contents: read
 jobs:
   build-ios:
+    name: Build iOS
     if: ${{ inputs.ios }}
     runs-on: ${{ inputs.macos-runner }}
     timeout-minutes: 60
@@ -205,6 +206,7 @@ jobs:
           overwrite: true
           if-no-files-found: error
   ios:
+    name: iOS
     needs: build-ios
     if: ${{ inputs.ios }}
     runs-on: ${{ inputs.macos-runner }}
@@ -295,6 +297,7 @@ jobs:
           name: forensics-ios
           junit: ${{ env.WORKFLOWS_OUT }}/maestro/junit.xml
   build-android:
+    name: Build Android
     if: ${{ inputs.android }}
     runs-on: ${{ inputs.linux-runner }}
     timeout-minutes: 40
@@ -369,6 +372,7 @@ jobs:
           overwrite: true
           if-no-files-found: error
   android:
+    name: Android
     needs: build-android
     if: ${{ inputs.android }}
     runs-on: ${{ inputs.linux-runner }}

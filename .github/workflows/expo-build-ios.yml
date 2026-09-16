@@ -1,4 +1,4 @@
-name: expo-build-ios
+name: Build iOS
 on:
   workflow_call:
     inputs:
@@ -117,6 +117,7 @@ permissions:
   contents: read
 jobs:
   build:
+    name: Build
     runs-on: ${{ inputs.macos-runner }}
     timeout-minutes: 90
     environment: ${{ inputs.environment }}

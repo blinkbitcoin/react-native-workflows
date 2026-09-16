@@ -1,4 +1,4 @@
-name: checks
+name: Checks
 on:
   workflow_call:
     inputs:
@@ -132,6 +132,7 @@ permissions:
   contents: read
 jobs:
   changes:
+    name: Changes
     if: ${{ inputs.docs-only-detection }}
     runs-on: ${{ inputs.linux-runner }}
     timeout-minutes: 5
@@ -172,6 +173,7 @@ jobs:
           DOCS_GLOBS_EXTRA: ${{ inputs.docs-globs }}
         run: bash ".workflows/scripts/ci/changed-class.sh" "$BASE_SHA" "$HEAD_SHA"
   code:
+    name: Code
     runs-on: ${{ inputs.linux-runner }}
     timeout-minutes: 20
     steps:
@@ -332,6 +334,7 @@ jobs:
           WORKFLOWS_SHELLCHECK: ${{ inputs.shellcheck }}
         run: bash "$WORKFLOWS_DIR/scripts/checks/run-consumer-or.sh" 'check:ci' scripts/ci/lint-ci.sh
   commits:
+    name: Commits
     if: ${{ inputs.commitlint && github.event_name == 'pull_request' && github.actor != 'dependabot[bot]' }}
     runs-on: ${{ inputs.linux-runner }}
     timeout-minutes: 5

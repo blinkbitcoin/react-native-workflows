@@ -27,6 +27,11 @@ legacy_hits() {
   # then reads another repository's files - including its dated plan archives,
   # which name the old prefix on purpose. Tracked files are exactly this repo.
   #
+  # CHANGELOG.md is excluded for the same reason as the archives: release-please
+  # generates it from commit subjects, and those subjects are what they were
+  # when written. Rewriting them to match today's names would make the changelog
+  # lie about its own history.
+  #
   # This file is excluded from its own search: it names the old prefix to
   # explain what was renamed. A check that reads its own explanation as a
   # violation is a false positive waiting to happen. The archives below are
@@ -34,6 +39,7 @@ legacy_hits() {
   git ls-files -z |
     grep -zv '^docs/superpowers/' |
     grep -zv '^test/no-legacy-prefix.bats$' |
+    grep -zv '^CHANGELOG.md$' |
     grep -zv '^test/fixtures/consumer/pnpm-lock.yaml$' |
     xargs -0 grep -nIi 'rnw' 2>/dev/null || true
 }

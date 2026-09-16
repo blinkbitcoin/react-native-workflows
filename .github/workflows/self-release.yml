@@ -1,4 +1,4 @@
-name: self-release
+name: Release
 on:
   push:
     branches: [main]
@@ -10,6 +10,7 @@ permissions:
   pull-requests: write
 jobs:
   release-please:
+    name: Release PR
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -24,6 +25,7 @@ jobs:
           manifest-file: .release-please-manifest.json
           token: ${{ secrets.RELEASE_PLEASE_TOKEN || github.token }}
   major-tag:
+    name: Major tag
     needs: release-please
     # Job outputs are strings and every non-empty string is truthy in a GitHub
     # expression, so a bare `outputs.release_created` also fires on the literal

@@ -1,4 +1,4 @@
-name: expo-build-android
+name: Build Android
 on:
   workflow_call:
     inputs:
@@ -129,6 +129,7 @@ permissions:
   contents: read
 jobs:
   build:
+    name: Build
     runs-on: ${{ inputs.linux-runner }}
     timeout-minutes: 60
     environment: ${{ inputs.environment }}

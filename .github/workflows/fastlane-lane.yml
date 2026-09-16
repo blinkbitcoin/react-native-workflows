@@ -1,4 +1,4 @@
-name: fastlane-lane
+name: Fastlane Lane
 on:
   workflow_call:
     inputs:
@@ -151,6 +151,7 @@ permissions:
   contents: read
 jobs:
   lane:
+    name: ${{ inputs.platform }} ${{ inputs.lane }}
     runs-on: ${{ inputs.runner }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
     environment: ${{ inputs.environment }}
