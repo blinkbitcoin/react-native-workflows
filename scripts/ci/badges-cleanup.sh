@@ -36,10 +36,16 @@ wt="${RUNNER_TEMP:-/tmp}/gh-pages"
 
 # CREATE=0: creating a gh-pages branch in order to delete nothing from it would
 # be a surprising side effect of closing a pull request.
-if ! CREATE=0 gh_pages_worktree "$wt"; then
-  log "gh-pages: no such branch - nothing to clean"
-  exit 0
-fi
+wt_rc=0
+CREATE=0 gh_pages_worktree "$wt" || wt_rc=$?
+case "$wt_rc" in
+  0) ;;
+  "$GH_PAGES_ABSENT")
+    log "gh-pages: no such branch - nothing to clean"
+    exit 0
+    ;;
+  *) die "could not open the gh-pages worktree (exit $wt_rc)" ;;
+esac
 rc=0
 drop_badges "$wt" || rc=$?
 case "$rc" in

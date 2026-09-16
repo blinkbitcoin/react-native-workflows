@@ -29,6 +29,9 @@
 # the first publishes nothing, exits 0 and leaves the branch's badge silently
 # stale - which is the failure mode this file's header warns about.
 GH_PAGES_NOOP=3
+# gh_pages_worktree with CREATE=0 and no gh-pages on the remote: nothing to
+# clean, which is success. Any other non-zero is a real failure.
+GH_PAGES_ABSENT=4
 
 # gh_pages_assert_branch NAME - a branch name that is safe as a path segment.
 # BRANCH reaches these scripts from github.head_ref / github.ref_name, which a
@@ -74,7 +77,11 @@ gh_pages_worktree() {
     git worktree add -q --detach "$dir" origin/gh-pages
     git -C "$dir" checkout -q -B gh-pages origin/gh-pages
   else
-    [ "${CREATE:-1}" = 1 ] || return 1
+    # GH_PAGES_ABSENT, not a bare 1: a caller that treats every non-zero as
+    # "the branch does not exist" would read a git failure as nothing-to-do and
+    # exit green with the work undone - the same class of bug as the no-op
+    # convention below.
+    [ "${CREATE:-1}" = 1 ] || return "$GH_PAGES_ABSENT"
     git worktree add -q --detach "$dir" HEAD
     git -C "$dir" checkout -q --orphan gh-pages
     # --orphan keeps the index and the working tree of the commit it came from;

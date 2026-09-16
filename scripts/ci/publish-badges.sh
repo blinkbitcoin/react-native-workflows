@@ -64,8 +64,11 @@ apply_badges() {
 
 wt="${RUNNER_TEMP:-/tmp}/gh-pages"
 gh_pages_worktree "$wt"
-# `|| rc=$?` rather than an `if`: a condition context would suppress errexit for
-# everything inside the callback as well as flatten every failure into one bit.
+# `|| rc=$?` rather than an `if`: this keeps the callback's own exit code instead
+# of flattening every failure into one bit. It does NOT restore errexit inside
+# the callback - `set -e` is suppressed in any non-final member of a `||` list,
+# exactly as in an `if` condition - so every step in there carries its own
+# `|| return 2`. A new step without one would fail silently.
 rc=0
 apply_badges "$wt" || rc=$?
 case "$rc" in
