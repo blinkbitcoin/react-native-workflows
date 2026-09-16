@@ -439,7 +439,10 @@ needs a `package.json` and a test harness; this repo has neither by design. So
 `scripts/checks/run-script.sh` — the same delegation `checks.yml` uses for
 typecheck and lint — and owns only `scripts/ci/publish-badges.sh` and the
 gh-pages mechanics behind it (`scripts/ci/gh-pages-lib.sh`: orphan creation on
-the first publish, rebase-retry when branches publish concurrently).
+the first publish; on a rejected push, the badge write is re-applied onto the
+fresh tip rather than replayed as a commit, because two publishes for one
+branch - or a PR-close cleanup against that branch's in-flight publish - touch
+the same paths and no merge of derived content can resolve that).
 
 | Input | Default | Meaning |
 | --- | --- | --- |

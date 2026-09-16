@@ -14,6 +14,21 @@ require_cmd git
 gh_pages_assert_branch "$BRANCH"
 
 cd "$(consumer_root)"
+# The unit of work, re-runnable on a moved tip - see gh_pages_push. Returns
+# non-zero when the directory is not there: either nothing was ever published
+# for this branch, or a competing cleanup already removed it. Modify/delete is
+# the conflict a replayed commit can never resolve, which is why this is a
+# function and not a straight line.
+drop_badges() {
+  local wt="$1"
+  if [ ! -d "$wt/badges/$BRANCH" ]; then
+    log "gh-pages: no badges published for $BRANCH - nothing to clean"
+    return 1
+  fi
+  git -C "$wt" rm -rq "badges/$BRANCH"
+  git -C "$wt" commit -qm "chore(ci): drop badges for closed branch $BRANCH"
+}
+
 wt="${RUNNER_TEMP:-/tmp}/gh-pages"
 
 # CREATE=0: creating a gh-pages branch in order to delete nothing from it would
@@ -22,12 +37,7 @@ if ! CREATE=0 gh_pages_worktree "$wt"; then
   log "gh-pages: no such branch - nothing to clean"
   exit 0
 fi
-if [ ! -d "$wt/badges/$BRANCH" ]; then
-  log "gh-pages: no badges published for $BRANCH - nothing to clean"
-  exit 0
+if drop_badges "$wt"; then
+  gh_pages_push "$wt" drop_badges
+  log "gh-pages: removed badges/$BRANCH"
 fi
-
-git -C "$wt" rm -rq "badges/$BRANCH"
-git -C "$wt" commit -qm "chore(ci): drop badges for closed branch $BRANCH"
-gh_pages_push "$wt"
-log "gh-pages: removed badges/$BRANCH"

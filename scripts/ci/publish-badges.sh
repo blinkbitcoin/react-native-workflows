@@ -29,27 +29,38 @@ while IFS= read -r file; do badges+=("$file"); done < <(
 )
 [ "${#badges[@]}" -gt 0 ] || die "no .svg/.json badges in $root/$badge_dir - did the render script run?"
 
+# The unit of work, as a function rather than a straight line, because
+# gh_pages_push re-runs it on the fresh tip when another job's publish beat us
+# there: replaying our commit would conflict on any badge both jobs wrote.
+# Returns non-zero when there is nothing to commit - either the badges are
+# unchanged (the ordinary no-op) or the competing commit already published the
+# same bytes.
+apply_badges() {
+  local wt="$1"
+  mkdir -p "$wt/badges/$BRANCH"
+  cp "${badges[@]}" "$wt/badges/$BRANCH/"
+  printf '%s\n' \
+    '# CI-owned branch' \
+    '' \
+    'badges/<branch>/{coverage,unit,e2e}.svg (+ their .json siblings) - written by' \
+    'the badges job in the CI workflow (react-native-workflows badges.yml ->' \
+    'scripts/ci/publish-badges.sh) on every run; a branch directory is removed when' \
+    "its pull request closes (badges-cleanup.sh). Do not edit by hand." \
+    '' \
+    'This branch is NOT the GitHub Pages source. Keep the Pages source set to' \
+    '"GitHub Actions": the web export deploys as a Pages artifact, and the badges' \
+    'are served from raw.githubusercontent.com.' > "$wt/README.md"
+  git -C "$wt" add -A badges README.md
+  if git -C "$wt" diff --cached --quiet; then
+    log "gh-pages: badges for $BRANCH unchanged"
+    return 1
+  fi
+  git -C "$wt" commit -qm "chore(ci): badges for $BRANCH @ ${SHA:0:7}"
+}
+
 wt="${RUNNER_TEMP:-/tmp}/gh-pages"
 gh_pages_worktree "$wt"
-mkdir -p "$wt/badges/$BRANCH"
-cp "${badges[@]}" "$wt/badges/$BRANCH/"
-printf '%s\n' \
-  '# CI-owned branch' \
-  '' \
-  'badges/<branch>/{coverage,unit,e2e}.svg (+ their .json siblings) - written by' \
-  'the badges job in the CI workflow (react-native-workflows badges.yml ->' \
-  'scripts/ci/publish-badges.sh) on every run; a branch directory is removed when' \
-  "its pull request closes (badges-cleanup.sh). Do not edit by hand." \
-  '' \
-  'This branch is NOT the GitHub Pages source. Keep the Pages source set to' \
-  '"GitHub Actions": the web export deploys as a Pages artifact, and the badges' \
-  'are served from raw.githubusercontent.com.' > "$wt/README.md"
-
-git -C "$wt" add -A badges README.md
-if git -C "$wt" diff --cached --quiet; then
-  log "gh-pages: badges for $BRANCH unchanged"
-  exit 0
+if apply_badges "$wt"; then
+  gh_pages_push "$wt" apply_badges
+  log "gh-pages: published ${#badges[@]} file(s) to badges/$BRANCH"
 fi
-git -C "$wt" commit -qm "chore(ci): badges for $BRANCH @ ${SHA:0:7}"
-gh_pages_push "$wt"
-log "gh-pages: published ${#badges[@]} file(s) to badges/$BRANCH"

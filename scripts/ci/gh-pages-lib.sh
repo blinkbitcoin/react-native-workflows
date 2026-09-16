@@ -13,8 +13,10 @@
 #     orphan (no parent, no files carried over from the consumer's default
 #     branch), so gh-pages never contains a copy of the source tree.
 #   * branches publish concurrently. Two pushes racing is the normal case, not
-#     the exception, so a rejected push is rebased and retried rather than
-#     treated as an error.
+#     the exception, so a rejected push is retried rather than treated as an
+#     error - by re-applying the work on the freshly fetched tip, never by
+#     replaying a commit. See gh_pages_push for why that distinction is the
+#     whole of it.
 #
 # The consumer's own checkout stays on its own ref throughout: gh-pages is only
 # ever a separate worktree.
@@ -38,13 +40,25 @@ gh_pages_assert_branch() {
 # Must be called from inside the consumer checkout.
 gh_pages_worktree() {
   local dir="$1"
-  git config user.name "${GH_PAGES_USER_NAME:-github-actions[bot]}"
-  git config user.email "${GH_PAGES_USER_EMAIL:-41898282+github-actions[bot]@users.noreply.github.com}"
+  # Environment, not `git config`: these scripts run inside the consumer's own
+  # checkout, and `git config user.name` would write the bot identity into its
+  # .git/config and leave it there. The GIT_* variables are per-process.
+  export GIT_AUTHOR_NAME="${GH_PAGES_USER_NAME:-github-actions[bot]}"
+  export GIT_COMMITTER_NAME="$GIT_AUTHOR_NAME"
+  export GIT_AUTHOR_EMAIL="${GH_PAGES_USER_EMAIL:-41898282+github-actions[bot]@users.noreply.github.com}"
+  export GIT_COMMITTER_EMAIL="$GIT_AUTHOR_EMAIL"
   # A runner is reused and a job may publish more than once, so a leftover
   # worktree at DIR (or a stale registration for a directory already deleted)
   # would make `git worktree add` fail on the second call.
   rm -rf "$dir"
   git worktree prune
+  # The local gh-pages ref is scratch state for one push and nothing else. A
+  # failed push leaves it behind, and since the branch still does not exist on
+  # the remote, the orphan path below would then die with "a branch named
+  # 'gh-pages' already exists" on every later run in this checkout - permanently,
+  # until someone creates the branch by hand. The rm -rf and prune above
+  # guarantee no worktree still holds it.
+  git branch -q -D gh-pages 2>/dev/null || true
   if git fetch -q origin gh-pages 2>/dev/null; then
     # --detach first, then -B: a plain `worktree add <dir> origin/gh-pages`
     # DWIMs a local branch and fails outright if one already exists.
@@ -62,20 +76,40 @@ gh_pages_worktree() {
   fi
 }
 
-# gh_pages_push DIR - push gh-pages, rebasing onto whatever landed meanwhile.
+# gh_pages_push DIR REDO - push gh-pages; on rejection reset to the freshly
+# fetched tip and call REDO DIR to re-do the work there, then push again.
+#
+# Re-doing rather than rebasing is the whole point. Badge files are *derived*
+# content: they have no merge semantics, so replaying our commit onto a
+# competing one conflicts the moment the two touch the same path - which is
+# precisely the interesting race (two publishes for one branch; a PR-close
+# cleanup against that branch's in-flight publish). A replayed commit that
+# conflicts can never converge however often it is retried, and `-X theirs`
+# resolves only the content half, never modify/delete. Re-applying the copy (or
+# the removal) onto whatever is now on the branch always converges, and gives
+# the semantics a badge should have: last writer wins, per file, without
+# discarding anything the other job wrote.
+#
+# REDO returns non-zero to mean "nothing left to do on this tip" - the competing
+# commit already did it - which ends the run green rather than pushing an empty
+# commit or burning the retry budget.
+#
 # GH_PAGES_PUSH_ATTEMPTS / GH_PAGES_RETRY_DELAY exist so the bats suite does not
 # have to sleep through the real backoff.
 gh_pages_push() {
-  local dir="$1" attempt attempts="${GH_PAGES_PUSH_ATTEMPTS:-5}" delay="${GH_PAGES_RETRY_DELAY:-2}"
+  local dir="$1" redo="$2" attempt attempts="${GH_PAGES_PUSH_ATTEMPTS:-5}" delay="${GH_PAGES_RETRY_DELAY:-2}"
   for ((attempt = 1; attempt <= attempts; attempt++)); do
     if git -C "$dir" push -q origin gh-pages; then
       return 0
     fi
-    log "gh-pages: push attempt $attempt of $attempts was rejected; rebasing onto origin/gh-pages"
-    if git -C "$dir" fetch -q origin gh-pages; then
-      git -C "$dir" rebase -q origin/gh-pages || git -C "$dir" rebase --abort || true
-    fi
+    log "gh-pages: push attempt $attempt of $attempts was rejected; re-applying onto origin/gh-pages"
     sleep "$((attempt * delay))"
+    git -C "$dir" fetch -q origin gh-pages || continue
+    git -C "$dir" reset -q --hard origin/gh-pages
+    if ! "$redo" "$dir"; then
+      log "gh-pages: nothing left to do on the new tip"
+      return 0
+    fi
   done
   die "could not push gh-pages in $attempts attempts"
 }
