@@ -14,8 +14,8 @@ setup() {
   git -C "$ROOT" config user.email t@example.test
   git -C "$ROOT" config user.name t
   export GITHUB_WORKSPACE="$BATS_TEST_TMPDIR" WORKING_DIRECTORY=app
-  export RNW_OUT="$BATS_TEST_TMPDIR/out" RUNNER_TEMP="$BATS_TEST_TMPDIR/tmp"
-  export RNW_RELEASE_META_DIR="$BATS_TEST_TMPDIR/meta"
+  export WORKFLOWS_OUT="$BATS_TEST_TMPDIR/out" RUNNER_TEMP="$BATS_TEST_TMPDIR/tmp"
+  export WORKFLOWS_RELEASE_META_DIR="$BATS_TEST_TMPDIR/meta"
   export GITHUB_ENV="$BATS_TEST_TMPDIR/env"
   mkdir -p "$RUNNER_TEMP"
   : > "$GITHUB_ENV"
@@ -31,14 +31,14 @@ notes() { run bash "$REPO_ROOT/scripts/release/notes.sh"; }
   APP_VERSION=1.2.3 APP_BUILD_NUMBER=1042 notes
   [ "$status" -eq 0 ] || fail "exited $status: $output"
   contains "$output" "::warning::" || fail "the fallback did not warn: $output"
-  [ "$(cat "$RNW_RELEASE_META_DIR/store-notes.json")" = "{}" ] \
-    || fail "store-notes.json is not an empty object: $(cat "$RNW_RELEASE_META_DIR/store-notes.json")"
-  grep -qx -- '- fix: a fix' "$RNW_RELEASE_META_DIR/notes-store.txt" \
-    || fail "the commit subjects are missing: $(cat "$RNW_RELEASE_META_DIR/notes-store.txt")"
-  grep -qx '## 1.2.3 (1042)' "$RNW_RELEASE_META_DIR/notes.md" \
-    || fail "notes.md has no version heading: $(cat "$RNW_RELEASE_META_DIR/notes.md")"
-  grep -q 'a feature' "$RNW_RELEASE_META_DIR/notes.md" \
-    || fail "notes.md does not carry the notes: $(cat "$RNW_RELEASE_META_DIR/notes.md")"
+  [ "$(cat "$WORKFLOWS_RELEASE_META_DIR/store-notes.json")" = "{}" ] \
+    || fail "store-notes.json is not an empty object: $(cat "$WORKFLOWS_RELEASE_META_DIR/store-notes.json")"
+  grep -qx -- '- fix: a fix' "$WORKFLOWS_RELEASE_META_DIR/notes-store.txt" \
+    || fail "the commit subjects are missing: $(cat "$WORKFLOWS_RELEASE_META_DIR/notes-store.txt")"
+  grep -qx '## 1.2.3 (1042)' "$WORKFLOWS_RELEASE_META_DIR/notes.md" \
+    || fail "notes.md has no version heading: $(cat "$WORKFLOWS_RELEASE_META_DIR/notes.md")"
+  grep -q 'a feature' "$WORKFLOWS_RELEASE_META_DIR/notes.md" \
+    || fail "notes.md does not carry the notes: $(cat "$WORKFLOWS_RELEASE_META_DIR/notes.md")"
 }
 
 @test "the fallback only lists commits since the last v* tag" {
@@ -47,10 +47,10 @@ notes() { run bash "$REPO_ROOT/scripts/release/notes.sh"; }
   commit "new: after the tag"
   APP_VERSION=1.0.1 APP_BUILD_NUMBER=2 notes
   [ "$status" -eq 0 ] || fail "exited $status: $output"
-  grep -q 'after the tag' "$RNW_RELEASE_META_DIR/notes-store.txt" \
-    || fail "the new commit is missing: $(cat "$RNW_RELEASE_META_DIR/notes-store.txt")"
-  ! grep -q 'before the tag' "$RNW_RELEASE_META_DIR/notes-store.txt" \
-    || fail "a commit from before the tag was included: $(cat "$RNW_RELEASE_META_DIR/notes-store.txt")"
+  grep -q 'after the tag' "$WORKFLOWS_RELEASE_META_DIR/notes-store.txt" \
+    || fail "the new commit is missing: $(cat "$WORKFLOWS_RELEASE_META_DIR/notes-store.txt")"
+  ! grep -q 'before the tag' "$WORKFLOWS_RELEASE_META_DIR/notes-store.txt" \
+    || fail "a commit from before the tag was included: $(cat "$WORKFLOWS_RELEASE_META_DIR/notes-store.txt")"
 }
 
 # An empty "what's new" makes App Store Connect reject the submission, so the
@@ -60,16 +60,16 @@ notes() { run bash "$REPO_ROOT/scripts/release/notes.sh"; }
   git -C "$ROOT" tag v1.0.0
   APP_VERSION=1.0.0 APP_BUILD_NUMBER=1 notes
   [ "$status" -eq 0 ] || fail "exited $status: $output"
-  [ -s "$RNW_RELEASE_META_DIR/notes-store.txt" ] || fail "shipped an empty notes file"
-  grep -qx -- '- Bug fixes and improvements' "$RNW_RELEASE_META_DIR/notes-store.txt" \
-    || fail "unexpected fallback content: $(cat "$RNW_RELEASE_META_DIR/notes-store.txt")"
+  [ -s "$WORKFLOWS_RELEASE_META_DIR/notes-store.txt" ] || fail "shipped an empty notes file"
+  grep -qx -- '- Bug fixes and improvements' "$WORKFLOWS_RELEASE_META_DIR/notes-store.txt" \
+    || fail "unexpected fallback content: $(cat "$WORKFLOWS_RELEASE_META_DIR/notes-store.txt")"
 }
 
 @test "the fallback publishes RELEASE_NOTES_STORE_FILE for the lanes" {
   commit "feat: a feature"
   APP_VERSION=1.2.3 APP_BUILD_NUMBER=1 notes
   [ "$status" -eq 0 ] || fail "exited $status: $output"
-  grep -qx "RELEASE_NOTES_STORE_FILE=$RNW_RELEASE_META_DIR/notes-store.txt" "$GITHUB_ENV" \
+  grep -qx "RELEASE_NOTES_STORE_FILE=$WORKFLOWS_RELEASE_META_DIR/notes-store.txt" "$GITHUB_ENV" \
     || fail "the lanes were not told where the notes are: $(cat "$GITHUB_ENV")"
 }
 
@@ -77,8 +77,8 @@ notes() { run bash "$REPO_ROOT/scripts/release/notes.sh"; }
   commit "feat: a feature"
   notes
   [ "$status" -eq 0 ] || fail "exited $status: $output"
-  grep -qx '## unreleased (0)' "$RNW_RELEASE_META_DIR/notes.md" \
-    || fail "unexpected heading: $(cat "$RNW_RELEASE_META_DIR/notes.md")"
+  grep -qx '## unreleased (0)' "$WORKFLOWS_RELEASE_META_DIR/notes.md" \
+    || fail "unexpected heading: $(cat "$WORKFLOWS_RELEASE_META_DIR/notes.md")"
 }
 
 @test "the consumer's notes.mjs is preferred, and is handed the release body when there is one" {
@@ -96,14 +96,14 @@ JS
   RELEASE_BODY_FILE="$BATS_TEST_TMPDIR/body.md" NOTES_LOCALES='en,de' notes
   [ "$status" -eq 0 ] || fail "exited $status: $output"
   not_contains "$output" "::warning::consumer has no" || fail "fell back despite a notes.mjs: $output"
-  argv="$(cat "$RNW_RELEASE_META_DIR/argv.txt")"
+  argv="$(cat "$WORKFLOWS_RELEASE_META_DIR/argv.txt")"
   contains "$argv" "--from-body $BATS_TEST_TMPDIR/body.md" || fail "the body was not passed: $argv"
   contains "$argv" "--body-section" || fail "--body-section is missing: $argv"
-  [ "$(cat "$RNW_RELEASE_META_DIR/locales.txt")" = "en,de" ] || fail "NOTES_LOCALES was not forwarded"
+  [ "$(cat "$WORKFLOWS_RELEASE_META_DIR/locales.txt")" = "en,de" ] || fail "NOTES_LOCALES was not forwarded"
   contains "$argv" "--locales en,de" || fail "the locales were not passed as a flag: $argv"
   # notes.mjs wrote no notes.md, so the script must synthesise one rather than
   # leaving the release body empty.
-  [ -f "$RNW_RELEASE_META_DIR/notes.md" ] || fail "no notes.md was produced"
+  [ -f "$WORKFLOWS_RELEASE_META_DIR/notes.md" ] || fail "no notes.md was produced"
 }
 
 @test "notes.mjs is used with --from-commits when there is no release body" {
@@ -118,7 +118,7 @@ writeFileSync(`${out}/notes-store.txt`, "- x\n");
 JS
   notes
   [ "$status" -eq 0 ] || fail "exited $status: $output"
-  argv="$(cat "$RNW_RELEASE_META_DIR/argv.txt")"
+  argv="$(cat "$WORKFLOWS_RELEASE_META_DIR/argv.txt")"
   contains "$argv" "--from-commits" || fail "unexpected argv: $argv"
   # An empty notes-locales input contributes no flag at all, rather than
   # `--locales ''`, which the generator would read as "no locales".

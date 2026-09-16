@@ -16,7 +16,7 @@ exit 0
 EOF
   chmod +x "$fakebin/udevadm"
   export PATH="$fakebin:$PATH"
-  unset GITHUB_ACTIONS RUNNER_OS RNW_FORCE_RUNNER_SCRIPTS
+  unset GITHUB_ACTIONS RUNNER_OS WORKFLOWS_FORCE_RUNNER_SCRIPTS
 }
 
 @test "skips with a notice and never calls sudo when GITHUB_ACTIONS is unset" {
@@ -31,8 +31,8 @@ EOF
   [[ "$output" == *"skipping"* ]] || fail "assertion failed; output: $output"
 }
 
-@test "RNW_FORCE_RUNNER_SCRIPTS=1 bypasses the guard (and would hit the sudo stub)" {
-  RNW_FORCE_RUNNER_SCRIPTS=1 run bash "$REPO_ROOT/scripts/ci/enable-kvm.sh"
+@test "WORKFLOWS_FORCE_RUNNER_SCRIPTS=1 bypasses the guard (and would hit the sudo stub)" {
+  WORKFLOWS_FORCE_RUNNER_SCRIPTS=1 run bash "$REPO_ROOT/scripts/ci/enable-kvm.sh"
   [ "$status" -eq 99 ]
   [[ "$output" == *"sudo must not be invoked"* ]] || fail "assertion failed; output: $output"
 }

@@ -125,7 +125,7 @@ jobs:
     environment: ${{ inputs.environment }}
     env:
       WORKING_DIRECTORY: ${{ inputs.working-directory }}
-      RNW_STAGE: ${{ inputs.stage }}
+      WORKFLOWS_STAGE: ${{ inputs.stage }}
       APP_VERSION: ${{ inputs.version }}
       APP_BUILD_NUMBER: ${{ inputs.build-number }}
       ANDROID_PACKAGE: ${{ inputs.android-package }}
@@ -146,14 +146,14 @@ jobs:
         with:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
-          path: .rnw
+          path: .workflows
           persist-credentials: false
       - name: Free disk space
-        uses: ./.rnw/.github/actions/free-disk
-      - name: Publish RNW environment
-        run: bash ".rnw/scripts/release/env-publish.sh"
+        uses: ./.workflows/.github/actions/free-disk
+      - name: Publish WORKFLOWS_DIR environment
+        run: bash ".workflows/scripts/release/env-publish.sh"
       - name: Setup
-        uses: ./.rnw/.github/actions/setup
+        uses: ./.workflows/.github/actions/setup
         with:
           working-directory: ${{ inputs.working-directory }}
           # fastlane's android lanes are Ruby, same as the iOS ones.
@@ -169,13 +169,13 @@ jobs:
         env:
           ANDROID_UPLOAD_KEYSTORE_BASE64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}
           PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
-        run: bash "$RNW/scripts/release/decode-secrets.sh"
+        run: bash "$WORKFLOWS_DIR/scripts/release/decode-secrets.sh"
       - name: Publish build-env
         env:
-          RNW_BUILD_ENV: ${{ inputs.build-env }}
-        run: bash "$RNW/scripts/release/build-env.sh"
+          WORKFLOWS_BUILD_ENV: ${{ inputs.build-env }}
+        run: bash "$WORKFLOWS_DIR/scripts/release/build-env.sh"
       - name: Prebuild (android)
-        run: bash "$RNW/scripts/native/prebuild.sh" android
+        run: bash "$WORKFLOWS_DIR/scripts/native/prebuild.sh" android
       # Before the lane, not inside it: the `android build` lane needs
       # bundletool to derive the universal APK from the .aab, and no runner
       # image ships it. Failing here costs seconds; failing inside the lane
@@ -184,17 +184,17 @@ jobs:
         env:
           BUNDLETOOL_VERSION: ${{ inputs.bundletool-version }}
           BUNDLETOOL_SHA256: ${{ inputs.bundletool-sha256 }}
-        run: bash "$RNW/scripts/ci/bundletool-install.sh"
+        run: bash "$WORKFLOWS_DIR/scripts/ci/bundletool-install.sh"
       - name: Download release-meta
         uses: actions/download-artifact@v8
         with:
           name: ${{ inputs.release-meta-artifact }}
-          path: ${{ env.RNW_RELEASE_META_DIR }}
+          path: ${{ env.WORKFLOWS_RELEASE_META_DIR }}
       - name: Fastlane android build
         env:
-          BUILD_INFO_FILE: ${{ env.RNW_RELEASE_META_DIR }}/build-info.json
-          RELEASE_NOTES_STORE_FILE: ${{ env.RNW_RELEASE_META_DIR }}/notes-store.txt
-          STORE_NOTES_JSON: ${{ env.RNW_RELEASE_META_DIR }}/store-notes.json
+          BUILD_INFO_FILE: ${{ env.WORKFLOWS_RELEASE_META_DIR }}/build-info.json
+          RELEASE_NOTES_STORE_FILE: ${{ env.WORKFLOWS_RELEASE_META_DIR }}/notes-store.txt
+          STORE_NOTES_JSON: ${{ env.WORKFLOWS_RELEASE_META_DIR }}/store-notes.json
           # Passed alongside the decoded file (ANDROID_UPLOAD_KEYSTORE_PATH):
           # a lane may read either form, and a lane that reads the base64 with
           # ENV.fetch would raise on a missing key.
@@ -203,7 +203,7 @@ jobs:
           ANDROID_UPLOAD_KEY_ALIAS: ${{ secrets.ANDROID_UPLOAD_KEY_ALIAS }}
           ANDROID_UPLOAD_KEY_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEY_PASSWORD }}
           PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
-        run: bash "$RNW/scripts/release/fastlane.sh" android build
+        run: bash "$WORKFLOWS_DIR/scripts/release/fastlane.sh" android build
       # Between build and verify: the digests describe what the lane just
       # produced, and verify is the step that checks the apk it is about to
       # publish against them. The enriched copy lives beside the binaries and is
@@ -211,8 +211,8 @@ jobs:
       # bytes attached to it.
       - name: Record artifact hashes
         env:
-          BUILD_INFO_FILE: ${{ env.RNW_RELEASE_META_DIR }}/build-info.json
-        run: bash "$RNW/scripts/release/artifact-hashes.sh"
+          BUILD_INFO_FILE: ${{ env.WORKFLOWS_RELEASE_META_DIR }}/build-info.json
+        run: bash "$WORKFLOWS_DIR/scripts/release/artifact-hashes.sh"
       # ANDROID_UPLOAD_CERT_SHA256 comes from build-env; the lane forwards it to
       # the consumer's verify-android.sh as --cert-sha256, which is what turns
       # "the aab is signed" into "the aab is signed by the expected key".
@@ -222,9 +222,9 @@ jobs:
           # The enriched copy, not release-meta's: it carries
           # artifacts.apkSha256, which is what the consumer's verify-android
           # compares the universal apk against.
-          BUILD_INFO_FILE: ${{ env.RNW_OUTPUT_DIR }}/build-info.json
-          RELEASE_NOTES_STORE_FILE: ${{ env.RNW_RELEASE_META_DIR }}/notes-store.txt
-          STORE_NOTES_JSON: ${{ env.RNW_RELEASE_META_DIR }}/store-notes.json
+          BUILD_INFO_FILE: ${{ env.WORKFLOWS_OUTPUT_DIR }}/build-info.json
+          RELEASE_NOTES_STORE_FILE: ${{ env.WORKFLOWS_RELEASE_META_DIR }}/notes-store.txt
+          STORE_NOTES_JSON: ${{ env.WORKFLOWS_RELEASE_META_DIR }}/store-notes.json
           # Published by build-env; forwarded explicitly so the contract is
           # visible at the step that depends on it. Empty means "signature
           # present" only; set it to assert the signing key's fingerprint.
@@ -234,7 +234,7 @@ jobs:
           ANDROID_UPLOAD_KEY_ALIAS: ${{ secrets.ANDROID_UPLOAD_KEY_ALIAS }}
           ANDROID_UPLOAD_KEY_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEY_PASSWORD }}
           PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
-        run: bash "$RNW/scripts/release/fastlane.sh" android verify
+        run: bash "$WORKFLOWS_DIR/scripts/release/fastlane.sh" android verify
       - name: Upload android-aab
         uses: actions/upload-artifact@v7
         with:
@@ -246,8 +246,8 @@ jobs:
           # would make the release's record a coin toss. github-release.yml
           # folds this one back in explicitly, with merge-build-info.sh.
           path: |
-            ${{ env.RNW_OUTPUT_DIR }}/*.aab
-            ${{ env.RNW_OUTPUT_DIR }}/build-info.android.json
+            ${{ env.WORKFLOWS_OUTPUT_DIR }}/*.aab
+            ${{ env.WORKFLOWS_OUTPUT_DIR }}/build-info.android.json
           # An .aab is already compressed.
           compression-level: 0
           retention-days: 30
@@ -260,7 +260,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: ${{ inputs.apk-artifact }}
-          path: ${{ env.RNW_OUTPUT_DIR }}/*.apk
+          path: ${{ env.WORKFLOWS_OUTPUT_DIR }}/*.apk
           compression-level: 0
           retention-days: 30
           overwrite: true

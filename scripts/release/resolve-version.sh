@@ -76,9 +76,9 @@ fi
 # stamping a wrong version on a real release - the same class of silent fallback
 # the HEAD^2 lookup below exists to close. $GITHUB_REF_NAME is the branch the
 # workflow is running on, which is the release branch on the push that matters;
-# RNW_RELEASE_SCOPE overrides it for a consumer whose release-please config sets
+# WORKFLOWS_RELEASE_SCOPE overrides it for a consumer whose release-please config sets
 # a scope that is not the branch name.
-release_scope="${RNW_RELEASE_SCOPE:-${GITHUB_REF_NAME:-main}}"
+release_scope="${WORKFLOWS_RELEASE_SCOPE:-${GITHUB_REF_NAME:-main}}"
 release_prefix="chore($release_scope): release "
 
 # The release commit is matched on its exact subject shape rather than on any

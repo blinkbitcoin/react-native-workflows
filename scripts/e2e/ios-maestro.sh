@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Maestro E2E on the booted iOS simulator.
 # Needs: app installed and launched (app-launch.sh), Metro running.
-# Output: $RNW_OUT/maestro/junit.xml + debug output (screenshots, per-flow logs).
+# Output: $WORKFLOWS_OUT/maestro/junit.xml + debug output (screenshots, per-flow logs).
 # Usage: ios-maestro.sh
 # No `set -e`: the suite's failure is handled here (retry, forensics), not by
 # the shell exiting mid-script.
@@ -20,22 +20,22 @@ export MAESTRO_DRIVER_STARTUP_TIMEOUT=600000
 
 root="$(consumer_root)"
 cd "$root" || exit 1
-flows="$RNW_MAESTRO_FLOWS"
-[ -d "$flows" ] || die "no flows directory at $root/$flows (RNW_MAESTRO_FLOWS)"
-out="$RNW_OUT/maestro"
+flows="$WORKFLOWS_MAESTRO_FLOWS"
+[ -d "$flows" ] || die "no flows directory at $root/$flows (WORKFLOWS_MAESTRO_FLOWS)"
+out="$WORKFLOWS_OUT/maestro"
 mkdir -p "$out"
 
-trap 'rnw_run_hook RNW_E2E_TEARDOWN_SCRIPT || true' EXIT
-rnw_run_hook RNW_E2E_SETUP_SCRIPT || die "RNW_E2E_SETUP_SCRIPT failed"
+trap 'workflows_run_hook WORKFLOWS_E2E_TEARDOWN_SCRIPT || true' EXIT
+workflows_run_hook WORKFLOWS_E2E_SETUP_SCRIPT || die "WORKFLOWS_E2E_SETUP_SCRIPT failed"
 
 args=(test "$flows" --platform ios)
 # Address the picked simulator explicitly: a developer Mac (and a warm runner)
 # can have an Android emulator attached at the same time, and Maestro otherwise
 # picks whichever device it finds first.
-args+=(--udid "$(rnw_sim_udid)")
+args+=(--udid "$(workflows_sim_udid)")
 [ -f "$flows/config.yaml" ] && args+=(--config "$flows/config.yaml")
 args+=(
-  -e "APP_ID=$(rnw_app_id ios)"
+  -e "APP_ID=$(workflows_app_id ios)"
   --debug-output "$out"
   --flatten-debug-output
   --format junit
@@ -43,12 +43,12 @@ args+=(
 )
 # The consumer's config.yaml usually carries includeTags already; the env var is
 # for narrowing a single run (a smoke-only PR job) without editing the config.
-[ -n "${RNW_MAESTRO_INCLUDE_TAGS:-}" ] && args+=(--include-tags "$RNW_MAESTRO_INCLUDE_TAGS")
-[ -n "${RNW_MAESTRO_EXCLUDE_TAGS:-}" ] && args+=(--exclude-tags "$RNW_MAESTRO_EXCLUDE_TAGS")
+[ -n "${WORKFLOWS_MAESTRO_INCLUDE_TAGS:-}" ] && args+=(--include-tags "$WORKFLOWS_MAESTRO_INCLUDE_TAGS")
+[ -n "${WORKFLOWS_MAESTRO_EXCLUDE_TAGS:-}" ] && args+=(--exclude-tags "$WORKFLOWS_MAESTRO_EXCLUDE_TAGS")
 
-bound=$((RNW_SUITE_TIMEOUT_MINUTES * 60))
+bound=$((WORKFLOWS_SUITE_TIMEOUT_MINUTES * 60))
 status=0
-group "maestro test (iOS, bound ${RNW_SUITE_TIMEOUT_MINUTES}m)"
+group "maestro test (iOS, bound ${WORKFLOWS_SUITE_TIMEOUT_MINUTES}m)"
 bounded_maestro "$bound" maestro "${args[@]}" || status=$?
 endgroup
 
@@ -65,6 +65,6 @@ fi
 # selection matches nothing, so success is only success once the junit report
 # says how many flows actually ran.
 if [ "$status" -eq 0 ]; then
-  rnw_assert_suite_ran "$out/junit.xml" "iOS"
+  workflows_assert_suite_ran "$out/junit.xml" "iOS"
 fi
 exit "$status"

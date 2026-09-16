@@ -113,7 +113,7 @@ jobs:
     timeout-minutes: 60
     env:
       WORKING_DIRECTORY: ${{ inputs.working-directory }}
-      RNW_XCODE: ${{ inputs.xcode }}
+      WORKFLOWS_XCODE: ${{ inputs.xcode }}
     steps:
       - name: Checkout consumer
         uses: actions/checkout@v7
@@ -126,15 +126,15 @@ jobs:
         with:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
-          path: .rnw
+          path: .workflows
           persist-credentials: false
-      # Puts RNW_OUT in $GITHUB_ENV up front so the upload step's `path:` below
+      # Puts WORKFLOWS_OUT in $GITHUB_ENV up front so the upload step's `path:` below
       # resolves even when an earlier step failed before any other script ran.
-      - name: Publish RNW environment
-        run: bash ".rnw/scripts/e2e/env-publish.sh"
+      - name: Publish WORKFLOWS_DIR environment
+        run: bash ".workflows/scripts/e2e/env-publish.sh"
       - name: Native cache keys
         id: keys
-        uses: ./.rnw/.github/actions/native-key
+        uses: ./.workflows/.github/actions/native-key
         with:
           working-directory: ${{ inputs.working-directory }}
           native-cache-version: ${{ inputs.native-cache-version }}
@@ -151,16 +151,16 @@ jobs:
             ${{ inputs.working-directory }}/ios/*.xcworkspace
           key: ${{ steps.keys.outputs.ios-key }}
           lookup-only: false
-      # Always: ios-pack.sh needs $RNW, pnpm and the expo config even on a hit.
+      # Always: ios-pack.sh needs $WORKFLOWS_DIR, pnpm and the expo config even on a hit.
       # Ruby is only needed by pods.sh, so it is installed on a miss only.
       - name: Setup
-        uses: ./.rnw/.github/actions/setup
+        uses: ./.workflows/.github/actions/setup
         with:
           working-directory: ${{ inputs.working-directory }}
           ruby: ${{ steps.restore.outputs.cache-hit != 'true' }}
       - name: Prebuild (ios)
         if: ${{ steps.restore.outputs.cache-hit != 'true' }}
-        run: bash "$RNW/scripts/native/prebuild.sh" ios
+        run: bash "$WORKFLOWS_DIR/scripts/native/prebuild.sh" ios
       - name: Cache CocoaPods
         if: ${{ steps.restore.outputs.cache-hit != 'true' }}
         uses: actions/cache@v6
@@ -174,12 +174,12 @@ jobs:
       - name: Pod install
         if: ${{ steps.restore.outputs.cache-hit != 'true' }}
         timeout-minutes: 20
-        run: bash "$RNW/scripts/native/pods.sh"
+        run: bash "$WORKFLOWS_DIR/scripts/native/pods.sh"
       - name: Build iOS app
         id: build
         if: ${{ steps.restore.outputs.cache-hit != 'true' }}
         timeout-minutes: 45
-        run: bash "$RNW/scripts/native/ios-build.sh"
+        run: bash "$WORKFLOWS_DIR/scripts/native/ios-build.sh"
       - name: Save iOS app cache
         if: ${{ steps.restore.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v6
@@ -194,13 +194,13 @@ jobs:
       # error. A cache hit leaves `conclusion` as `skipped`, which still packs.
       - name: Pack iOS app
         if: ${{ !cancelled() && steps.build.conclusion != 'failure' }}
-        run: bash "$RNW/scripts/native/ios-pack.sh"
+        run: bash "$WORKFLOWS_DIR/scripts/native/ios-pack.sh"
       - name: Upload iOS app
         if: ${{ !cancelled() && steps.build.conclusion != 'failure' }}
         uses: actions/upload-artifact@v7
         with:
           name: ${{ inputs.ios-artifact-name }}
-          path: ${{ env.RNW_OUT }}/*.app.tar
+          path: ${{ env.WORKFLOWS_OUT }}/*.app.tar
           retention-days: 1
           overwrite: true
           if-no-files-found: error
@@ -211,11 +211,11 @@ jobs:
     timeout-minutes: 60
     env:
       WORKING_DIRECTORY: ${{ inputs.working-directory }}
-      RNW_DEV_CLIENT: ${{ inputs.dev-client }}
-      RNW_MAESTRO_FLOWS: ${{ inputs.maestro-flows }}
-      RNW_MAESTRO_INCLUDE_TAGS: ${{ inputs.maestro-include-tags }}
-      RNW_MAESTRO_EXCLUDE_TAGS: ${{ inputs.maestro-exclude-tags }}
-      RNW_SUITE_TIMEOUT_MINUTES: ${{ inputs.suite-timeout-minutes }}
+      WORKFLOWS_DEV_CLIENT: ${{ inputs.dev-client }}
+      WORKFLOWS_MAESTRO_FLOWS: ${{ inputs.maestro-flows }}
+      WORKFLOWS_MAESTRO_INCLUDE_TAGS: ${{ inputs.maestro-include-tags }}
+      WORKFLOWS_MAESTRO_EXCLUDE_TAGS: ${{ inputs.maestro-exclude-tags }}
+      WORKFLOWS_SUITE_TIMEOUT_MINUTES: ${{ inputs.suite-timeout-minutes }}
     steps:
       - name: Checkout consumer
         uses: actions/checkout@v7
@@ -228,72 +228,72 @@ jobs:
         with:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
-          path: .rnw
+          path: .workflows
           persist-credentials: false
-      # Before setup there is no $RNW yet, so these two reach the scripts through
-      # the plain checkout path. env-publish puts RNW_OUT in $GITHUB_ENV so the
+      # Before setup there is no $WORKFLOWS_DIR yet, so these two reach the scripts through
+      # the plain checkout path. env-publish puts WORKFLOWS_OUT in $GITHUB_ENV so the
       # download-artifact and forensics `with:` blocks below can interpolate it.
-      - name: Publish RNW environment
-        run: bash ".rnw/scripts/e2e/env-publish.sh"
+      - name: Publish WORKFLOWS_DIR environment
+        run: bash ".workflows/scripts/e2e/env-publish.sh"
       - name: Compute suite step timeout
         id: timeout
-        run: bash ".rnw/scripts/e2e/step-timeout.sh"
+        run: bash ".workflows/scripts/e2e/step-timeout.sh"
       - name: Pick simulator
-        run: bash ".rnw/scripts/e2e/ios-simulator.sh" pick
+        run: bash ".workflows/scripts/e2e/ios-simulator.sh" pick
       - name: Setup
-        uses: ./.rnw/.github/actions/setup
+        uses: ./.workflows/.github/actions/setup
         with:
           working-directory: ${{ inputs.working-directory }}
       - name: Install Maestro
         timeout-minutes: 10
-        uses: ./.rnw/.github/actions/maestro
+        uses: ./.workflows/.github/actions/maestro
         with:
           version: ${{ inputs.maestro-version }}
       - name: Start Metro
-        run: bash "$RNW/scripts/e2e/metro-start.sh"
+        run: bash "$WORKFLOWS_DIR/scripts/e2e/metro-start.sh"
       - name: E2E setup script
         if: ${{ inputs.e2e-setup-script != '' }}
         env:
           HOOK: ${{ inputs.e2e-setup-script }}
-        run: bash "$RNW/scripts/e2e/run-hook.sh"
+        run: bash "$WORKFLOWS_DIR/scripts/e2e/run-hook.sh"
       - name: Wait for simulator
-        run: bash "$RNW/scripts/e2e/ios-simulator.sh" wait
+        run: bash "$WORKFLOWS_DIR/scripts/e2e/ios-simulator.sh" wait
       - name: Download iOS app
         uses: actions/download-artifact@v8
         with:
           name: ${{ inputs.ios-artifact-name }}
-          path: ${{ env.RNW_OUT }}
+          path: ${{ env.WORKFLOWS_OUT }}
       - name: Install app
-        run: bash "$RNW/scripts/e2e/ios-simulator.sh" install "$RNW_OUT"/*.app.tar
+        run: bash "$WORKFLOWS_DIR/scripts/e2e/ios-simulator.sh" install "$WORKFLOWS_OUT"/*.app.tar
       - name: Wait for Metro
         timeout-minutes: 10
-        run: bash "$RNW/scripts/e2e/metro-wait.sh" ios
+        run: bash "$WORKFLOWS_DIR/scripts/e2e/metro-wait.sh" ios
       - name: Start screen recording
-        run: bash "$RNW/scripts/e2e/ios-simulator.sh" record start
+        run: bash "$WORKFLOWS_DIR/scripts/e2e/ios-simulator.sh" record start
       - name: Launch app
-        run: bash "$RNW/scripts/e2e/app-launch.sh" ios
+        run: bash "$WORKFLOWS_DIR/scripts/e2e/app-launch.sh" ios
       - name: Maestro suite (iOS)
         timeout-minutes: ${{ fromJSON(steps.timeout.outputs.minutes) }}
         env:
           MAESTRO_DRIVER_STARTUP_TIMEOUT: '600000'
-        run: bash "$RNW/scripts/e2e/ios-maestro.sh"
+        run: bash "$WORKFLOWS_DIR/scripts/e2e/ios-maestro.sh"
       - name: Stop screen recording
         if: always()
-        run: bash "$RNW/scripts/e2e/ios-simulator.sh" record stop
+        run: bash "$WORKFLOWS_DIR/scripts/e2e/ios-simulator.sh" record stop
       - name: E2E teardown script
         if: ${{ always() && inputs.e2e-teardown-script != '' }}
         env:
           HOOK: ${{ inputs.e2e-teardown-script }}
-        run: bash "$RNW/scripts/e2e/run-hook.sh"
+        run: bash "$WORKFLOWS_DIR/scripts/e2e/run-hook.sh"
       - name: Collect forensics
         if: always()
-        run: bash "$RNW/scripts/e2e/collect-forensics.sh" ios
+        run: bash "$WORKFLOWS_DIR/scripts/e2e/collect-forensics.sh" ios
       - name: Upload forensics
         if: always()
-        uses: ./.rnw/.github/actions/forensics
+        uses: ./.workflows/.github/actions/forensics
         with:
           name: forensics-ios
-          junit: ${{ env.RNW_OUT }}/maestro/junit.xml
+          junit: ${{ env.WORKFLOWS_OUT }}/maestro/junit.xml
   build-android:
     if: ${{ inputs.android }}
     runs-on: ${{ inputs.linux-runner }}
@@ -312,11 +312,11 @@ jobs:
         with:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
-          path: .rnw
+          path: .workflows
           persist-credentials: false
       - name: Native cache keys
         id: keys
-        uses: ./.rnw/.github/actions/native-key
+        uses: ./.workflows/.github/actions/native-key
         with:
           working-directory: ${{ inputs.working-directory }}
           native-cache-version: ${{ inputs.native-cache-version }}
@@ -330,7 +330,7 @@ jobs:
           lookup-only: false
       - name: Setup
         if: ${{ steps.restore.outputs.cache-hit != 'true' }}
-        uses: ./.rnw/.github/actions/setup
+        uses: ./.workflows/.github/actions/setup
         with:
           working-directory: ${{ inputs.working-directory }}
       - name: Setup Gradle
@@ -343,11 +343,11 @@ jobs:
           cache-read-only: ${{ github.ref != inputs.default-branch }}
       - name: Prebuild (android)
         if: ${{ steps.restore.outputs.cache-hit != 'true' }}
-        run: bash "$RNW/scripts/native/prebuild.sh" android
+        run: bash "$WORKFLOWS_DIR/scripts/native/prebuild.sh" android
       - name: Build APK
         id: build
         if: ${{ steps.restore.outputs.cache-hit != 'true' }}
-        run: bash "$RNW/scripts/native/android-build.sh"
+        run: bash "$WORKFLOWS_DIR/scripts/native/android-build.sh"
       - name: Save APK cache
         if: ${{ steps.restore.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v6
@@ -375,13 +375,13 @@ jobs:
     timeout-minutes: 60
     env:
       WORKING_DIRECTORY: ${{ inputs.working-directory }}
-      RNW_DEV_CLIENT: ${{ inputs.dev-client }}
-      RNW_MAESTRO_FLOWS: ${{ inputs.maestro-flows }}
-      RNW_MAESTRO_INCLUDE_TAGS: ${{ inputs.maestro-include-tags }}
-      RNW_MAESTRO_EXCLUDE_TAGS: ${{ inputs.maestro-exclude-tags }}
-      RNW_SUITE_TIMEOUT_MINUTES: ${{ inputs.suite-timeout-minutes }}
+      WORKFLOWS_DEV_CLIENT: ${{ inputs.dev-client }}
+      WORKFLOWS_MAESTRO_FLOWS: ${{ inputs.maestro-flows }}
+      WORKFLOWS_MAESTRO_INCLUDE_TAGS: ${{ inputs.maestro-include-tags }}
+      WORKFLOWS_MAESTRO_EXCLUDE_TAGS: ${{ inputs.maestro-exclude-tags }}
+      WORKFLOWS_SUITE_TIMEOUT_MINUTES: ${{ inputs.suite-timeout-minutes }}
     steps:
-      # free-disk is a local composite action, so the .rnw checkout has to come
+      # free-disk is a local composite action, so the .workflows checkout has to come
       # first; it still runs before every disk-heavy step (SDK, emulator, build).
       - name: Checkout consumer
         uses: actions/checkout@v7
@@ -394,35 +394,35 @@ jobs:
         with:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
-          path: .rnw
+          path: .workflows
           persist-credentials: false
       - name: Free disk space
-        uses: ./.rnw/.github/actions/free-disk
-      - name: Publish RNW environment
-        run: bash ".rnw/scripts/e2e/env-publish.sh"
+        uses: ./.workflows/.github/actions/free-disk
+      - name: Publish WORKFLOWS_DIR environment
+        run: bash ".workflows/scripts/e2e/env-publish.sh"
       - name: Compute suite step timeout
         id: timeout
-        run: bash ".rnw/scripts/e2e/step-timeout.sh"
+        run: bash ".workflows/scripts/e2e/step-timeout.sh"
       - name: Setup
-        uses: ./.rnw/.github/actions/setup
+        uses: ./.workflows/.github/actions/setup
         with:
           working-directory: ${{ inputs.working-directory }}
       - name: Install Maestro
         timeout-minutes: 10
-        uses: ./.rnw/.github/actions/maestro
+        uses: ./.workflows/.github/actions/maestro
         with:
           version: ${{ inputs.maestro-version }}
       - name: Enable KVM
-        run: bash "$RNW/scripts/ci/enable-kvm.sh"
+        run: bash "$WORKFLOWS_DIR/scripts/ci/enable-kvm.sh"
       - name: Start Metro
-        run: bash "$RNW/scripts/e2e/metro-start.sh"
+        run: bash "$WORKFLOWS_DIR/scripts/e2e/metro-start.sh"
       - name: E2E setup script
         if: ${{ inputs.e2e-setup-script != '' }}
         env:
           HOOK: ${{ inputs.e2e-setup-script }}
-        run: bash "$RNW/scripts/e2e/run-hook.sh"
+        run: bash "$WORKFLOWS_DIR/scripts/e2e/run-hook.sh"
       # Downloaded into the consumer's gradle output path so android-maestro.sh
-      # finds it at its default location ($consumer/$RNW_ANDROID_APK).
+      # finds it at its default location ($consumer/$WORKFLOWS_ANDROID_APK).
       - name: Download APK
         uses: actions/download-artifact@v8
         with:
@@ -435,7 +435,7 @@ jobs:
       # same no-op property the system-image cache below relies on.
       - name: Install Android emulator package
         timeout-minutes: 15
-        run: bash "$RNW/scripts/ci/android-sdk-install.sh" emulator
+        run: bash "$WORKFLOWS_DIR/scripts/ci/android-sdk-install.sh" emulator
       - name: Cache Android system image
         uses: actions/cache@v6
         with:
@@ -465,10 +465,10 @@ jobs:
           force-avd-creation: false
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: false
-          script: bash "$RNW/scripts/e2e/android-emulator.sh" snapshot-bake
+          script: bash "$WORKFLOWS_DIR/scripts/e2e/android-emulator.sh" snapshot-bake
       - name: Wait for Metro
         timeout-minutes: 10
-        run: bash "$RNW/scripts/e2e/metro-wait.sh" android
+        run: bash "$WORKFLOWS_DIR/scripts/e2e/metro-wait.sh" android
       - name: Maestro suite (Android)
         timeout-minutes: ${{ fromJSON(steps.timeout.outputs.minutes) }}
         uses: ReactiveCircus/android-emulator-runner@v2
@@ -481,15 +481,15 @@ jobs:
           force-avd-creation: false
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
-          script: bash "$RNW/scripts/e2e/android-maestro.sh"
+          script: bash "$WORKFLOWS_DIR/scripts/e2e/android-maestro.sh"
       - name: E2E teardown script
         if: ${{ always() && inputs.e2e-teardown-script != '' }}
         env:
           HOOK: ${{ inputs.e2e-teardown-script }}
-        run: bash "$RNW/scripts/e2e/run-hook.sh"
+        run: bash "$WORKFLOWS_DIR/scripts/e2e/run-hook.sh"
       - name: Upload forensics
         if: always()
-        uses: ./.rnw/.github/actions/forensics
+        uses: ./.workflows/.github/actions/forensics
         with:
           name: forensics-android
-          junit: ${{ env.RNW_OUT }}/maestro/junit.xml
+          junit: ${{ env.WORKFLOWS_OUT }}/maestro/junit.xml

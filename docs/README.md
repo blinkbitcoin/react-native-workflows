@@ -16,7 +16,7 @@ rest explain the parts of it that surprise people.
 
 | Doc | Contents |
 | --- | --- |
-| [consumer-guide.md](consumer-guide.md) | Every workflow's inputs, outputs and secrets; the full caller examples; versioning and the `@v0` pin; the `.rnw/` self-checkout |
+| [consumer-guide.md](consumer-guide.md) | Every workflow's inputs, outputs and secrets; the full caller examples; versioning and the `@v0` pin; the `.workflows/` self-checkout |
 | [cache-keys.md](cache-keys.md) | Each cache's key shape, what invalidates it, and the restore/save split |
 | [forensics.md](forensics.md) | The artifacts an E2E job uploads on iOS and Android, what is in each, and retention |
 | [runners.md](runners.md) | Runner labels, macOS billing at 10x, self-hosted notes, KVM and disk pressure |

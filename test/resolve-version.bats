@@ -24,7 +24,7 @@ setup() {
   # set inside GitHub Actions, it seeds the release scope, and left ambient it
   # would make every `chore(main)` fixture below pass on a laptop and fail in CI.
   unset GITHUB_OUTPUT GITHUB_ENV RELEASE_PR_TITLE BUILD_NUMBER_OFFSET GH_TOKEN
-  unset GITHUB_REF_NAME RNW_RELEASE_SCOPE
+  unset GITHUB_REF_NAME WORKFLOWS_RELEASE_SCOPE
 }
 
 commit() { git -C "$REPO" commit -q --allow-empty -m "${1:-c}"; }
@@ -101,15 +101,15 @@ merge_release_fixture() {
 # contract-identical, not byte-identical, so the case that differs most between
 # two implementations is compared output-to-output.
 @test "this copy and the template's agree on the merge-commit fixture" {
-  # RNW_TEMPLATE_DIR only: this repo serves any consumer, so it has no business
+  # WORKFLOWS_TEMPLATE_DIR only: this repo serves any consumer, so it has no business
   # guessing where one sits on a particular machine. CI and anyone wanting the
   # parity check points it at a checkout; everyone else gets the skip below.
-  template_dir="${RNW_TEMPLATE_DIR:-}"
-  [ -n "$template_dir" ] || parity_skip "parity NOT verified: set RNW_TEMPLATE_DIR to a template checkout"
+  template_dir="${WORKFLOWS_TEMPLATE_DIR:-}"
+  [ -n "$template_dir" ] || parity_skip "parity NOT verified: set WORKFLOWS_TEMPLATE_DIR to a template checkout"
   other="$template_dir/scripts/release/resolve-version.sh"
   # A skip here means parity with the template's copy was NOT verified by this
   # run -- not that the two copies agree.
-  [ -f "$other" ] || parity_skip "parity NOT verified: no template copy at $other (set RNW_TEMPLATE_DIR)"
+  [ -f "$other" ] || parity_skip "parity NOT verified: no template copy at $other (set WORKFLOWS_TEMPLATE_DIR)"
   merge_release_fixture
   # All three channels: the APP_* lines on stdout, the file both copies append to
   # when $GITHUB_OUTPUT is set, and $GITHUB_ENV - which neither copy may write.
@@ -152,10 +152,10 @@ $(cat "$theirs_env")"
 # no validation, so a typo'd offset was read as 0 and the build number went
 # backwards. A store rejects that permanently, so both copies must refuse it.
 @test "this copy and the template's both refuse a non-numeric offset" {
-  template_dir="${RNW_TEMPLATE_DIR:-}"
-  [ -n "$template_dir" ] || parity_skip "parity NOT verified: set RNW_TEMPLATE_DIR to a template checkout"
+  template_dir="${WORKFLOWS_TEMPLATE_DIR:-}"
+  [ -n "$template_dir" ] || parity_skip "parity NOT verified: set WORKFLOWS_TEMPLATE_DIR to a template checkout"
   other="$template_dir/scripts/release/resolve-version.sh"
-  [ -f "$other" ] || parity_skip "parity NOT verified: no template copy at $other (set RNW_TEMPLATE_DIR)"
+  [ -f "$other" ] || parity_skip "parity NOT verified: no template copy at $other (set WORKFLOWS_TEMPLATE_DIR)"
   commit
   run env BUILD_NUMBER_OFFSET=abc bash "$REPO_ROOT/scripts/release/resolve-version.sh" "$REPO"
   [ "$status" -ne 0 ] || fail "this copy accepted a non-numeric offset: $output"
@@ -298,13 +298,13 @@ $(cat "$theirs_env")"
   contains "$output" "APP_VERSION=1.2.0" || fail "the master-scoped release was missed: $output"
 }
 
-@test "RNW_RELEASE_SCOPE overrides the branch name" {
+@test "WORKFLOWS_RELEASE_SCOPE overrides the branch name" {
   commit
   git -C "$REPO" tag v0.4.9
   commit 'chore(app): release 1.2.0'
-  GITHUB_REF_NAME=main RNW_RELEASE_SCOPE=app resolve
+  GITHUB_REF_NAME=main WORKFLOWS_RELEASE_SCOPE=app resolve
   [ "$status" -eq 0 ] || fail "exited $status: $output"
-  contains "$output" "APP_VERSION=1.2.0" || fail "RNW_RELEASE_SCOPE was ignored: $output"
+  contains "$output" "APP_VERSION=1.2.0" || fail "WORKFLOWS_RELEASE_SCOPE was ignored: $output"
 }
 
 @test "a release commit scoped to another branch is not this branch's release" {

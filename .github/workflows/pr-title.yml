@@ -48,14 +48,14 @@ jobs:
         with:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
-          path: .rnw
+          path: .workflows
           persist-credentials: false
       - name: Setup
-        uses: ./.rnw/.github/actions/setup
+        uses: ./.workflows/.github/actions/setup
         with:
           working-directory: ${{ inputs.working-directory }}
           install: true
       - name: Commitlint
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
-        run: bash "$RNW/scripts/checks/commitlint.sh"
+        run: bash "$WORKFLOWS_DIR/scripts/checks/commitlint.sh"

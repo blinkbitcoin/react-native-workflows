@@ -3,7 +3,7 @@
 #
 # `sdkmanager` is stubbed: what is under test is where the script *finds* the
 # binary, what it asks it for, and how it retries - not Google's CDN. The stub
-# appends its argv to a log and fails its first $RNW_TEST_FAILURES invocations,
+# appends its argv to a log and fails its first $WORKFLOWS_TEST_FAILURES invocations,
 # so a test can assert both the request and the number of attempts.
 load test_helper
 
@@ -22,7 +22,7 @@ make_sdk() {
 #!/usr/bin/env bash
 printf '%s\n' "\$*" >> "$SDK_LOG"
 attempts=\$(grep -c . "$SDK_LOG")
-if [ "\$attempts" -le "\${RNW_TEST_FAILURES:-0}" ]; then
+if [ "\$attempts" -le "\${WORKFLOWS_TEST_FAILURES:-0}" ]; then
   echo "Error on ZipFile unknown archive" >&2
   exit 1
 fi
@@ -48,7 +48,7 @@ calls() { grep -c . "$SDK_LOG"; }
 # Android SDK would otherwise satisfy every lookup and these tests would pass
 # without ever running the stub.
 setup() {
-  unset ANDROID_HOME ANDROID_SDK_ROOT ANDROID_SDK_RETRIES RNW_TEST_FAILURES
+  unset ANDROID_HOME ANDROID_SDK_ROOT ANDROID_SDK_RETRIES WORKFLOWS_TEST_FAILURES
   make_sdk
 }
 
@@ -90,7 +90,7 @@ setup() {
 }
 
 @test "retries after purging the download cache, then succeeds" {
-  RNW_TEST_FAILURES=2 install emulator
+  WORKFLOWS_TEST_FAILURES=2 install emulator
   [ "$status" -eq 0 ] || fail "exited $status: $output"
   [ "$(calls)" -eq 3 ] || fail "expected 3 attempts, got $(calls)"
   contains "$output" "retry 1 of 2" || fail "first retry unannounced: $output"
@@ -102,7 +102,7 @@ setup() {
 }
 
 @test "gives up after ANDROID_SDK_RETRIES retries" {
-  RNW_TEST_FAILURES=99 ANDROID_SDK_RETRIES=1 install emulator
+  WORKFLOWS_TEST_FAILURES=99 ANDROID_SDK_RETRIES=1 install emulator
   [ "$status" -eq 1 ] || fail "exited $status: $output"
   [ "$(calls)" -eq 2 ] || fail "expected 2 attempts, got $(calls)"
   contains "$output" "could not install 'emulator' in 2 attempts" \

@@ -11,17 +11,17 @@
 #      classifier. (3) compares the guide to the fixture only — it would not
 #      catch that on its own.
 # Runs against test/fixtures/consumer-min by default, so all of this is asserted
-# on every push including self-ci. Set RNW_CONSUMER_ROOT to a real consumer
+# on every push including self-ci. Set WORKFLOWS_CONSUMER_ROOT to a real consumer
 # checkout (e.g. a react-native-mobile-template clone) to assert against that
 # instead; the consumer tests skip with a message if that path has no
 # package.json.
 load test_helper
 
 GUIDE="$REPO_ROOT/docs/consumer-guide.md"
-CONSUMER="${RNW_CONSUMER_ROOT:-$FIXTURES/consumer-min}"
+CONSUMER="${WORKFLOWS_CONSUMER_ROOT:-$FIXTURES/consumer-min}"
 
 require_consumer() {
-  [ -f "$CONSUMER/package.json" ] || skip "no consumer package.json at $CONSUMER (RNW_CONSUMER_ROOT)"
+  [ -f "$CONSUMER/package.json" ] || skip "no consumer package.json at $CONSUMER (WORKFLOWS_CONSUMER_ROOT)"
 }
 
 # Prints the consumer's package.json script names, one per line.

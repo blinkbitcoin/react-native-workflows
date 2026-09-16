@@ -6,7 +6,6 @@ extend-ignore-re = []
 
 [default.extend-words]
 # Real project/technology names and Apple API field names that trip the dictionary.
-rnw = "rnw"
 maestro = "maestro"
 udid = "udid"
 UDID = "UDID"

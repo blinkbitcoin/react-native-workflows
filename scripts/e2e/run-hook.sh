@@ -10,4 +10,4 @@ if [ -z "${HOOK:-}" ]; then
   log "run-hook: HOOK is empty; nothing to run"
   exit 0
 fi
-rnw_run_hook HOOK
+workflows_run_hook HOOK

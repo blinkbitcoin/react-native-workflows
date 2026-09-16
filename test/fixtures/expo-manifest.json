@@ -10,6 +10,6 @@
   "assets": [],
   "metadata": {},
   "extra": {
-    "expoClient": { "slug": "rnw-fixture", "hostUri": "192.168.1.42:8081" }
+    "expoClient": { "slug": "workflows-fixture", "hostUri": "192.168.1.42:8081" }
   }
 }

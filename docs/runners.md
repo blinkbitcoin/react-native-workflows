@@ -13,10 +13,10 @@ repo. Consumers that want a repo-wide override without touching every caller
 workflow can instead read it from a repo variable:
 
 ```yaml
-macos-runner: ${{ vars.RNW_MACOS_RUNNER || 'macos-26' }}
+macos-runner: ${{ vars.WORKFLOWS_MACOS_RUNNER || 'macos-26' }}
 ```
 
-`RNW_MACOS_RUNNER` is not read by any workflow in this repo directly — it's a
+`WORKFLOWS_MACOS_RUNNER` is not read by any workflow in this repo directly — it's a
 convention for the consumer's own caller workflows (see
 `docs/consumer-guide.md`), which is why it's a repo *variable* the consumer
 sets, not an input this repo defines a default for.
@@ -34,7 +34,7 @@ self-hosted:
   `scripts/ci/enable-kvm.sh`) both **skip themselves with a log line** unless
   `GITHUB_ACTIONS=true` *and* `RUNNER_OS=Linux` — true on any Linux
   self-hosted runner too, so they still run there. Set
-  `RNW_FORCE_RUNNER_SCRIPTS=1` to force them on a runner that reports
+  `WORKFLOWS_FORCE_RUNNER_SCRIPTS=1` to force them on a runner that reports
   differently (rare) or when testing locally in an actions-like container.
 - `actionlint.yaml`'s `self-hosted-runner.labels` is empty in this repo (it
   never runs its own workflows on self-hosted runners), but a consumer with

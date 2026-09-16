@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Produce the store-notes bundle in $RNW_RELEASE_META_DIR:
+# Produce the store-notes bundle in $WORKFLOWS_RELEASE_META_DIR:
 #
 #   store-notes.json  {"<locale>": {"testflight","play","appstore"}}
 #   notes-store.txt   the plain-text notes handed to the store lanes
@@ -20,7 +20,7 @@ source "$(dirname "$0")/../lib/common.sh"
 source "$(dirname "$0")/../lib/release-env.sh"
 
 root="$(consumer_root)"
-mkdir -p "$RNW_RELEASE_META_DIR"
+mkdir -p "$WORKFLOWS_RELEASE_META_DIR"
 cd "$root"
 
 # The locales are passed both ways on purpose: $NOTES_LOCALES is the older
@@ -40,40 +40,40 @@ if [ -f "scripts/release/notes.mjs" ]; then
     log "running the consumer's notes.mjs --from-body --body-section"
     NOTES_LOCALES="${NOTES_LOCALES:-en-US}" \
       node scripts/release/notes.mjs --from-body "$RELEASE_BODY_FILE" --body-section \
-      "${locale_args[@]+"${locale_args[@]}"}" --out "$RNW_RELEASE_META_DIR"
+      "${locale_args[@]+"${locale_args[@]}"}" --out "$WORKFLOWS_RELEASE_META_DIR"
   else
     log "running the consumer's notes.mjs --from-commits"
     NOTES_LOCALES="${NOTES_LOCALES:-en-US}" \
       node scripts/release/notes.mjs --from-commits \
-      "${locale_args[@]+"${locale_args[@]}"}" --out "$RNW_RELEASE_META_DIR"
+      "${locale_args[@]+"${locale_args[@]}"}" --out "$WORKFLOWS_RELEASE_META_DIR"
   fi
 else
   printf '::warning::consumer has no scripts/release/notes.mjs - falling back to commit subjects; store listings will get generic notes\n' >&2
-  printf '{}\n' > "$RNW_RELEASE_META_DIR/store-notes.json"
+  printf '{}\n' > "$WORKFLOWS_RELEASE_META_DIR/store-notes.json"
   last_tag="$(git tag --list 'v*' --sort=-v:refname 2>/dev/null | head -1 || true)"
   if [ -n "$last_tag" ]; then
-    git log --no-merges --format='- %s' "$last_tag..HEAD" > "$RNW_RELEASE_META_DIR/notes-store.txt" || true
+    git log --no-merges --format='- %s' "$last_tag..HEAD" > "$WORKFLOWS_RELEASE_META_DIR/notes-store.txt" || true
   else
-    git log --no-merges --format='- %s' -n 50 > "$RNW_RELEASE_META_DIR/notes-store.txt" || true
+    git log --no-merges --format='- %s' -n 50 > "$WORKFLOWS_RELEASE_META_DIR/notes-store.txt" || true
   fi
   # An empty notes file makes App Store Connect reject the submission, so never
   # ship one: fall back to a single generic line.
-  [ -s "$RNW_RELEASE_META_DIR/notes-store.txt" ] ||
-    printf -- '- Bug fixes and improvements\n' > "$RNW_RELEASE_META_DIR/notes-store.txt"
+  [ -s "$WORKFLOWS_RELEASE_META_DIR/notes-store.txt" ] ||
+    printf -- '- Bug fixes and improvements\n' > "$WORKFLOWS_RELEASE_META_DIR/notes-store.txt"
   {
     printf '## %s (%s)\n\n' "${APP_VERSION:-unreleased}" "${APP_BUILD_NUMBER:-0}"
-    cat "$RNW_RELEASE_META_DIR/notes-store.txt"
-  } > "$RNW_RELEASE_META_DIR/notes.md"
+    cat "$WORKFLOWS_RELEASE_META_DIR/notes-store.txt"
+  } > "$WORKFLOWS_RELEASE_META_DIR/notes.md"
 fi
 
 # notes.mjs is the consumer's, so assert the two files the store lanes need
 # rather than trusting it produced them.
 for f in store-notes.json notes-store.txt; do
-  [ -f "$RNW_RELEASE_META_DIR/$f" ] || die "release notes step produced no $f in $RNW_RELEASE_META_DIR"
+  [ -f "$WORKFLOWS_RELEASE_META_DIR/$f" ] || die "release notes step produced no $f in $WORKFLOWS_RELEASE_META_DIR"
 done
-[ -f "$RNW_RELEASE_META_DIR/notes.md" ] || cp "$RNW_RELEASE_META_DIR/notes-store.txt" "$RNW_RELEASE_META_DIR/notes.md"
+[ -f "$WORKFLOWS_RELEASE_META_DIR/notes.md" ] || cp "$WORKFLOWS_RELEASE_META_DIR/notes-store.txt" "$WORKFLOWS_RELEASE_META_DIR/notes.md"
 
-gh_env RELEASE_NOTES_STORE_FILE "$RNW_RELEASE_META_DIR/notes-store.txt"
+gh_env RELEASE_NOTES_STORE_FILE "$WORKFLOWS_RELEASE_META_DIR/notes-store.txt"
 log "release-meta contents:"
-ls -l "$RNW_RELEASE_META_DIR" >&2
+ls -l "$WORKFLOWS_RELEASE_META_DIR" >&2
 endgroup

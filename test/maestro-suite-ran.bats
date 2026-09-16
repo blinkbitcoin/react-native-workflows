@@ -7,18 +7,18 @@
 # the most expensive kind of pass - indistinguishable from a real one, and it
 # stays green until someone ships a broken build.
 #
-# rnw_assert_suite_ran reads the count out of the junit report Maestro already
+# workflows_assert_suite_ran reads the count out of the junit report Maestro already
 # writes, so nothing extra runs. It lives in scripts/lib/e2e-env.sh, which both
 # ios-maestro.sh and android-maestro.sh source, so the two platforms cannot
 # drift apart on it.
 load test_helper
 
 setup() {
-  export RNW_OUT="$BATS_TEST_TMPDIR/out"
+  export WORKFLOWS_OUT="$BATS_TEST_TMPDIR/out"
   export RUNNER_TEMP="$BATS_TEST_TMPDIR/tmp"
-  mkdir -p "$RNW_OUT" "$RUNNER_TEMP"
-  unset GITHUB_ENV GITHUB_OUTPUT RNW_MAESTRO_INCLUDE_TAGS RNW_MAESTRO_EXCLUDE_TAGS
-  JUNIT="$RNW_OUT/junit.xml"
+  mkdir -p "$WORKFLOWS_OUT" "$RUNNER_TEMP"
+  unset GITHUB_ENV GITHUB_OUTPUT WORKFLOWS_MAESTRO_INCLUDE_TAGS WORKFLOWS_MAESTRO_EXCLUDE_TAGS
+  JUNIT="$WORKFLOWS_OUT/junit.xml"
 }
 
 # Runs the assertion in a subshell that sources the library the same way the
@@ -27,7 +27,7 @@ assert_ran() {
   run bash -c '
     source "$1/scripts/lib/common.sh"
     source "$1/scripts/lib/e2e-env.sh"
-    rnw_assert_suite_ran "$2" "$3"
+    workflows_assert_suite_ran "$2" "$3"
   ' _ "$REPO_ROOT" "$1" "${2:-iOS}"
 }
 
@@ -53,7 +53,7 @@ XML
   run bash -c '
     source "$1/scripts/lib/common.sh"
     source "$1/scripts/lib/e2e-env.sh"
-    RNW_MAESTRO_INCLUDE_TAGS=smoke rnw_assert_suite_ran "$2" iOS
+    WORKFLOWS_MAESTRO_INCLUDE_TAGS=smoke workflows_assert_suite_ran "$2" iOS
   ' _ "$REPO_ROOT" "$JUNIT"
   [ "$status" -ne 0 ] || fail "expected a failure: $output"
   contains "$output" "smoke" || fail "the error does not name the include tag: $output"
@@ -84,7 +84,7 @@ XML
 @test "no junit report at all is a failure" {
   # Success with no report means nothing can show the suite ran, which is the
   # same hole by another route.
-  assert_ran "$RNW_OUT/does-not-exist.xml"
+  assert_ran "$WORKFLOWS_OUT/does-not-exist.xml"
   [ "$status" -ne 0 ] || fail "a missing report passed: $output"
   contains "$output" "no junit report" || fail "unexpected message: $output"
 }
@@ -99,7 +99,7 @@ XML
 @test "both platform scripts call the guard, and only on success" {
   for f in ios-maestro android-maestro; do
     path="$REPO_ROOT/scripts/e2e/$f.sh"
-    grep -q 'rnw_assert_suite_ran' "$path" || fail "$f.sh does not assert the suite ran"
+    grep -q 'workflows_assert_suite_ran' "$path" || fail "$f.sh does not assert the suite ran"
     # Gated on status 0: on a real failure Maestro's own status is the answer,
     # and an empty-report complaint would bury it.
     grep -qF 'if [ "$status" -eq 0 ]; then' "$path" \

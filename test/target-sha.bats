@@ -35,7 +35,7 @@ target_sha() { run bash "$REPO_ROOT/scripts/release/target-sha.sh" "$@"; }
   GITHUB_SHA="$HEAD_SHA" target_sha v1.2.3
   [ "$status" -eq 0 ] || fail "exited $status: $output"
   grep -qx "sha=$TAG_SHA" "$GITHUB_OUTPUT" || fail "wrong sha output: $(cat "$GITHUB_OUTPUT")"
-  grep -qx "RNW_SHA=$TAG_SHA" "$GITHUB_ENV" || fail "wrong RNW_SHA: $(cat "$GITHUB_ENV")"
+  grep -qx "WORKFLOWS_SHA=$TAG_SHA" "$GITHUB_ENV" || fail "wrong WORKFLOWS_SHA: $(cat "$GITHUB_ENV")"
   [ "$TAG_SHA" != "$HEAD_SHA" ] || fail "the fixture does not actually distinguish tag from HEAD"
 }
 

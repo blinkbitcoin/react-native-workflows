@@ -4,39 +4,39 @@
 # shellcheck shell=bash
 
 # Where every release artifact this family produces is staged. Mirrors
-# scripts/lib/e2e-env.sh's RNW_OUT so a job that does both keeps one directory.
-RNW_OUT="${RNW_OUT:-${RUNNER_TEMP:-/tmp}/rnw}"
+# scripts/lib/e2e-env.sh's WORKFLOWS_OUT so a job that does both keeps one directory.
+WORKFLOWS_OUT="${WORKFLOWS_OUT:-${RUNNER_TEMP:-/tmp}/workflows}"
 # Fastlane reads this to decide where to drop the .ipa/.aab it builds.
-RNW_OUTPUT_DIR="${RNW_OUTPUT_DIR:-$RNW_OUT}"
-RNW_RELEASE_META_DIR="${RNW_RELEASE_META_DIR:-$RNW_OUT/release-meta}"
-RNW_OTA_DIR="${RNW_OTA_DIR:-$RNW_OUT/ota}"
+WORKFLOWS_OUTPUT_DIR="${WORKFLOWS_OUTPUT_DIR:-$WORKFLOWS_OUT}"
+WORKFLOWS_RELEASE_META_DIR="${WORKFLOWS_RELEASE_META_DIR:-$WORKFLOWS_OUT/release-meta}"
+WORKFLOWS_OTA_DIR="${WORKFLOWS_OTA_DIR:-$WORKFLOWS_OUT/ota}"
 # Where the artifacts a release job downloads are staged for release-assets.sh.
-RNW_ASSETS_DIR="${RNW_ASSETS_DIR:-$RNW_OUT/assets}"
-export RNW_OUT RNW_OUTPUT_DIR RNW_RELEASE_META_DIR RNW_OTA_DIR RNW_ASSETS_DIR
-mkdir -p "$RNW_OUT"
+WORKFLOWS_ASSETS_DIR="${WORKFLOWS_ASSETS_DIR:-$WORKFLOWS_OUT/assets}"
+export WORKFLOWS_OUT WORKFLOWS_OUTPUT_DIR WORKFLOWS_RELEASE_META_DIR WORKFLOWS_OTA_DIR WORKFLOWS_ASSETS_DIR
+mkdir -p "$WORKFLOWS_OUT"
 
 # Publish the directories to $GITHUB_ENV so a later step's `with:` block can
-# interpolate ${{ env.RNW_RELEASE_META_DIR }} without re-running a script.
+# interpolate ${{ env.WORKFLOWS_RELEASE_META_DIR }} without re-running a script.
 # gh_env_once's guard is file-based, so this dedupes across the separate
 # processes that each step in one job is.
-gh_env_once RNW_OUT "$RNW_OUT"
-gh_env_once RNW_OUTPUT_DIR "$RNW_OUTPUT_DIR"
-gh_env_once RNW_RELEASE_META_DIR "$RNW_RELEASE_META_DIR"
-gh_env_once RNW_OTA_DIR "$RNW_OTA_DIR"
-gh_env_once RNW_ASSETS_DIR "$RNW_ASSETS_DIR"
+gh_env_once WORKFLOWS_OUT "$WORKFLOWS_OUT"
+gh_env_once WORKFLOWS_OUTPUT_DIR "$WORKFLOWS_OUTPUT_DIR"
+gh_env_once WORKFLOWS_RELEASE_META_DIR "$WORKFLOWS_RELEASE_META_DIR"
+gh_env_once WORKFLOWS_OTA_DIR "$WORKFLOWS_OTA_DIR"
+gh_env_once WORKFLOWS_ASSETS_DIR "$WORKFLOWS_ASSETS_DIR"
 
-# rnw_release_platform [ARG] -> ios|android
-rnw_release_platform() {
-  local p="${1:-${RNW_PLATFORM:-}}"
+# workflows_release_platform [ARG] -> ios|android
+workflows_release_platform() {
+  local p="${1:-${WORKFLOWS_PLATFORM:-}}"
   case "$p" in
     ios | android) printf '%s\n' "$p" ;;
     *) die "platform must be ios or android (got '${p}')" ;;
   esac
 }
 
-# rnw_fingerprint PLATFORM -> the @expo/fingerprint hash for that platform.
+# workflows_fingerprint PLATFORM -> the @expo/fingerprint hash for that platform.
 #
-# RNW_FP_IOS / RNW_FP_ANDROID short-circuit the computation. That is not only a
+# WORKFLOWS_FINGERPRINT_IOS / WORKFLOWS_FINGERPRINT_ANDROID short-circuit the computation. That is not only a
 # test seam: a job that already computed the fingerprint in an earlier step
 # (expo-prepare does) passes it down instead of paying for a second, slower and
 # possibly *different* run - fingerprint input includes node_modules, so the
@@ -51,12 +51,12 @@ rnw_release_platform() {
 # `npx --no`, not `npx --yes`: the bin must come from the consumer's own
 # devDependency. `--yes` would happily install some unrelated npm package
 # called "fingerprint" and hash the app with it.
-rnw_fingerprint() {
+workflows_fingerprint() {
   local platform override out root
-  platform="$(rnw_release_platform "${1:-}")"
+  platform="$(workflows_release_platform "${1:-}")"
   case "$platform" in
-    ios) override="${RNW_FP_IOS:-}" ;;
-    android) override="${RNW_FP_ANDROID:-}" ;;
+    ios) override="${WORKFLOWS_FINGERPRINT_IOS:-}" ;;
+    android) override="${WORKFLOWS_FINGERPRINT_ANDROID:-}" ;;
   esac
   if [ -n "$override" ]; then printf '%s\n' "$override"; return 0; fi
 

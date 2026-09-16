@@ -199,7 +199,7 @@ end
 # Where build artifacts land. CI overrides it so the upload job finds the same
 # paths the build job wrote, without either side hard-coding the other's layout.
 def output_dir(platform)
-  dir = ENV['RNW_OUTPUT_DIR'].to_s.strip
+  dir = ENV['WORKFLOWS_OUTPUT_DIR'].to_s.strip
   return root_path('artifacts', platform.to_s) if dir.empty?
 
   File.absolute_path?(dir) ? dir : root_path(dir)

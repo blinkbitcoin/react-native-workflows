@@ -18,7 +18,7 @@
 set -euo pipefail
 source "$(dirname "$0")/../lib/common.sh"
 
-secrets_dir="${RNW_SECRETS_DIR:-${RUNNER_TEMP:-/tmp}/secrets}"
+secrets_dir="${WORKFLOWS_SECRETS_DIR:-${RUNNER_TEMP:-/tmp}/secrets}"
 mkdir -p "$secrets_dir"
 chmod 700 "$secrets_dir"
 

@@ -7,8 +7,8 @@ setup() {
   # A PATH without any coreutils timeout, so the pure-bash watchdog is the
   # branch under test unless a stub is planted explicitly.
   export PATH="$fakebin:/usr/bin:/bin"
-  export RNW_OUT="$BATS_TEST_TMPDIR/out"
-  mkdir -p "$RNW_OUT"
+  export WORKFLOWS_OUT="$BATS_TEST_TMPDIR/out"
+  mkdir -p "$WORKFLOWS_OUT"
 }
 
 plant_timeout_stub() {

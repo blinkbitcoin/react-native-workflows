@@ -2,10 +2,10 @@
 # Record the sha256 of the binaries the lane just built in a copy of
 # build-info.json, next to those binaries.
 #
-#   $RNW_OUTPUT_DIR/build-info.json = build-info.json + {
+#   $WORKFLOWS_OUTPUT_DIR/build-info.json = build-info.json + {
 #     artifacts: { apkSha256, aabSha256 }
 #   }
-#   $RNW_OUTPUT_DIR/build-info.android.json = the same bytes, under the name
+#   $WORKFLOWS_OUTPUT_DIR/build-info.android.json = the same bytes, under the name
 #     that is uploaded with the binaries (see the note above the cp below)
 #
 # Why a copy rather than an edit in place: the release-meta artifact is produced
@@ -21,17 +21,17 @@
 # stages this copy over the release-meta one, so the release's build-info.json
 # is the one that names the bytes actually attached to it.
 #
-# Env: RNW_OUTPUT_DIR (where the lane dropped the .apk/.aab), BUILD_INFO_FILE
-#      (default $RNW_RELEASE_META_DIR/build-info.json).
+# Env: WORKFLOWS_OUTPUT_DIR (where the lane dropped the .apk/.aab), BUILD_INFO_FILE
+#      (default $WORKFLOWS_RELEASE_META_DIR/build-info.json).
 # Usage: artifact-hashes.sh
 set -euo pipefail
 source "$(dirname "$0")/../lib/common.sh"
 source "$(dirname "$0")/../lib/release-env.sh"
 require_cmd node
 
-src="${BUILD_INFO_FILE:-$RNW_RELEASE_META_DIR/build-info.json}"
+src="${BUILD_INFO_FILE:-$WORKFLOWS_RELEASE_META_DIR/build-info.json}"
 [ -f "$src" ] || die "no build-info.json at $src - run build-info.sh (expo-prepare) first"
-dest="$RNW_OUTPUT_DIR/build-info.json"
+dest="$WORKFLOWS_OUTPUT_DIR/build-info.json"
 
 sha256_of() {
   if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | cut -d' ' -f1
@@ -49,8 +49,8 @@ first_of() {
   [ "${#matches[@]}" -eq 0 ] || printf '%s\n' "${matches[0]}"
 }
 
-apk="$(first_of "$RNW_OUTPUT_DIR/*.apk")"
-aab="$(first_of "$RNW_OUTPUT_DIR/*.aab")"
+apk="$(first_of "$WORKFLOWS_OUTPUT_DIR/*.apk")"
+aab="$(first_of "$WORKFLOWS_OUTPUT_DIR/*.aab")"
 apk_sha=""
 aab_sha=""
 [ -z "$apk" ] || apk_sha="$(sha256_of "$apk")"
@@ -74,11 +74,11 @@ writeFileSync(process.env.BUILD_INFO_DEST, JSON.stringify(info, null, 2) + "\n")
 # defined order, so two artifacts both carrying `build-info.json` would make the
 # release's record a coin toss. github-release.yml folds this one back in with
 # scripts/release/merge-build-info.sh, which takes only its `artifacts`.
-cp "$dest" "$RNW_OUTPUT_DIR/build-info.android.json"
+cp "$dest" "$WORKFLOWS_OUTPUT_DIR/build-info.android.json"
 
-log "wrote $dest and $RNW_OUTPUT_DIR/build-info.android.json"
-if [ -n "$apk_sha" ]; then log "apkSha256=$apk_sha"; else log "no .apk in $RNW_OUTPUT_DIR - apkSha256 not recorded"; fi
-if [ -n "$aab_sha" ]; then log "aabSha256=$aab_sha"; else log "no .aab in $RNW_OUTPUT_DIR - aabSha256 not recorded"; fi
+log "wrote $dest and $WORKFLOWS_OUTPUT_DIR/build-info.android.json"
+if [ -n "$apk_sha" ]; then log "apkSha256=$apk_sha"; else log "no .apk in $WORKFLOWS_OUTPUT_DIR - apkSha256 not recorded"; fi
+if [ -n "$aab_sha" ]; then log "aabSha256=$aab_sha"; else log "no .aab in $WORKFLOWS_OUTPUT_DIR - aabSha256 not recorded"; fi
 # The verify lane reads the enriched copy, not the one expo-prepare produced.
 gh_env BUILD_INFO_FILE "$dest"
 gh_output apk-sha256 "$apk_sha"

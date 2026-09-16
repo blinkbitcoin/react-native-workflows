@@ -18,7 +18,7 @@ a later "it passed that time" into a diagnosis. **The lever is
 ## Where it comes from
 
 `scripts/e2e/collect-forensics.sh <ios|android>` always exits `0` (a forensics
-failure must never fail the job) and writes into `$RNW_OUT/forensics`:
+failure must never fail the job) and writes into `$WORKFLOWS_OUT/forensics`:
 
 - `metro.log` — the bundler's full stdout/stderr for the run.
 - `*.mp4` — the screen recording (`ios-simulator.sh record start|stop` /
@@ -26,13 +26,13 @@ failure must never fail the job) and writes into `$RNW_OUT/forensics`:
   launches and stopped in the `always()` teardown step.
 - iOS only: crash reports (`*.ips`, `*.crash`) copied from
   `~/Library/Logs/DiagnosticReports`, filtered to files newer than
-  `$RNW_RUN_START` (a timestamp file stamped once per job by whichever script
+  `$WORKFLOWS_RUN_START` (a timestamp file stamped once per job by whichever script
   sources `scripts/lib/e2e-env.sh` first) so a stale crash from a previous job
   on the same runner never shows up. If that stamp is missing for some reason
   the fallback is "modified in the last 60 minutes".
 - `maestro/` — the whole Maestro debug directory (`junit.xml` plus the
   per-command screenshots and device logs), copied in from its sibling
-  `$RNW_OUT/maestro`. Only `forensics/` is uploaded, so this copy is what puts
+  `$WORKFLOWS_OUT/maestro`. Only `forensics/` is uploaded, so this copy is what puts
   the Maestro output in the artifact at all.
 - Android only: `logcat.txt` (full buffer) and `logcat-crash.txt` (the crash
   buffer). The step also prints two `::group::` blocks straight into the job
@@ -40,7 +40,7 @@ failure must never fail the job) and writes into `$RNW_OUT/forensics`:
   lines of the crash buffer, and the last 200 lines of `logcat.txt` matching
   `ReactNativeJS|AndroidRuntime|FATAL|Fatal signal|lowmemorykiller|has died|app died`.
 
-The `forensics` composite action then uploads `$RNW_OUT/forensics` (or
+The `forensics` composite action then uploads `$WORKFLOWS_OUT/forensics` (or
 `playwright-report/` for the web workflow) as an artifact and calls
 `scripts/ci/artifact-summary.sh`, which writes a table with the artifact's
 download URL and, when a `junit` path was given, the pass/fail/total counts
@@ -57,7 +57,7 @@ runs from the same `if: always()` step that carries the diagnosis.
 `ios-maestro.sh` / `android-maestro.sh` pass Maestro:
 
 ```
---debug-output "$RNW_OUT/maestro" --flatten-debug-output --format junit --output "$RNW_OUT/maestro/junit.xml"
+--debug-output "$WORKFLOWS_OUT/maestro" --flatten-debug-output --format junit --output "$WORKFLOWS_OUT/maestro/junit.xml"
 ```
 
 Inside the `forensics-ios` / `forensics-android` artifact, under `maestro/`,
@@ -95,7 +95,7 @@ log even though the artifact only carries the final attempt's files.
 - Android: a background loop in `android-emulator.sh record start` running
   `adb shell screenrecord --time-limit 180` over and over (the emulator caps a
   single recording at ~3 minutes), pulling each finished chunk to its own
-  `$RNW_OUT/android-N.mp4`; `record stop` kills the loop and pulls the
+  `$WORKFLOWS_OUT/android-N.mp4`; `record stop` kills the loop and pulls the
   in-progress chunk as `android-last.mp4`. Nothing concatenates — a long suite
   leaves several numbered files, in order, and `collect-forensics.sh` copies
   them all out.

@@ -84,10 +84,10 @@ jobs:
         with:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
-          path: .rnw
+          path: .workflows
           persist-credentials: false
       - name: Setup
-        uses: ./.rnw/.github/actions/setup
+        uses: ./.workflows/.github/actions/setup
         with:
           working-directory: ${{ inputs.working-directory }}
       - name: Export web build
@@ -96,7 +96,7 @@ jobs:
           EXPORT_ARGS: ${{ inputs.export-args }}
           EXPO_PUBLIC_BASE_URL: ${{ inputs.base-url }}
           OUTPUT_DIR: ${{ inputs.output-dir }}
-        run: bash "$RNW/scripts/web/export.sh"
+        run: bash "$WORKFLOWS_DIR/scripts/web/export.sh"
       - name: Upload web-dist
         uses: actions/upload-artifact@v7
         with:
@@ -129,10 +129,10 @@ jobs:
         with:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
-          path: .rnw
+          path: .workflows
           persist-credentials: false
       - name: Setup
-        uses: ./.rnw/.github/actions/setup
+        uses: ./.workflows/.github/actions/setup
         with:
           working-directory: ${{ inputs.working-directory }}
       - name: Download web-dist
@@ -142,7 +142,7 @@ jobs:
           path: ${{ inputs.working-directory }}/${{ inputs.output-dir }}
       - name: Resolve Playwright version
         id: pw
-        run: bash "$RNW/scripts/web/playwright-cache-key.sh"
+        run: bash "$WORKFLOWS_DIR/scripts/web/playwright-cache-key.sh"
       - name: Cache Playwright browsers
         uses: actions/cache@v6
         with:
@@ -151,15 +151,15 @@ jobs:
       - name: Install Playwright browsers
         env:
           PLAYWRIGHT_BROWSERS: ${{ inputs.playwright-browsers }}
-        run: bash "$RNW/scripts/web/playwright-install.sh"
+        run: bash "$WORKFLOWS_DIR/scripts/web/playwright-install.sh"
       - name: Playwright suite
         env:
           E2E_SCRIPT: ${{ inputs.e2e-script }}
           PLAYWRIGHT_SKIP_EXPORT: '1'
-        run: bash "$RNW/scripts/web/playwright.sh"
+        run: bash "$WORKFLOWS_DIR/scripts/web/playwright.sh"
       - name: Upload forensics
         if: always()
-        uses: ./.rnw/.github/actions/forensics
+        uses: ./.workflows/.github/actions/forensics
         with:
           name: playwright-report
           path: ${{ inputs.working-directory }}/playwright-report

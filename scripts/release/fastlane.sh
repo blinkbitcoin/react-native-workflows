@@ -15,7 +15,7 @@
 #
 # The lanes read their inputs from the environment - APP_VERSION,
 # APP_BUILD_NUMBER, RELEASE_NOTES_STORE_FILE, STORE_NOTES_JSON, IOS_BUNDLE_ID,
-# IOS_SCHEME, ANDROID_PACKAGE, BUILD_INFO_FILE, RNW_OUTPUT_DIR plus the
+# IOS_SCHEME, ANDROID_PACKAGE, BUILD_INFO_FILE, WORKFLOWS_OUTPUT_DIR plus the
 # credentials decode-secrets.sh materialised - so this wrapper only fixes up
 # the path-valued ones and passes the key:value pairs through verbatim.
 #
@@ -28,7 +28,7 @@ set -euo pipefail
 source "$(dirname "$0")/../lib/common.sh"
 source "$(dirname "$0")/../lib/release-env.sh"
 
-platform="$(rnw_release_platform "${1:-}")"
+platform="$(workflows_release_platform "${1:-}")"
 shift
 lane="${1:?usage: fastlane.sh PLATFORM LANE [key:value ...]}"
 shift
@@ -59,9 +59,9 @@ absolutise() {
   done
 }
 
-mkdir -p "$RNW_OUTPUT_DIR"
-export RNW_OUTPUT_DIR
-absolutise RNW_OUTPUT_DIR BUILD_INFO_FILE RELEASE_NOTES_STORE_FILE STORE_NOTES_JSON \
+mkdir -p "$WORKFLOWS_OUTPUT_DIR"
+export WORKFLOWS_OUTPUT_DIR
+absolutise WORKFLOWS_OUTPUT_DIR BUILD_INFO_FILE RELEASE_NOTES_STORE_FILE STORE_NOTES_JSON \
   ANDROID_UPLOAD_KEYSTORE_PATH PLAY_SERVICE_ACCOUNT_JSON_PATH ASC_KEY_P8_PATH BUNDLETOOL_JAR
 
 group "fastlane $platform $lane"

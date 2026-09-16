@@ -23,19 +23,19 @@ JSON
   printf '{"name":"expo","version":"54.0.7"}\n' > "$ROOT/node_modules/expo/package.json"
   printf '{"name":"react-native","version":"0.81.9"}\n' > "$ROOT/node_modules/react-native/package.json"
   export GITHUB_WORKSPACE="$BATS_TEST_TMPDIR" WORKING_DIRECTORY=app
-  export RNW_OUT="$BATS_TEST_TMPDIR/out" RUNNER_TEMP="$BATS_TEST_TMPDIR/tmp"
-  export RNW_RELEASE_META_DIR="$BATS_TEST_TMPDIR/meta"
+  export WORKFLOWS_OUT="$BATS_TEST_TMPDIR/out" RUNNER_TEMP="$BATS_TEST_TMPDIR/tmp"
+  export WORKFLOWS_RELEASE_META_DIR="$BATS_TEST_TMPDIR/meta"
   mkdir -p "$RUNNER_TEMP"
-  unset GITHUB_ENV GITHUB_OUTPUT RNW_SHA GITHUB_SHA RNW_STAGE FP_IOS FP_ANDROID GITHUB_RUN_ID
-  DEST="$RNW_RELEASE_META_DIR/build-info.json"
+  unset GITHUB_ENV GITHUB_OUTPUT WORKFLOWS_SHA GITHUB_SHA WORKFLOWS_STAGE FINGERPRINT_IOS FINGERPRINT_ANDROID GITHUB_RUN_ID
+  DEST="$WORKFLOWS_RELEASE_META_DIR/build-info.json"
 }
 
 build_info() { run bash "$REPO_ROOT/scripts/release/build-info.sh"; }
 field() { node -e 'const i=require(process.argv[1]);const p=process.argv[2].split(".");let v=i;for(const k of p)v=v?.[k];console.log(v===undefined?"undefined":JSON.stringify(v))' "$DEST" "$1"; }
 
 @test "writes the documented schema" {
-  APP_VERSION=1.2.3 APP_BUILD_NUMBER=1042 RNW_STAGE=beta RNW_SHA=deadbeef \
-    FP_IOS=fp-i FP_ANDROID=fp-a GITHUB_RUN_ID=99 build_info
+  APP_VERSION=1.2.3 APP_BUILD_NUMBER=1042 WORKFLOWS_STAGE=beta WORKFLOWS_SHA=deadbeef \
+    FINGERPRINT_IOS=fp-i FINGERPRINT_ANDROID=fp-a GITHUB_RUN_ID=99 build_info
   [ "$status" -eq 0 ] || fail "exited $status: $output"
   [ -f "$DEST" ] || fail "no build-info.json was written"
   [ "$(field sha)" = '"deadbeef"' ] || fail "wrong sha: $(cat "$DEST")"
@@ -56,7 +56,7 @@ field() { node -e 'const i=require(process.argv[1]);const p=process.argv[2].spli
 # reads the installed version, disagreed with it on every such build. A
 # provenance record must say what actually went into the build.
 @test "expoSdk and reactNative are the installed versions, not the declared ranges" {
-  APP_VERSION=1.2.3 APP_BUILD_NUMBER=1 RNW_SHA=x build_info
+  APP_VERSION=1.2.3 APP_BUILD_NUMBER=1 WORKFLOWS_SHA=x build_info
   [ "$status" -eq 0 ] || fail "exited $status: $output"
   [ "$(field expoSdk)" = '"54.0.7"' ] || fail "expoSdk came from the range, not the install: $(cat "$DEST")"
   [ "$(field reactNative)" = '"0.81.9"' ] || fail "reactNative came from the range, not the install: $(cat "$DEST")"
@@ -64,7 +64,7 @@ field() { node -e 'const i=require(process.argv[1]);const p=process.argv[2].spli
 
 @test "a package that is not installed gives null, not a failure" {
   rm -rf "$ROOT/node_modules/react-native"
-  APP_VERSION=1.2.3 APP_BUILD_NUMBER=1 RNW_SHA=x build_info
+  APP_VERSION=1.2.3 APP_BUILD_NUMBER=1 WORKFLOWS_SHA=x build_info
   [ "$status" -eq 0 ] || fail "a missing package failed the release: $output"
   [ "$(field reactNative)" = 'null' ] || fail "reactNative is not null: $(cat "$DEST")"
   [ "$(field expoSdk)" = '"54.0.7"' ] || fail "the package that IS installed was lost too: $(cat "$DEST")"
@@ -72,14 +72,14 @@ field() { node -e 'const i=require(process.argv[1]);const p=process.argv[2].spli
 
 @test "a consumer with nothing installed gives null, not a failure" {
   rm -rf "$ROOT/node_modules" "$ROOT/package.json"
-  APP_VERSION=1.2.3 APP_BUILD_NUMBER=1 RNW_SHA=x build_info
+  APP_VERSION=1.2.3 APP_BUILD_NUMBER=1 WORKFLOWS_SHA=x build_info
   [ "$status" -eq 0 ] || fail "a consumer without package.json failed the release: $output"
   [ "$(field expoSdk)" = 'null' ] || fail "expoSdk is not null: $(cat "$DEST")"
   [ "$(field reactNative)" = 'null' ] || fail "reactNative is not null: $(cat "$DEST")"
 }
 
 @test "an unset fingerprint is null rather than an empty string" {
-  APP_VERSION=1.2.3 APP_BUILD_NUMBER=1 RNW_SHA=x build_info
+  APP_VERSION=1.2.3 APP_BUILD_NUMBER=1 WORKFLOWS_SHA=x build_info
   [ "$status" -eq 0 ] || fail "exited $status: $output"
   [ "$(field fingerprint.ios)" = 'null' ] || fail "ios fingerprint is not null: $(cat "$DEST")"
 }
@@ -91,7 +91,7 @@ field() { node -e 'const i=require(process.argv[1]);const p=process.argv[2].spli
 }
 
 @test "the stage defaults to development" {
-  APP_VERSION=1.2.3 APP_BUILD_NUMBER=1 RNW_SHA=x build_info
+  APP_VERSION=1.2.3 APP_BUILD_NUMBER=1 WORKFLOWS_SHA=x build_info
   [ "$status" -eq 0 ] || fail "exited $status: $output"
   [ "$(field stage)" = '"development"' ] || fail "wrong default stage: $(cat "$DEST")"
 }
@@ -142,12 +142,12 @@ $SCHEMA_KEYS"
 # drift that actually happened - a key added, renamed or dropped on one side, and
 # the declared-versus-installed choice.
 @test "the template's copy emits the same schema and reads installed versions" {
-  template_dir="${RNW_TEMPLATE_DIR:-}"
-  [ -n "$template_dir" ] || parity_skip "parity NOT verified: set RNW_TEMPLATE_DIR to a template checkout"
+  template_dir="${WORKFLOWS_TEMPLATE_DIR:-}"
+  [ -n "$template_dir" ] || parity_skip "parity NOT verified: set WORKFLOWS_TEMPLATE_DIR to a template checkout"
   other="$template_dir/scripts/release/build-info.sh"
   # A skip here means parity with the template's copy was NOT verified by this
   # run -- not that the two copies agree.
-  [ -f "$other" ] || parity_skip "parity NOT verified: no template copy at $other (set RNW_TEMPLATE_DIR)"
+  [ -f "$other" ] || parity_skip "parity NOT verified: no template copy at $other (set WORKFLOWS_TEMPLATE_DIR)"
 
   theirs="$(schema_keys_of "$other")"
   [ "$theirs" = "$SCHEMA_KEYS" ] || fail "the template's copy drifted from the schema:

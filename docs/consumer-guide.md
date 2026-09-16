@@ -14,8 +14,8 @@ this repo.
 4. Add `web.yml`, `pr-closed.yml`, `pr-title.yml` if you want those too (all
    three below).
 
-That's it — every job self-checks-out this repo into `.rnw/` and reaches its
-scripts through `$RNW`; you never reference anything under `scripts/` or
+That's it — every job self-checks-out this repo into `.workflows/` and reaches its
+scripts through `$WORKFLOWS_DIR`; you never reference anything under `scripts/` or
 `.github/actions/` directly.
 
 ## Versioning
@@ -75,7 +75,7 @@ jobs:
       # E2E_IOS=true for every run, or label a single PR `e2e:ios` (the
       # `labeled` trigger above is what makes the label alone start a run).
       ios: ${{ vars.E2E_IOS == 'true' || contains(github.event.pull_request.labels.*.name, 'e2e:ios') }}
-      macos-runner: ${{ vars.RNW_MACOS_RUNNER || 'macos-26' }}
+      macos-runner: ${{ vars.WORKFLOWS_MACOS_RUNNER || 'macos-26' }}
       dev-client: true
       e2e-setup-script: scripts/e2e/ci-mock-api-up.sh
       e2e-teardown-script: scripts/e2e/ci-mock-api-down.sh
@@ -515,7 +515,7 @@ Outputs: `docs-only` (`'true'` when nothing but docs changed, so no analysis
 ran). Secrets: `consumer-token` (optional).
 
 Two jobs. `changes` runs the **same** classifier `checks.yml` does — the same
-`scripts/ci/changed-class.sh`, from the same `.rnw/` self-checkout, with a
+`scripts/ci/changed-class.sh`, from the same `.workflows/` self-checkout, with a
 byte-identical `BASE_SHA` expression (`test/workflow-shape.bats` compares the
 two). `analyze` is gated on `docs-only != 'true'` and runs
 `github/codeql-action/init@v4` + `analyze@v4` with no build step: JS/TS is
@@ -618,8 +618,8 @@ Six more reusable workflows cover the release path: version/notes preparation,
 signed store builds, arbitrary fastlane lanes, the GitHub release, and OTA
 publishing. They are strictly opt-in — nothing in `ci.yml` calls them — and
 they follow every rule the workflows above do: `permissions: contents: read` at
-the top, no `concurrency` (the caller owns it), self-checkout into `.rnw/`,
-every `run:` a single `bash "$RNW/scripts/..."` line, and **every secret
+the top, no `concurrency` (the caller owns it), self-checkout into `.workflows/`,
+every `run:` a single `bash "$WORKFLOWS_DIR/scripts/..."` line, and **every secret
 declared `required: false`** so a caller only passes the ones its stage needs.
 
 The pipeline they compose into:
@@ -689,7 +689,7 @@ Prebuild → pods → `fastlane ios build` → `fastlane ios verify`, on
 | `xcode` | `''` | Sets `DEVELOPER_DIR` to `/Applications/Xcode_<v>.app/Contents/Developer` and is folded into the Pods cache key |
 | `environment` | `''` | GitHub Environment gating the build (secrets + approvals); empty means none |
 | `version` / `build-number` | **required** | `APP_VERSION` / `APP_BUILD_NUMBER`; wire them to `expo-prepare`'s outputs |
-| `stage` | `internal` | Passed through as `RNW_STAGE` |
+| `stage` | `internal` | Passed through as `WORKFLOWS_STAGE` |
 | `ios-bundle-id` / `ios-scheme` / `android-package` | **required** | `IOS_BUNDLE_ID` / `IOS_SCHEME` / `ANDROID_PACKAGE`. All three are required **on the iOS build too** — see [The five Fastfile contract variables](#the-five-fastfile-contract-variables) |
 | `verify` | `true` | Run the `ios verify` lane after `build` |
 | `release-meta-artifact` | `release-meta` | Artifact downloaded for `build-info.json` and the store notes |
@@ -711,7 +711,7 @@ Prebuild → `fastlane android build` → `fastlane android verify`, on
 | `default-branch` | `refs/heads/main` | Fully qualified ref of the branch allowed to **write** the Gradle cache; every other ref reads it. Set it if your default branch is not `main`, or the cache is never written and every run pays a cold Gradle |
 | `environment` | `''` | GitHub Environment gating the build |
 | `version` / `build-number` | **required** | `APP_VERSION` / `APP_BUILD_NUMBER` |
-| `stage` | `internal` | `RNW_STAGE` |
+| `stage` | `internal` | `WORKFLOWS_STAGE` |
 | `android-package` / `ios-bundle-id` / `ios-scheme` | **required** | `ANDROID_PACKAGE` / `IOS_BUNDLE_ID` / `IOS_SCHEME`. The two iOS ids are required **on the Android build too** — see [The five Fastfile contract variables](#the-five-fastfile-contract-variables) |
 | `verify` | `true` | Run the `android verify` lane after `build` |
 | `release-meta-artifact` | `release-meta` | Artifact downloaded for `build-info.json` and the store notes |
@@ -742,7 +742,7 @@ uploads, promotions, staged rollouts, halts.
 | `runner` | `ubuntu-latest` | An iOS lane that touches Xcode needs a macOS runner; a store-API-only lane does not |
 | `environment` | `''` | GitHub Environment gating the lane (this is where a production approval belongs) |
 | `env-json` | `{}` | Flat JSON object published into the lane's environment. **Configuration only** — the values are printed to the log; credentials belong in `secrets:` |
-| `artifacts` | `''` | Artifact name or glob pattern downloaded (merged) into `$RNW_ASSETS_DIR` before the lane runs. The lane step then runs with **`RNW_OUTPUT_DIR` = `$RNW_ASSETS_DIR`**: the lanes read the binaries they upload out of `RNW_OUTPUT_DIR`, and this workflow builds nothing, so the downloaded `.ipa`/`.aab` are what it has to point at. (The two build workflows leave `RNW_OUTPUT_DIR` alone — there it is where the lane *writes*.) |
+| `artifacts` | `''` | Artifact name or glob pattern downloaded (merged) into `$WORKFLOWS_ASSETS_DIR` before the lane runs. The lane step then runs with **`WORKFLOWS_OUTPUT_DIR` = `$WORKFLOWS_ASSETS_DIR`**: the lanes read the binaries they upload out of `WORKFLOWS_OUTPUT_DIR`, and this workflow builds nothing, so the downloaded `.ipa`/`.aab` are what it has to point at. (The two build workflows leave `WORKFLOWS_OUTPUT_DIR` alone — there it is where the lane *writes*.) |
 | `version` / `build-number` | **required** | `APP_VERSION` / `APP_BUILD_NUMBER` |
 | `ios-bundle-id` / `ios-scheme` / `android-package` | **required** | All three on every lane, both platforms — see [The five Fastfile contract variables](#the-five-fastfile-contract-variables) |
 | `ruby` | `true` | Install Ruby (leave on unless the consumer has no Gemfile) |
@@ -816,7 +816,7 @@ Fingerprint gate → `expo export` → publish → manifest smoke check.
 
 No outputs. Secrets: `consumer-token`, `OTA_PUBLISH_TOKEN` (both optional).
 
-What is published is the export `scripts/ota/export.sh` wrote to `$RNW_OTA_DIR`
+What is published is the export `scripts/ota/export.sh` wrote to `$WORKFLOWS_OTA_DIR`
 — the bytes the fingerprint gate vetted — not an export the CLI performs for
 itself after the gate has run. That export is also uploaded as the
 `ota-export-<channel>` artifact (90 days, `!cancelled()`), **source maps
@@ -826,7 +826,7 @@ way to read a stack trace from it and they die with the runner otherwise.
 
 > **Unverified against the CLI.** `scripts/ota/publish.sh` calls
 > `npx eoas@$OTA_CLI_VERSION publish --branch CHANNEL --rollout-percentage N
-> --input-dir $RNW_OTA_DIR --skip-bundler --non-interactive`, with
+> --input-dir $WORKFLOWS_OTA_DIR --skip-bundler --non-interactive`, with
 > `OTA_PUBLISH_TOKEN` exported to the CLI as `EXPO_TOKEN`. The flags and that
 > variable name come from the OTA runbook (`--input-dir` only takes effect with
 > `--skip-bundler`, as in `eas-cli`) and could not be checked against the CLI
@@ -866,14 +866,14 @@ Rules, enforced by `scripts/lib/build-env.sh`:
   and anyone who can see the run can read it. Refusing loudly is the difference
   between noticing immediately and leaking quietly.
 - **A key owned by the family or by the runner is refused**: anything matching
-  `RNW_*`, `GITHUB_*`, `RUNNER_*`, `ACTIONS_*`, `LD_*`, `DYLD_*`, plus `PATH`,
+  `WORKFLOWS_*`, `GITHUB_*`, `RUNNER_*`, `ACTIONS_*`, `LD_*`, `DYLD_*`, plus `PATH`,
   `HOME` and `NODE_OPTIONS`. `build-env` is published *before* the fingerprint
-  step, so `{"RNW_FP_IOS":"…"}` would hand the OTA fingerprint gate a
+  step, so `{"WORKFLOWS_FINGERPRINT_IOS":"…"}` would hand the OTA fingerprint gate a
   caller-supplied constant to compare its baseline against, and
-  `RNW_ASSETS_DIR` / `RNW_RELEASE_META_DIR` would repoint the artifact paths
+  `WORKFLOWS_ASSETS_DIR` / `WORKFLOWS_RELEASE_META_DIR` would repoint the artifact paths
   mid-job. Use the dedicated input instead.
 - **A value may contain anything, newlines included.** Values reach
-  `$GITHUB_ENV` through the heredoc delimiter form (`KEY<<__rnw_eof_…`), never
+  `$GITHUB_ENV` through the heredoc delimiter form (`KEY<<__workflows_eof_…`), never
   as a bare `KEY=value` line — a value carrying a newline would otherwise write
   a second line that the runner reads as *another* variable (`PATH=/evil` on the
   second line of an innocent-looking repo variable), in a job that also holds
@@ -911,7 +911,7 @@ make sense together:
    the tag — so gating on it checks the wrong commit's CI and stamps the binary
    with a commit it was not built from.
 3. **The store notes** come from that release's body (`gh release view TAG --json body`,
-   written to `$RNW_OUT/release-body.md`), passed to the consumer's `notes.mjs`
+   written to `$WORKFLOWS_OUT/release-body.md`), passed to the consumer's `notes.mjs`
    as `--from-body <file> --body-section`. An empty body is fatal rather than a
    silent fall back to commit subjects: the caller asked for this release's
    notes, and shipping a git log to the stores instead would look like success.
@@ -919,8 +919,8 @@ make sense together:
 ### Promoting a pre-release's assets
 
 > **`github-release.yml` runs no `Setup`.** That job installs nothing — it only
-> talks to the GitHub API — so its steps use the literal `.rnw/scripts/…` path
-> (`$RNW` is published by the setup action and is empty there) and rely on the
+> talks to the GitHub API — so its steps use the literal `.workflows/scripts/…` path
+> (`$WORKFLOWS_DIR` is published by the setup action and is empty there) and rely on the
 > runner image for `gh`, `bash` and **`node`** (the `Merge platform build-info`
 > step parses JSON with it). All three are on GitHub-hosted `ubuntu-latest`; a
 > self-hosted `linux-runner` must provide them.
@@ -964,7 +964,7 @@ any repo that has not set the variable. Wrap it:
 
 ```yaml
     with:
-      build-number-offset: ${{ fromJSON(vars.RNW_BUILD_NUMBER_OFFSET || '1000') }}
+      build-number-offset: ${{ fromJSON(vars.WORKFLOWS_BUILD_NUMBER_OFFSET || '1000') }}
       rollout: ${{ fromJSON(vars.OTA_ROLLOUT || '0') }}
 ```
 
@@ -992,7 +992,7 @@ it out" and fail on the first real run instead.
 receives all five, from the job env or its own.
 
 Paths handed to a lane are made absolute by `scripts/release/fastlane.sh` before
-`bundle exec` — `RNW_OUTPUT_DIR`, `BUILD_INFO_FILE`, `RELEASE_NOTES_STORE_FILE`,
+`bundle exec` — `WORKFLOWS_OUTPUT_DIR`, `BUILD_INFO_FILE`, `RELEASE_NOTES_STORE_FILE`,
 `STORE_NOTES_JSON`, `ANDROID_UPLOAD_KEYSTORE_PATH`,
 `PLAY_SERVICE_ACCOUNT_JSON_PATH`, `ASC_KEY_P8_PATH`, `BUNDLETOOL_JAR`. fastlane
 runs a lane with its working directory set to `fastlane/`, not the project root,
@@ -1056,7 +1056,7 @@ would otherwise only fail deep inside a Play lane, after the build.
 
 The lanes themselves read: `APP_VERSION`, `APP_BUILD_NUMBER`,
 `RELEASE_NOTES_STORE_FILE`, `STORE_NOTES_JSON`, `IOS_BUNDLE_ID`, `IOS_SCHEME`,
-`ANDROID_PACKAGE`, `BUILD_INFO_FILE`, `RNW_OUTPUT_DIR`, plus `ASC_KEY_ID`, `ASC_ISSUER_ID`,
+`ANDROID_PACKAGE`, `BUILD_INFO_FILE`, `WORKFLOWS_OUTPUT_DIR`, plus `ASC_KEY_ID`, `ASC_ISSUER_ID`,
 `ASC_KEY_P8_BASE64`, `MATCH_PASSWORD`, `MATCH_GIT_URL`,
 `MATCH_GIT_BASIC_AUTHORIZATION`, `ANDROID_UPLOAD_KEYSTORE_PASSWORD`,
 `ANDROID_UPLOAD_KEY_ALIAS`, `ANDROID_UPLOAD_KEY_PASSWORD` and
@@ -1082,7 +1082,7 @@ Written by `scripts/release/build-info.sh`. Adding a key is fine; renaming one
 is a breaking change for the OTA gate and the store lanes alike. `expoSdk` and
 `reactNative` have their range operator stripped (`^54.0.0` is written as
 `54.0.0`) so the file is byte-comparable with the one the template's own
-`build-info.sh` produces. `stage` falls back to `development` when `RNW_STAGE`
+`build-info.sh` produces. `stage` falls back to `development` when `WORKFLOWS_STAGE`
 is unset, matching the template; `expo-prepare.yml`'s `stage` input defaults to
 `internal` because a prepare run is by definition producing a build for at least
 the internal track.
@@ -1090,7 +1090,7 @@ the internal track.
 `artifacts` is empty as `expo-prepare` writes it and is filled in later, by the
 job that produces the binaries: `expo-build-android.yml` runs
 `scripts/release/artifact-hashes.sh` between the `build` and `verify` lanes,
-which writes an enriched **copy** into `$RNW_OUTPUT_DIR` carrying
+which writes an enriched **copy** into `$WORKFLOWS_OUTPUT_DIR` carrying
 `artifacts.apkSha256` / `artifacts.aabSha256`. The `verify` lane reads that copy
 (`BUILD_INFO_FILE` points at it), so the consumer's `verify-android` can compare
 the universal apk against the digest recorded for it. The release-meta copy is
@@ -1155,7 +1155,7 @@ to `$GITHUB_OUTPUT`, and resolve in this order, first match wins:
    `<scope>` is the **release branch's name**, because that is what release-please
    scopes its commit with: `chore(main): …` on `main`, `chore(master): …` on
    `master`. It defaults to `$GITHUB_REF_NAME`, falling back to `main` outside
-   Actions, and `RNW_RELEASE_SCOPE` overrides it for a `release-please-config.json`
+   Actions, and `WORKFLOWS_RELEASE_SCOPE` overrides it for a `release-please-config.json`
    whose scope is not the branch name. Hardcoding `main` meant a consumer
    releasing from any other branch matched nothing here and fell through to the
    patch bump at step 5 — a wrong version on a real release, with no error;
@@ -1282,8 +1282,8 @@ paths**, not package.json script names, run via `bash` by
   workflow step on the runner host, not something the emulator-side script
   does: a host-side mock API has to be stopped on the host, and Android's
   suite runs inside `ReactiveCircus/android-emulator-runner`'s `script:`.
-  (`ios-maestro.sh`/`android-maestro.sh` also honour the `RNW_E2E_SETUP_SCRIPT`
-  / `RNW_E2E_TEARDOWN_SCRIPT` env variables, but nothing in CI sets those —
+  (`ios-maestro.sh`/`android-maestro.sh` also honour the `WORKFLOWS_E2E_SETUP_SCRIPT`
+  / `WORKFLOWS_E2E_TEARDOWN_SCRIPT` env variables, but nothing in CI sets those —
   they are the local-run path. Setting both the env var and the workflow input
   runs the hook twice.)
 - `self-smoke.yml` wires these to
@@ -1303,34 +1303,34 @@ bill at 10x. Two independent ways to opt in per the `ci.yml` example above:
   `pull_request: types: [..., labeled]` in the caller so the label itself
   triggers a run).
 
-`macos-runner` reads the repo variable `RNW_MACOS_RUNNER` when set
-(`vars.RNW_MACOS_RUNNER || 'macos-26'`), falling back to `macos-26` —
-`RNW_MACOS_RUNNER` is a convention documented here and in `docs/runners.md`,
+`macos-runner` reads the repo variable `WORKFLOWS_MACOS_RUNNER` when set
+(`vars.WORKFLOWS_MACOS_RUNNER || 'macos-26'`), falling back to `macos-26` —
+`WORKFLOWS_MACOS_RUNNER` is a convention documented here and in `docs/runners.md`,
 not an input any workflow defaults on its own.
 
-## `.rnw/` ignore list for consumers
+## `.workflows/` ignore list for consumers
 
-Every job self-checks-out this repo into `.rnw/` at `$GITHUB_WORKSPACE/.rnw`
-(see `docs/cache-keys.md` and the `setup` action, which also adds `.rnw/` to
+Every job self-checks-out this repo into `.workflows/` at `$GITHUB_WORKSPACE/.workflows`
+(see `docs/cache-keys.md` and the `setup` action, which also adds `.workflows/` to
 `.git/info/exclude` so it never shows up as untracked locally). A consumer's
 own local tooling still needs to ignore it explicitly wherever it walks the
 whole tree:
 
 | Tool | Where |
 | --- | --- |
-| Biome | `biome.json` → `files.includes` (or the older `ignore`) with `!**/.rnw` |
-| ESLint | `eslint.config.mjs` → the flat-config `ignores` array, `.rnw/**` |
-| tsconfig | `tsconfig.json` → `exclude`, add `.rnw` |
+| Biome | `biome.json` → `files.includes` (or the older `ignore`) with `!**/.workflows` |
+| ESLint | `eslint.config.mjs` → the flat-config `ignores` array, `.workflows/**` |
+| tsconfig | `tsconfig.json` → `exclude`, add `.workflows` |
 | knip | `knip.json` → `ignore` (or `project`/`entry` globs that don't reach into it) |
-| typos | `typos.toml` → `[files] extend-exclude`, add `.rnw/**` |
+| typos | `typos.toml` → `[files] extend-exclude`, add `.workflows/**` |
 | git | `.gitignore` — not strictly required (`setup` uses `.git/info/exclude`
   instead, which is local-only and never committed), but recommended so a
-  local `.rnw/` checkout is ignored by every clone, not just CI's |
+  local `.workflows/` checkout is ignored by every clone, not just CI's |
 
-The template carries all six: `biome.json` (`files.includes` → `"!**/.rnw"`),
-`eslint.config.mjs` (`ignores` → `'.rnw/**'`), `tsconfig.json` (`exclude` →
-`".rnw"`), `knip.json` (`ignore` → `".rnw/**"`), `typos.toml`
-(`[files] extend-exclude` → `".rnw/"`) and `.gitignore` (`/.rnw`). Copy that
+The template carries all six: `biome.json` (`files.includes` → `"!**/.workflows"`),
+`eslint.config.mjs` (`ignores` → `'.workflows/**'`), `tsconfig.json` (`exclude` →
+`".workflows"`), `knip.json` (`ignore` → `".workflows/**"`), `typos.toml`
+(`[files] extend-exclude` → `".workflows/"`) and `.gitignore` (`/.workflows`). Copy that
 set when bootstrapping a new consumer.
 
 ## Gotchas encoded
@@ -1342,19 +1342,19 @@ each one lives so a future edit doesn't quietly regress it.
 | --- | --- |
 | A hung Maestro driver must never eat the job twice | `scripts/e2e/maestro-bound.sh` (`bounded_maestro`, exit `124`) + `ios-maestro.sh`/`android-maestro.sh` (retry only on a real failure, never on `124`) |
 | The suite's own timeout must not race the step's `timeout-minutes` | `scripts/e2e/step-timeout.sh` (step timeout = `suite-timeout-minutes + 5`), consumed via `fromJSON(steps.timeout.outputs.minutes)` in `e2e.yml` |
-| Killing Metro must kill its whole process group, not just the wrapper pid | `scripts/e2e/README.md` notes `kill -TERM -"$(cat "$RNW_OUT/metro.pid")"` (leading `-`), which `metro-start.sh` also logs when it starts Metro; nothing kills Metro itself — the job teardown reaps the process group |
+| Killing Metro must kill its whole process group, not just the wrapper pid | `scripts/e2e/README.md` notes `kill -TERM -"$(cat "$WORKFLOWS_OUT/metro.pid")"` (leading `-`), which `metro-start.sh` also logs when it starts Metro; nothing kills Metro itself — the job teardown reaps the process group |
 | The first app launch must not race a cold Metro bundle | `scripts/e2e/metro-wait.sh` pre-warms `/.expo/.virtual-metro-entry.bundle?platform=...` before `app-launch.sh` runs |
 | The native dependency hash must be computable before `pnpm install`, or a cache lookup blocks on an install | `scripts/ci/native-hash.sh` reads `pnpm-lock.yaml` directly via `yq` instead of `pnpm list` |
 | `android-emulator-runner`'s `script:` can only run once per invocation and must be a single line | `test/workflow-shape.bats` ("every android-emulator-runner script: is a single 'bash ...' line"); `android-maestro.sh` does prepare→record→launch→suite→forensics itself for exactly this reason |
 | The AVD snapshot must have dialogs suppressed or the suite hangs on a first-boot dialog | `scripts/e2e/android-emulator.sh snapshot-bake` (`hide_error_dialogs 1`, `anr_show_background 0`), cache key suffix `-hidedialogs` documents the content, not a read value |
-| A crash-report scan must not pick up a stale crash from a previous job on the same runner | `scripts/e2e/collect-forensics.sh` filters iOS `DiagnosticReports` to files newer than `$RNW_RUN_START`, stamped once by `scripts/lib/e2e-env.sh` |
+| A crash-report scan must not pick up a stale crash from a previous job on the same runner | `scripts/e2e/collect-forensics.sh` filters iOS `DiagnosticReports` to files newer than `$WORKFLOWS_RUN_START`, stamped once by `scripts/lib/e2e-env.sh` |
 | `docs-only` classification must use merge-base semantics, not raw two-dot diff, so a target-branch advance doesn't retroactively flip a PR to non-docs-only | `scripts/ci/changed-class.sh` (falls back to two-dot only when `git merge-base` itself fails, with a warning) |
 | One docs rule, not two: a caller's `paths-ignore` is a second, narrower list that drifts from the classifier's (it misses `LICENSE` and the issue/PR templates) | `checks.yml` derives `BASE_SHA` from `github.event.before` on a push, so `scripts/ci/changed-class.sh` classifies pushes too and the caller's `ci.yml` carries no `paths-ignore` |
 | An unclassifiable range must fail open, not abort the step under `set -euo pipefail` | `scripts/ci/changed-class.sh` guards an empty base, the all-zero base of a branch's first push and an unreachable base (`git cat-file -e`), each emitting `docs-only=false` and exiting 0 |
-| `sudo`-based Linux-runner scripts (free disk, KVM) must no-op safely everywhere else (macOS, a laptop, self-hosted with different env) | `scripts/ci/free-disk.sh` / `scripts/ci/enable-kvm.sh` guard on `GITHUB_ACTIONS=true && RUNNER_OS=Linux`, overridable with `RNW_FORCE_RUNNER_SCRIPTS=1` |
+| `sudo`-based Linux-runner scripts (free disk, KVM) must no-op safely everywhere else (macOS, a laptop, self-hosted with different env) | `scripts/ci/free-disk.sh` / `scripts/ci/enable-kvm.sh` guard on `GITHUB_ACTIONS=true && RUNNER_OS=Linux`, overridable with `WORKFLOWS_FORCE_RUNNER_SCRIPTS=1` |
 | Forensics collection must never fail the job it's diagnosing | `scripts/e2e/collect-forensics.sh` (`set -uo pipefail`, no `-e`; explicit `exit 0`) |
 | E2E must never run against a production app id/scheme | `scripts/e2e/README.md`: "`APP_VARIANT` must not be `production` for E2E" |
-| A reusable workflow must check out *itself* at the calling job's ref, not the caller's, or `$RNW` scripts silently drift from the pinned version | Every job: `repository: ${{ job.workflow_repository }}`, `ref: ${{ job.workflow_sha }}` into `.rnw/`; enforced by `test/workflow-shape.bats` |
+| A reusable workflow must check out *itself* at the calling job's ref, not the caller's, or `$WORKFLOWS_DIR` scripts silently drift from the pinned version | Every job: `repository: ${{ job.workflow_repository }}`, `ref: ${{ job.workflow_sha }}` into `.workflows/`; enforced by `test/workflow-shape.bats` |
 | A Playwright run against a web export should test the artifact that will actually deploy, not a fresh, possibly-different export | `web.yml`'s `playwright` job downloads the `build` job's `web-dist` artifact and sets `PLAYWRIGHT_SKIP_EXPORT=1` (see [above](#the-playwright--export-contract) for the consumer-side half of this contract) |
 | Cancelling stale runs must not cancel the run doing the cancelling | `scripts/ci/cancel-runs.sh` excludes `$GITHUB_RUN_ID` from its own query |
 | A build number must never go backwards (stores reject the build forever), so a merge of a long-lived branch must not jump it either | `scripts/release/resolve-version.sh` counts `git rev-list --count --first-parent HEAD`, plus a monotonic `BUILD_NUMBER_OFFSET`; pinned by `test/resolve-version.bats` |

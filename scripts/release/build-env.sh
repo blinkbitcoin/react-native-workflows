@@ -8,5 +8,5 @@ source "$(dirname "$0")/../lib/common.sh"
 source "$(dirname "$0")/../lib/build-env.sh"
 
 group "build-env"
-rnw_publish_build_env
+workflows_publish_build_env
 endgroup

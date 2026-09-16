@@ -41,7 +41,7 @@ backported fixes — a consumer is expected to move its pin forward.
   the mitigation is that the set is small, first-party or well-known, and
   reviewed on every bump. A consumer that needs immutability pins this
   repository by sha rather than `@v0`, which fixes the action set too.
-- **The `.rnw/` self-checkout must resolve to this repository.** Every job
+- **The `.workflows/` self-checkout must resolve to this repository.** Every job
   checks itself out via `job.workflow_repository` / `job.workflow_sha`; a
   regression there would run someone else's scripts under the consumer's token,
   which is why `test/workflow-shape.bats` asserts the pattern.

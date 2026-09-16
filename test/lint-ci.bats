@@ -46,7 +46,7 @@ scripts() {
   run bash "$REPO_ROOT/scripts/ci/lint-ci.sh"
   [ "$status" -eq 0 ]
   grep -q shellcheck "$MISE_LOG"
-  ! grep -q actionlint "$MISE_LOG" || fail "actionlint ran with RNW_ACTIONLINT off: $(cat "$MISE_LOG")"
+  ! grep -q actionlint "$MISE_LOG" || fail "actionlint ran with WORKFLOWS_ACTIONLINT off: $(cat "$MISE_LOG")"
 }
 
 @test "runs both halves when the consumer has both" {
@@ -58,19 +58,19 @@ scripts() {
   grep -q shellcheck "$MISE_LOG"
 }
 
-@test "RNW_ACTIONLINT=false disables only the actionlint half" {
+@test "WORKFLOWS_ACTIONLINT=false disables only the actionlint half" {
   workflows
   scripts
-  RNW_ACTIONLINT=false run bash "$REPO_ROOT/scripts/ci/lint-ci.sh"
+  WORKFLOWS_ACTIONLINT=false run bash "$REPO_ROOT/scripts/ci/lint-ci.sh"
   [ "$status" -eq 0 ]
   ! grep -q actionlint "$MISE_LOG" || fail "actionlint ran with no .github/workflows: $(cat "$MISE_LOG")"
   grep -q shellcheck "$MISE_LOG"
 }
 
-@test "RNW_SHELLCHECK=false disables only the shellcheck half" {
+@test "WORKFLOWS_SHELLCHECK=false disables only the shellcheck half" {
   workflows
   scripts
-  RNW_SHELLCHECK=false run bash "$REPO_ROOT/scripts/ci/lint-ci.sh"
+  WORKFLOWS_SHELLCHECK=false run bash "$REPO_ROOT/scripts/ci/lint-ci.sh"
   [ "$status" -eq 0 ]
   grep -q actionlint "$MISE_LOG"
   ! grep -q shellcheck "$MISE_LOG" || fail "shellcheck ran with no scripts dir: $(cat "$MISE_LOG")"

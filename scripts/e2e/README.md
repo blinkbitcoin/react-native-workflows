@@ -29,27 +29,27 @@ pure-bash fallback).
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `RNW_PLATFORM` | (none) | `ios` or `android`, used when a script is called without its positional platform argument. |
-| `RNW_XCODE` | (none) | Xcode version; `ios-build.sh` runs `sudo xcode-select -s /Applications/Xcode_$RNW_XCODE.app` when set. |
-| `RNW_APP_ID` | `expo config` → `ios.bundleIdentifier` / `android.package` | Application id under test. The Expo config already carries any variant suffix, so nothing is appended. |
-| `RNW_DEV_CLIENT` | `true` | Launch through the `expo-development-client` deep link and start Metro with `--dev-client`. Set `false` for a standalone build. |
-| `RNW_MAESTRO_FLOWS` | `.maestro` | Flows directory, consumer-relative. `config.yaml` inside it is passed as `--config` when present. |
-| `RNW_MAESTRO_INCLUDE_TAGS` | (none) | Passed as `--include-tags` only when set; the consumer's `config.yaml` normally carries `includeTags` already. |
-| `RNW_MAESTRO_EXCLUDE_TAGS` | (none) | Passed as `--exclude-tags` only when set. |
-| `RNW_SUITE_TIMEOUT_MINUTES` | `10` | Per-attempt bound enforced inside the script (`maestro-bound.sh`), so forensics still run on a hang. |
-| `RNW_METRO_PORT` | `8081` | Metro port; also the port reversed into the Android emulator. |
-| `RNW_MOCK_API_PORT` | `4000` | Host-side mock-API port also reversed into the Android emulator by `android-emulator.sh prepare`. Set it empty to reverse nothing but Metro. |
-| `RNW_OUT` | `${RUNNER_TEMP:-/tmp}/rnw` | Every artifact this family writes: `metro.log`, `metro.pid`, `sim-udid`, `<scheme>.app.tar`, `maestro/`, `forensics/`, videos. |
-| `RNW_E2E_SETUP_SCRIPT` | (none) | **Local runs only.** Consumer-relative script run before the suite (e.g. start a mock API), from inside `ios-maestro.sh`/`android-maestro.sh`. A missing file is fatal. In CI the same hooks run as workflow steps on the host from `e2e.yml`'s `e2e-setup-script` input, and nothing sets this variable; setting both runs the hook twice. |
-| `RNW_E2E_TEARDOWN_SCRIPT` | (none) | **Local runs only**, same contract as above (`e2e.yml`'s `e2e-teardown-script` is the CI path). Runs after the suite, pass or fail. |
-| `RNW_ANDROID_ABIS` | `x86_64` | `-PreactNativeArchitectures` for `android-build.sh`. CI emulators are x86_64; set `arm64-v8a` to run against an Apple-silicon emulator locally. |
+| `WORKFLOWS_PLATFORM` | (none) | `ios` or `android`, used when a script is called without its positional platform argument. |
+| `WORKFLOWS_XCODE` | (none) | Xcode version; `ios-build.sh` runs `sudo xcode-select -s /Applications/Xcode_$WORKFLOWS_XCODE.app` when set. |
+| `WORKFLOWS_APP_ID` | `expo config` → `ios.bundleIdentifier` / `android.package` | Application id under test. The Expo config already carries any variant suffix, so nothing is appended. |
+| `WORKFLOWS_DEV_CLIENT` | `true` | Launch through the `expo-development-client` deep link and start Metro with `--dev-client`. Set `false` for a standalone build. |
+| `WORKFLOWS_MAESTRO_FLOWS` | `.maestro` | Flows directory, consumer-relative. `config.yaml` inside it is passed as `--config` when present. |
+| `WORKFLOWS_MAESTRO_INCLUDE_TAGS` | (none) | Passed as `--include-tags` only when set; the consumer's `config.yaml` normally carries `includeTags` already. |
+| `WORKFLOWS_MAESTRO_EXCLUDE_TAGS` | (none) | Passed as `--exclude-tags` only when set. |
+| `WORKFLOWS_SUITE_TIMEOUT_MINUTES` | `10` | Per-attempt bound enforced inside the script (`maestro-bound.sh`), so forensics still run on a hang. |
+| `WORKFLOWS_METRO_PORT` | `8081` | Metro port; also the port reversed into the Android emulator. |
+| `WORKFLOWS_MOCK_API_PORT` | `4000` | Host-side mock-API port also reversed into the Android emulator by `android-emulator.sh prepare`. Set it empty to reverse nothing but Metro. |
+| `WORKFLOWS_OUT` | `${RUNNER_TEMP:-/tmp}/workflows` | Every artifact this family writes: `metro.log`, `metro.pid`, `sim-udid`, `<scheme>.app.tar`, `maestro/`, `forensics/`, videos. |
+| `WORKFLOWS_E2E_SETUP_SCRIPT` | (none) | **Local runs only.** Consumer-relative script run before the suite (e.g. start a mock API), from inside `ios-maestro.sh`/`android-maestro.sh`. A missing file is fatal. In CI the same hooks run as workflow steps on the host from `e2e.yml`'s `e2e-setup-script` input, and nothing sets this variable; setting both runs the hook twice. |
+| `WORKFLOWS_E2E_TEARDOWN_SCRIPT` | (none) | **Local runs only**, same contract as above (`e2e.yml`'s `e2e-teardown-script` is the CI path). Runs after the suite, pass or fail. |
+| `WORKFLOWS_ANDROID_ABIS` | `x86_64` | `-PreactNativeArchitectures` for `android-build.sh`. CI emulators are x86_64; set `arm64-v8a` to run against an Apple-silicon emulator locally. |
 
-`$RNW_OUT/run-start` is stamped once, by whichever script sources
+`$WORKFLOWS_OUT/run-start` is stamped once, by whichever script sources
 `scripts/lib/e2e-env.sh` first; `collect-forensics.sh` selects iOS crash reports
 newer than it.
 
-`RNW_SIM_UDID` is produced, not consumed: `ios-simulator.sh pick` writes it to
-`$GITHUB_ENV`, to `$GITHUB_OUTPUT` as `udid`, and to `$RNW_OUT/sim-udid` so a
+`WORKFLOWS_SIM_UDID` is produced, not consumed: `ios-simulator.sh pick` writes it to
+`$GITHUB_ENV`, to `$GITHUB_OUTPUT` as `udid`, and to `$WORKFLOWS_OUT/sim-udid` so a
 later step (or a local shell) finds the device without env plumbing.
 
 **`APP_VARIANT` must not be `production` for E2E.** The app id, the scheme and
@@ -63,7 +63,7 @@ iOS:
 ```
 prebuild.sh ios → pods.sh → ios-build.sh → ios-pack.sh
 ios-simulator.sh pick → metro-start.sh → ios-simulator.sh wait
-  → ios-simulator.sh install "$RNW_OUT/<scheme>.app.tar"
+  → ios-simulator.sh install "$WORKFLOWS_OUT/<scheme>.app.tar"
   → metro-wait.sh ios → app-launch.sh ios → ios-maestro.sh
   → collect-forensics.sh ios
 ```
@@ -96,7 +96,7 @@ metro-start.sh → metro-wait.sh android
   manifest cannot be read, it falls back to the hand-built URL behind a
   `::warning::`. Evidence it worked: one `Bundled` line in `metro.log` for the
   prewarm, and a first launch served in tens of milliseconds.
-- Stop Metro with `kill -TERM -"$(cat "$RNW_OUT/metro.pid")"` (note the leading
+- Stop Metro with `kill -TERM -"$(cat "$WORKFLOWS_OUT/metro.pid")"` (note the leading
   `-`: the pid is a process-group id). Killing the pid alone reaps the pnpm
   wrapper and leaves node holding the port.
 - The Xcode scheme comes from `expo-config.sh ios.scheme-name` but is validated

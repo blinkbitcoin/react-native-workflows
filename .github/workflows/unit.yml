@@ -68,21 +68,21 @@ jobs:
         with:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
-          path: .rnw
+          path: .workflows
           persist-credentials: false
       - name: Setup
-        uses: ./.rnw/.github/actions/setup
+        uses: ./.workflows/.github/actions/setup
         with:
           working-directory: ${{ inputs.working-directory }}
       - name: Unit tests
         env:
           SCRIPT_NAME: ${{ inputs.coverage && inputs.coverage-script || inputs.test-script }}
-        run: bash "$RNW/scripts/checks/run-script.sh" "$SCRIPT_NAME"
+        run: bash "$WORKFLOWS_DIR/scripts/checks/run-script.sh" "$SCRIPT_NAME"
       - name: Scripts tests
         if: ${{ inputs.scripts-test-script != '' }}
         env:
           SCRIPT_NAME: ${{ inputs.scripts-test-script }}
-        run: bash "$RNW/scripts/checks/run-script.sh" "$SCRIPT_NAME"
+        run: bash "$WORKFLOWS_DIR/scripts/checks/run-script.sh" "$SCRIPT_NAME"
       - name: Upload coverage
         if: always() && inputs.coverage
         uses: actions/upload-artifact@v7

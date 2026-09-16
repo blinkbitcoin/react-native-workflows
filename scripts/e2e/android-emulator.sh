@@ -3,7 +3,7 @@
 # already sees (reactivecircus/android-emulator-runner boots it).
 #   snapshot-bake  settings that must survive into the saved AVD snapshot
 #   prepare        install the APK, reverse the host ports, arm logcat
-#   record start   loop 3-minute screenrecord chunks into $RNW_OUT/android-N.mp4
+#   record start   loop 3-minute screenrecord chunks into $WORKFLOWS_OUT/android-N.mp4
 #   record stop    stop the loop and pull the last chunk
 # Usage: android-emulator.sh snapshot-bake | prepare [apk] | record start|stop
 set -euo pipefail
@@ -11,7 +11,7 @@ source "$(dirname "$0")/../lib/common.sh"
 source "$(dirname "$0")/../lib/e2e-env.sh"
 
 require_cmd adb
-rec_pid_file="$RNW_OUT/android-record.pid"
+rec_pid_file="$WORKFLOWS_OUT/android-record.pid"
 
 # A starved CI emulator throws "X isn't responding" dialogs (even for the
 # launcher) on top of the app under test, which then fails visibility
@@ -32,15 +32,15 @@ case "${1:-}" in
     ;;
   prepare)
     root="$(consumer_root)"
-    apk="${2:-$root/$RNW_ANDROID_APK}"
+    apk="${2:-$root/$WORKFLOWS_ANDROID_APK}"
     [ -f "$apk" ] || die "no APK at $apk - run android-build.sh first"
     adb install -r "$apk"
     # Metro and the consumer's mock API both live on the host; the emulator
     # reaches them through reversed ports rather than 10.0.2.2 so the app's
     # localhost URLs work unchanged.
-    adb reverse "tcp:$RNW_METRO_PORT" "tcp:$RNW_METRO_PORT"
-    if [ -n "$RNW_MOCK_API_PORT" ]; then
-      adb reverse "tcp:$RNW_MOCK_API_PORT" "tcp:$RNW_MOCK_API_PORT"
+    adb reverse "tcp:$WORKFLOWS_METRO_PORT" "tcp:$WORKFLOWS_METRO_PORT"
+    if [ -n "$WORKFLOWS_MOCK_API_PORT" ]; then
+      adb reverse "tcp:$WORKFLOWS_MOCK_API_PORT" "tcp:$WORKFLOWS_MOCK_API_PORT"
     fi
     # The default 256K main buffer wraps within a couple of minutes on the
     # emulator, losing the app-launch window from the post-mortem dump.
@@ -58,22 +58,22 @@ case "${1:-}" in
         (
           i=0
           while :; do
-            adb shell screenrecord --time-limit 180 /sdcard/rnw-rec.mp4 || break
-            adb pull /sdcard/rnw-rec.mp4 "$RNW_OUT/android-$i.mp4" >/dev/null 2>&1 || true
+            adb shell screenrecord --time-limit 180 /sdcard/workflows-rec.mp4 || break
+            adb pull /sdcard/workflows-rec.mp4 "$WORKFLOWS_OUT/android-$i.mp4" >/dev/null 2>&1 || true
             i=$((i + 1))
           done
-        ) > "$RNW_OUT/android-record.log" 2>&1 &
+        ) > "$WORKFLOWS_OUT/android-record.log" 2>&1 &
         # The redirect is not cosmetic: a background job that keeps the caller's
         # stdout open hangs anything that pipes this script's output.
         printf '%s\n' "$!" > "$rec_pid_file"
-        log "recording to $RNW_OUT/android-N.mp4 (pid $(cat "$rec_pid_file"))"
+        log "recording to $WORKFLOWS_OUT/android-N.mp4 (pid $(cat "$rec_pid_file"))"
         ;;
       stop)
         [ -f "$rec_pid_file" ] || { log "no recording in progress"; exit 0; }
         kill "$(cat "$rec_pid_file")" 2>/dev/null || true
         adb shell pkill -INT screenrecord 2>/dev/null || true
         sleep 3
-        adb pull /sdcard/rnw-rec.mp4 "$RNW_OUT/android-last.mp4" >/dev/null 2>&1 || true
+        adb pull /sdcard/workflows-rec.mp4 "$WORKFLOWS_OUT/android-last.mp4" >/dev/null 2>&1 || true
         rm -f "$rec_pid_file"
         log "recording stopped"
         ;;

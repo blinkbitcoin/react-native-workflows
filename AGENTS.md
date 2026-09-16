@@ -76,8 +76,8 @@ Every row is a make target; nothing here is run through a package manager.
 - **Tool versions live in `scripts/lib/versions.sh`**, mirrored into
   `.mise.toml` and into workflow input defaults. Never bump one copy alone;
   `make check-versions` is what catches it.
-- **Jobs check this repo out into `.rnw/`** via `job.workflow_repository` /
-  `job.workflow_sha`, and reference everything through `$RNW`. Never reference
+- **Jobs check this repo out into `.workflows/`** via `job.workflow_repository` /
+  `job.workflow_sha`, and reference everything through `$WORKFLOWS_DIR`. Never reference
   a path under `scripts/` or `.github/actions/` from a consumer-visible
   interface.
 - **Permissions start at `contents: read`** at the top of a workflow; a job
@@ -102,21 +102,21 @@ Every row is a make target; nothing here is run through a package manager.
 | Workflow and action shape (inputs, permissions, step names) | `test/workflow-shape.bats`, `test/actions-shape.bats` | `make test` |
 | The consumer contract (guide ↔ fixtures ↔ real caller) | `test/consumer-contract.bats` | `make test` |
 | Hooks and the docs command table | `test/hooks.bats`, `test/docs-contract.bats` | `make test` |
-| Parity with the consumer's own copy of a shared script | `test/resolve-version.bats`, `test/build-info.bats`, `test/workflow-shape.bats` | `make test` **with `RNW_TEMPLATE_DIR` set** |
+| Parity with the consumer's own copy of a shared script | `test/resolve-version.bats`, `test/build-info.bats`, `test/workflow-shape.bats` | `make test` **with `WORKFLOWS_TEMPLATE_DIR` set** |
 | The family end to end, against a real consumer | `.github/workflows/self-smoke.yml` | `workflow_dispatch` |
 
 Two variables point the suite at a real consumer, and both are worth setting
 together — that is the configuration `self-ci.yml`'s `parity` job uses:
 
 ```sh
-RNW_TEMPLATE_DIR=~/Dev/blink/react-native-mobile-template \
-RNW_CONSUMER_ROOT=~/Dev/blink/react-native-mobile-template \
+WORKFLOWS_TEMPLATE_DIR=~/Dev/blink/react-native-mobile-template \
+WORKFLOWS_CONSUMER_ROOT=~/Dev/blink/react-native-mobile-template \
   mise exec -- bats test/
 ```
 
-`RNW_CONSUMER_ROOT` is what `consumer-contract.bats` reads; `RNW_TEMPLATE_DIR`
+`WORKFLOWS_CONSUMER_ROOT` is what `consumer-contract.bats` reads; `WORKFLOWS_TEMPLATE_DIR`
 is what the parity cases read. **Without them four cases skip**, saying `parity
-NOT verified` rather than implying the copies agree. `RNW_PARITY_REQUIRED=1`
+NOT verified` rather than implying the copies agree. `WORKFLOWS_PARITY_REQUIRED=1`
 turns such a skip into a failure, which is what makes the CI job honest.
 
 ## Where to look next

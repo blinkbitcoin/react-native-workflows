@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Post-mortem artifacts for a failed (or passing) E2E run, left in
-# $RNW_OUT/forensics/ for upload-artifact. Never fails the job: forensics that
+# $WORKFLOWS_OUT/forensics/ for upload-artifact. Never fails the job: forensics that
 # can turn a red run green-by-accident, or red-by-accident, are worse than no
 # forensics - every step is `|| true` and the script always exits 0.
 # Usage: collect-forensics.sh <ios|android>
@@ -8,18 +8,18 @@ set -uo pipefail
 source "$(dirname "$0")/../lib/common.sh"
 source "$(dirname "$0")/../lib/e2e-env.sh"
 
-platform="$(rnw_platform "${1:-}" 2>/dev/null || printf '%s\n' "${RNW_PLATFORM:-}")"
-dest="$RNW_OUT/forensics"
+platform="$(workflows_platform "${1:-}" 2>/dev/null || printf '%s\n' "${WORKFLOWS_PLATFORM:-}")"
+dest="$WORKFLOWS_OUT/forensics"
 mkdir -p "$dest" || exit 0
 
-cp "$RNW_OUT/metro.log" "$dest/" 2>/dev/null || true
-cp "$RNW_OUT"/*.mp4 "$dest/" 2>/dev/null || true
+cp "$WORKFLOWS_OUT/metro.log" "$dest/" 2>/dev/null || true
+cp "$WORKFLOWS_OUT"/*.mp4 "$dest/" 2>/dev/null || true
 # Maestro writes junit.xml and the per-command debug output (screenshots, device
-# logs, command hierarchy) to $RNW_OUT/maestro, a *sibling* of forensics/. The
+# logs, command hierarchy) to $WORKFLOWS_OUT/maestro, a *sibling* of forensics/. The
 # forensics action only uploads forensics/, so without this copy the artifact
 # never carries the single most useful thing for diagnosing a failed flow.
-if [ -d "$RNW_OUT/maestro" ]; then
-  cp -R "$RNW_OUT/maestro" "$dest/" 2>/dev/null || true
+if [ -d "$WORKFLOWS_OUT/maestro" ]; then
+  cp -R "$WORKFLOWS_OUT/maestro" "$dest/" 2>/dev/null || true
 fi
 
 if [ "$platform" = ios ]; then
@@ -29,9 +29,9 @@ if [ "$platform" = ios ]; then
   # run long, so it would only ever select reports newer than the last bundle
   # request. The hour window is the fallback when no stamp exists.
   if [ -d "$HOME/Library/Logs/DiagnosticReports" ]; then
-    if [ -f "$RNW_RUN_START" ] && [ -z "$RNW_RUN_START_FRESH" ]; then
+    if [ -f "$WORKFLOWS_RUN_START" ] && [ -z "$WORKFLOWS_RUN_START_FRESH" ]; then
       find "$HOME/Library/Logs/DiagnosticReports" -maxdepth 1 -type f \
-        -newer "$RNW_RUN_START" -exec cp {} "$dest/" \; 2>/dev/null || true
+        -newer "$WORKFLOWS_RUN_START" -exec cp {} "$dest/" \; 2>/dev/null || true
     else
       find "$HOME/Library/Logs/DiagnosticReports" -maxdepth 1 -type f \
         -mmin -60 -exec cp {} "$dest/" \; 2>/dev/null || true

@@ -70,14 +70,14 @@ jobs:
           token: ${{ secrets.consumer-token || github.token }}
           fetch-depth: 0
       # No setup here, exactly as in checks.yml: changed-class.sh is pure git,
-      # so this job reaches it through the plain .rnw checkout ($RNW is
+      # so this job reaches it through the plain .workflows checkout ($WORKFLOWS_DIR is
       # published by the setup action, which never runs in this job).
       - name: Checkout react-native-workflows
         uses: actions/checkout@v7
         with:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
-          path: .rnw
+          path: .workflows
           persist-credentials: false
       - name: Classify changed files
         id: classify
@@ -91,7 +91,7 @@ jobs:
           BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
           HEAD_SHA: ${{ github.sha }}
           DOCS_GLOBS_EXTRA: ${{ inputs.docs-globs }}
-        run: bash ".rnw/scripts/ci/changed-class.sh" "$BASE_SHA" "$HEAD_SHA"
+        run: bash ".workflows/scripts/ci/changed-class.sh" "$BASE_SHA" "$HEAD_SHA"
   analyze:
     needs: [changes]
     # Nothing to analyse when no code moved. CodeQL is informational and must
@@ -106,7 +106,7 @@ jobs:
       actions: read # workflow metadata for the SARIF upload
       security-events: write # upload the SARIF results
     steps:
-      # No .rnw checkout: this job runs no scripts of ours, and a second
+      # No .workflows checkout: this job runs no scripts of ours, and a second
       # repository in the workspace would be extracted into the database.
       - name: Checkout consumer
         uses: actions/checkout@v7

@@ -111,10 +111,10 @@ jobs:
         with:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
-          path: .rnw
+          path: .workflows
           persist-credentials: false
       - name: Setup
-        uses: ./.rnw/.github/actions/setup
+        uses: ./.workflows/.github/actions/setup
         with:
           working-directory: ${{ inputs.working-directory }}
       # Only when Unit succeeded: a failed Unit may have uploaded a partial
@@ -134,11 +134,11 @@ jobs:
           BADGE_E2E: ${{ inputs.e2e-result }}
           BADGE_UNIT_LABEL: ${{ inputs.unit-label }}
           BADGE_E2E_LABEL: ${{ inputs.e2e-label }}
-        run: bash "$RNW/scripts/checks/run-script.sh" "$SCRIPT_NAME"
+        run: bash "$WORKFLOWS_DIR/scripts/checks/run-script.sh" "$SCRIPT_NAME"
       - name: Publish to gh-pages
         env:
           # head_ref on a PR (the branch the badge is *for*), ref_name on a push.
           BRANCH: ${{ github.head_ref || github.ref_name }}
           SHA: ${{ github.sha }}
           BADGE_DIR: ${{ inputs.badge-dir }}
-        run: bash "$RNW/scripts/ci/publish-badges.sh"
+        run: bash "$WORKFLOWS_DIR/scripts/ci/publish-badges.sh"

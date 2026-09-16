@@ -19,7 +19,7 @@ gh_output() { if [ -n "${GITHUB_OUTPUT:-}" ]; then printf '%s=%s\n' "$1" "$2" >>
 # a value that contains it anyway is fatal rather than silently truncated.
 gh_env_multiline() {
   local key="$1" value="$2" delim
-  delim="__rnw_eof_${RANDOM}${RANDOM}"
+  delim="__workflows_eof_${RANDOM}${RANDOM}"
   case "$value" in
     *"$delim"*) die "value for $key contains the generated heredoc delimiter - refusing to write it to \$GITHUB_ENV" ;;
   esac

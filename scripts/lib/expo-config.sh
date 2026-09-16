@@ -27,7 +27,7 @@ else
   # commits is two different configs - and in CI that directory keeps its name
   # across a re-checkout, so a path-only key served the previous commit's answer.
   cache_key=$(printf '%s\n%s' "$root" "${GITHUB_SHA:-nosha}" | shasum -a 256 | cut -c1-16)
-  json_file="${RUNNER_TEMP:-/tmp}/rnw-expo-config-$cache_key.json"
+  json_file="${RUNNER_TEMP:-/tmp}/workflows-expo-config-$cache_key.json"
   if [ "$refresh" = true ] || [ ! -f "$json_file" ]; then
     # Written to a temp file and moved into place only on success. A plain
     # redirect creates $json_file *before* expo runs, so a failed run left a

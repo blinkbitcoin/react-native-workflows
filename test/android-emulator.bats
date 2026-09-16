@@ -7,8 +7,8 @@ load test_helper
 setup() {
   export GITHUB_WORKSPACE="$BATS_TEST_TMPDIR/consumer"
   export WORKING_DIRECTORY=.
-  export RNW_OUT="$BATS_TEST_TMPDIR/out"
-  mkdir -p "$GITHUB_WORKSPACE" "$RNW_OUT"
+  export WORKFLOWS_OUT="$BATS_TEST_TMPDIR/out"
+  mkdir -p "$GITHUB_WORKSPACE" "$WORKFLOWS_OUT"
   apk="$BATS_TEST_TMPDIR/app-debug.apk"
   : > "$apk"
   bin="$BATS_TEST_TMPDIR/bin"
@@ -32,15 +32,15 @@ STUB
   grep -qx "reverse tcp:4000 tcp:4000" "$ADB_LOG"
 }
 
-@test "RNW_MOCK_API_PORT overrides the reversed mock-API port" {
-  RNW_MOCK_API_PORT=5001 run bash "$REPO_ROOT/scripts/e2e/android-emulator.sh" prepare "$apk"
+@test "WORKFLOWS_MOCK_API_PORT overrides the reversed mock-API port" {
+  WORKFLOWS_MOCK_API_PORT=5001 run bash "$REPO_ROOT/scripts/e2e/android-emulator.sh" prepare "$apk"
   [ "$status" -eq 0 ]
   grep -qx "reverse tcp:5001 tcp:5001" "$ADB_LOG"
-  ! grep -qx "reverse tcp:4000 tcp:4000" "$ADB_LOG" || fail "port 4000 was reversed despite an empty RNW_MOCK_API_PORT: $(cat "$ADB_LOG")"
+  ! grep -qx "reverse tcp:4000 tcp:4000" "$ADB_LOG" || fail "port 4000 was reversed despite an empty WORKFLOWS_MOCK_API_PORT: $(cat "$ADB_LOG")"
 }
 
-@test "an empty RNW_MOCK_API_PORT reverses only Metro" {
-  RNW_MOCK_API_PORT= run bash "$REPO_ROOT/scripts/e2e/android-emulator.sh" prepare "$apk"
+@test "an empty WORKFLOWS_MOCK_API_PORT reverses only Metro" {
+  WORKFLOWS_MOCK_API_PORT= run bash "$REPO_ROOT/scripts/e2e/android-emulator.sh" prepare "$apk"
   [ "$status" -eq 0 ]
   [ "$(grep -c '^reverse ' "$ADB_LOG")" -eq 1 ]
   grep -qx "reverse tcp:8081 tcp:8081" "$ADB_LOG"

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Resolve the commit this release is actually being prepared from, and publish
-# it as the `sha` output plus $RNW_SHA.
+# it as the `sha` output plus $WORKFLOWS_SHA.
 #
 # With a release-tag, `github.sha` is the wrong answer: on a `release:
 # published` event it is the repository's default-branch tip at the time the
@@ -33,4 +33,4 @@ else
 fi
 
 gh_output sha "$sha"
-gh_env RNW_SHA "$sha"
+gh_env WORKFLOWS_SHA "$sha"

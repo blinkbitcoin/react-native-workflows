@@ -8,8 +8,8 @@
 # is the failure mode this script exists to prevent.
 #
 # Usage: require-green-run.sh WORKFLOW_FILE SHA
-# Env: RNW_GREEN_TIMEOUT_MINUTES (45), RNW_GREEN_DISCOVERY_MINUTES (5),
-#      RNW_GREEN_POLL_SECONDS (30), GH_TOKEN.
+# Env: WORKFLOWS_GREEN_TIMEOUT_MINUTES (45), WORKFLOWS_GREEN_DISCOVERY_MINUTES (5),
+#      WORKFLOWS_GREEN_POLL_SECONDS (30), GH_TOKEN.
 set -euo pipefail
 source "$(dirname "$0")/../lib/common.sh"
 require_cmd gh yq
@@ -17,9 +17,9 @@ require_cmd gh yq
 workflow="${1:?usage: require-green-run.sh WORKFLOW_FILE SHA}"
 sha="${2:?usage: require-green-run.sh WORKFLOW_FILE SHA}"
 
-timeout_minutes="${RNW_GREEN_TIMEOUT_MINUTES:-45}"
-discovery_minutes="${RNW_GREEN_DISCOVERY_MINUTES:-5}"
-poll_seconds="${RNW_GREEN_POLL_SECONDS:-30}"
+timeout_minutes="${WORKFLOWS_GREEN_TIMEOUT_MINUTES:-45}"
+discovery_minutes="${WORKFLOWS_GREEN_DISCOVERY_MINUTES:-5}"
+poll_seconds="${WORKFLOWS_GREEN_POLL_SECONDS:-30}"
 
 now() { date +%s; }
 start="$(now)"

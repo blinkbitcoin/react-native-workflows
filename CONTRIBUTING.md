@@ -76,15 +76,15 @@ and say `parity NOT verified` rather than implying the two copies agree.
 Point them at a checkout to run them:
 
 ```sh
-RNW_TEMPLATE_DIR=../react-native-mobile-template \
-RNW_CONSUMER_ROOT=../react-native-mobile-template \
+WORKFLOWS_TEMPLATE_DIR=../react-native-mobile-template \
+WORKFLOWS_CONSUMER_ROOT=../react-native-mobile-template \
   mise exec -- bats test/
 ```
 
-`RNW_TEMPLATE_DIR` is what the parity cases read; `RNW_CONSUMER_ROOT` is what
+`WORKFLOWS_TEMPLATE_DIR` is what the parity cases read; `WORKFLOWS_CONSUMER_ROOT` is what
 `consumer-contract.bats` reads. Setting both is the configuration CI uses.
 
-Add `RNW_PARITY_REQUIRED=1` to turn a would-be skip into a failure. `self-ci.yml`'s
+Add `WORKFLOWS_PARITY_REQUIRED=1` to turn a would-be skip into a failure. `self-ci.yml`'s
 `parity` job sets it, because a parity case that silently runs against nothing
 and reports green is the exact failure the whole mechanism exists to prevent.
 Do not add it to a plain local run unless you have supplied a checkout.
@@ -99,7 +99,7 @@ Do not add it to a plain local run unless you have supplied a checkout.
   the fixtures under `test/fixtures/consumer-min/` updated in the same commit.
   `test/consumer-contract.bats` keeps the guide's examples and the fixtures
   byte-identical, and separately checks the live consumer's `on:` block when
-  `RNW_CONSUMER_ROOT` points at one.
+  `WORKFLOWS_CONSUMER_ROOT` points at one.
 - **A new gate** - a step in `checks.yml` or `unit.yml` - needs the matching
   target in the consumer's `Makefile`, reachable from `make ci`. The two cases
   at the end of `test/consumer-contract.bats` read the workflow YAML and the
@@ -110,7 +110,7 @@ Do not add it to a plain local run unless you have supplied a checkout.
   `scripts/release/resolve-version.sh` and `scripts/release/build-info.sh` —
   has to move both copies. They are contract-identical, not byte-identical, and
   the parity cases above are what holds them together; run them with
-  `RNW_TEMPLATE_DIR` set before you push, because a laptop run skips them.
+  `WORKFLOWS_TEMPLATE_DIR` set before you push, because a laptop run skips them.
 - **A tool version bump** moves `scripts/lib/versions.sh` *and* the mirrors in
   `.mise.toml` and the workflow defaults; `make check-versions` is what fails
   otherwise.

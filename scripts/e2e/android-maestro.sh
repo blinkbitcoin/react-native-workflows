@@ -4,7 +4,7 @@
 # purpose - reactivecircus/android-emulator-runner executes each line of its
 # `script:` input as its own `sh -c`, so multi-step shell cannot live inline.
 # Needs: emulator up, debug APK built, Metro running.
-# Output: $RNW_OUT/maestro/junit.xml, $RNW_OUT/forensics/*
+# Output: $WORKFLOWS_OUT/maestro/junit.xml, $WORKFLOWS_OUT/forensics/*
 # Usage: android-maestro.sh
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -20,9 +20,9 @@ export MAESTRO_DRIVER_STARTUP_TIMEOUT=300000
 
 root="$(consumer_root)"
 cd "$root" || exit 1
-flows="$RNW_MAESTRO_FLOWS"
-[ -d "$flows" ] || die "no flows directory at $root/$flows (RNW_MAESTRO_FLOWS)"
-out="$RNW_OUT/maestro"
+flows="$WORKFLOWS_MAESTRO_FLOWS"
+[ -d "$flows" ] || die "no flows directory at $root/$flows (WORKFLOWS_MAESTRO_FLOWS)"
+out="$WORKFLOWS_OUT/maestro"
 mkdir -p "$out"
 
 bash "$HERE/android-emulator.sh" prepare || die "android-emulator.sh prepare failed"
@@ -32,29 +32,29 @@ bash "$HERE/android-emulator.sh" record start || true
 cleanup() {
   bash "$HERE/android-emulator.sh" record stop || true
   bash "$HERE/collect-forensics.sh" android || true
-  rnw_run_hook RNW_E2E_TEARDOWN_SCRIPT || true
+  workflows_run_hook WORKFLOWS_E2E_TEARDOWN_SCRIPT || true
 }
 trap cleanup EXIT
 
-rnw_run_hook RNW_E2E_SETUP_SCRIPT || die "RNW_E2E_SETUP_SCRIPT failed"
+workflows_run_hook WORKFLOWS_E2E_SETUP_SCRIPT || die "WORKFLOWS_E2E_SETUP_SCRIPT failed"
 bash "$HERE/app-launch.sh" android || die "app-launch.sh android failed"
 
 # --platform android so an iOS simulator on the same machine is never picked.
 args=(test "$flows" --platform android)
 [ -f "$flows/config.yaml" ] && args+=(--config "$flows/config.yaml")
 args+=(
-  -e "APP_ID=$(rnw_app_id android)"
+  -e "APP_ID=$(workflows_app_id android)"
   --debug-output "$out"
   --flatten-debug-output
   --format junit
   --output "$out/junit.xml"
 )
-[ -n "${RNW_MAESTRO_INCLUDE_TAGS:-}" ] && args+=(--include-tags "$RNW_MAESTRO_INCLUDE_TAGS")
-[ -n "${RNW_MAESTRO_EXCLUDE_TAGS:-}" ] && args+=(--exclude-tags "$RNW_MAESTRO_EXCLUDE_TAGS")
+[ -n "${WORKFLOWS_MAESTRO_INCLUDE_TAGS:-}" ] && args+=(--include-tags "$WORKFLOWS_MAESTRO_INCLUDE_TAGS")
+[ -n "${WORKFLOWS_MAESTRO_EXCLUDE_TAGS:-}" ] && args+=(--exclude-tags "$WORKFLOWS_MAESTRO_EXCLUDE_TAGS")
 
-bound=$((RNW_SUITE_TIMEOUT_MINUTES * 60))
+bound=$((WORKFLOWS_SUITE_TIMEOUT_MINUTES * 60))
 status=0
-group "maestro test (Android, bound ${RNW_SUITE_TIMEOUT_MINUTES}m)"
+group "maestro test (Android, bound ${WORKFLOWS_SUITE_TIMEOUT_MINUTES}m)"
 bounded_maestro "$bound" maestro "${args[@]}" || status=$?
 endgroup
 
@@ -69,6 +69,6 @@ fi
 # selection matches nothing, so success is only success once the junit report
 # says how many flows actually ran.
 if [ "$status" -eq 0 ]; then
-  rnw_assert_suite_ran "$out/junit.xml" "Android"
+  workflows_assert_suite_ran "$out/junit.xml" "Android"
 fi
 exit "$status"

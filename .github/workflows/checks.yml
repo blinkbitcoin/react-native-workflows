@@ -147,13 +147,13 @@ jobs:
           fetch-depth: 0
       # No setup here: changed-class.sh is pure git and doesn't need node/pnpm,
       # so this job skips it and reaches the script via the plain checkout path
-      # (there's no $RNW yet -- that's exported by setup, which never runs).
+      # (there's no $WORKFLOWS_DIR yet -- that's exported by setup, which never runs).
       - name: Checkout react-native-workflows
         uses: actions/checkout@v7
         with:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
-          path: .rnw
+          path: .workflows
           persist-credentials: false
       - name: Classify changed files
         id: classify
@@ -170,7 +170,7 @@ jobs:
           # _EXTRA, not DOCS_GLOBS: the input is additive, so it must not
           # replace the built-in ^docs/|\.md$|... pattern.
           DOCS_GLOBS_EXTRA: ${{ inputs.docs-globs }}
-        run: bash ".rnw/scripts/ci/changed-class.sh" "$BASE_SHA" "$HEAD_SHA"
+        run: bash ".workflows/scripts/ci/changed-class.sh" "$BASE_SHA" "$HEAD_SHA"
   code:
     runs-on: ${{ inputs.linux-runner }}
     timeout-minutes: 20
@@ -186,37 +186,37 @@ jobs:
         with:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
-          path: .rnw
+          path: .workflows
           persist-credentials: false
       - name: Setup
-        uses: ./.rnw/.github/actions/setup
+        uses: ./.workflows/.github/actions/setup
         with:
           working-directory: ${{ inputs.working-directory }}
       - name: Typecheck
         if: ${{ inputs.typecheck }}
         env:
           SCRIPT_NAME: typecheck
-        run: bash "$RNW/scripts/checks/run-script.sh" "$SCRIPT_NAME"
+        run: bash "$WORKFLOWS_DIR/scripts/checks/run-script.sh" "$SCRIPT_NAME"
       - name: Lint
         if: ${{ inputs.lint }}
         env:
           SCRIPT_NAME: lint
-        run: bash "$RNW/scripts/checks/run-script.sh" "$SCRIPT_NAME"
+        run: bash "$WORKFLOWS_DIR/scripts/checks/run-script.sh" "$SCRIPT_NAME"
       - name: Format
         if: ${{ inputs.format }}
         env:
           SCRIPT_NAME: 'format:check'
-        run: bash "$RNW/scripts/checks/run-script.sh" "$SCRIPT_NAME"
+        run: bash "$WORKFLOWS_DIR/scripts/checks/run-script.sh" "$SCRIPT_NAME"
       - name: Knip
         if: ${{ inputs.knip }}
         env:
           SCRIPT_NAME: knip
-        run: bash "$RNW/scripts/checks/run-script.sh" "$SCRIPT_NAME"
+        run: bash "$WORKFLOWS_DIR/scripts/checks/run-script.sh" "$SCRIPT_NAME"
       - name: Spell
         if: ${{ inputs.spell }}
         env:
           SCRIPT_NAME: spell
-        run: bash "$RNW/scripts/checks/run-script.sh" "$SCRIPT_NAME"
+        run: bash "$WORKFLOWS_DIR/scripts/checks/run-script.sh" "$SCRIPT_NAME"
       # The consumer's docs gate. It is handed the event shape rather than
       # working it out: a docs-freshness heuristic needs a diff base, and on a
       # PR that base is the target branch, not HEAD~1. PR_AUTHOR is what lets
@@ -229,24 +229,24 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           BASE_REF: ${{ github.base_ref }}
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
-        run: bash "$RNW/scripts/checks/run-script.sh" "$SCRIPT_NAME"
+        run: bash "$WORKFLOWS_DIR/scripts/checks/run-script.sh" "$SCRIPT_NAME"
       # The consumer's own script wins when it ships one; the script in this
       # repo is the fallback. See scripts/checks/run-consumer-or.sh for why -
       # in short, a gate the consumer defines and a gate CI runs must be the
       # same gate, and for these five they were not.
       - name: i18n
         if: ${{ inputs.i18n }}
-        run: bash "$RNW/scripts/checks/run-consumer-or.sh" 'i18n:check' scripts/checks/i18n.sh
+        run: bash "$WORKFLOWS_DIR/scripts/checks/run-consumer-or.sh" 'i18n:check' scripts/checks/i18n.sh
       - name: GraphQL codegen
         if: ${{ inputs.graphql-codegen }}
-        run: bash "$RNW/scripts/checks/run-consumer-or.sh" 'codegen:check' scripts/checks/codegen.sh
+        run: bash "$WORKFLOWS_DIR/scripts/checks/run-consumer-or.sh" 'codegen:check' scripts/checks/codegen.sh
       # deps:check, not expo-doctor: the template's script is
       # `expo install --check && expo-doctor`. The two overlap - expo-doctor
       # validates installed versions against the SDK as well - so this closes no
       # gap on its own; it is here so one gate has one implementation.
       - name: Expo doctor
         if: ${{ inputs.expo-doctor }}
-        run: bash "$RNW/scripts/checks/run-consumer-or.sh" 'deps:check' scripts/checks/expo-doctor.sh
+        run: bash "$WORKFLOWS_DIR/scripts/checks/run-consumer-or.sh" 'deps:check' scripts/checks/expo-doctor.sh
       # The audit is one registry request (the advisories/bulk endpoint), and
       # that endpoint is the family's known staller: esign measured 5s-102s for
       # identical payloads on a healthy day. So the step gets a bound of its
@@ -280,14 +280,14 @@ jobs:
           NPM_CONFIG_FETCH_TIMEOUT: '270000'
         # deps:audit, not audit.sh: the template's script also runs its lockfile
         # provenance check, which likewise ran in no CI job.
-        run: bash "$RNW/scripts/checks/run-consumer-or.sh" 'deps:audit' scripts/checks/audit.sh
+        run: bash "$WORKFLOWS_DIR/scripts/checks/run-consumer-or.sh" 'deps:audit' scripts/checks/audit.sh
       # Cheap, and it ran in no CI job before this: `make check-deps` includes it
       # locally, so a green local gate implied a licence check CI never made.
       - name: Licenses
         if: ${{ inputs.licenses }}
         env:
           SCRIPT_NAME: 'deps:licenses'
-        run: bash "$RNW/scripts/checks/run-script.sh" "$SCRIPT_NAME"
+        run: bash "$WORKFLOWS_DIR/scripts/checks/run-script.sh" "$SCRIPT_NAME"
       # The two expensive gates, both off by default. A prebuild of both
       # platforms and a web export are minutes each, so they are opt-in for the
       # consumers that decide the coverage is worth the wall clock - on main, on
@@ -297,20 +297,20 @@ jobs:
         timeout-minutes: 20
         env:
           SCRIPT_NAME: check-prebuild
-        run: bash "$RNW/scripts/checks/run-script.sh" "$SCRIPT_NAME"
+        run: bash "$WORKFLOWS_DIR/scripts/checks/run-script.sh" "$SCRIPT_NAME"
       - name: Bundle secrets
         if: ${{ inputs.bundle-secrets }}
         timeout-minutes: 15
         env:
           SCRIPT_NAME: 'check:bundle-secrets'
-        run: bash "$RNW/scripts/checks/run-script.sh" "$SCRIPT_NAME"
+        run: bash "$WORKFLOWS_DIR/scripts/checks/run-script.sh" "$SCRIPT_NAME"
       # Ruby is installed here rather than through the `setup` action's `ruby`
       # input so the 12 checks above never pay for a bundle install they do not
       # use; `bundler-cache: true` makes the repeat cost near zero.
       - name: Read pinned Ruby version
         id: rb
         if: ${{ inputs.release-checks }}
-        run: bash "$RNW/scripts/ci/ruby-version.sh"
+        run: bash "$WORKFLOWS_DIR/scripts/ci/ruby-version.sh"
       - name: Install Ruby
         if: ${{ inputs.release-checks }}
         uses: ruby/setup-ruby@v1
@@ -322,15 +322,15 @@ jobs:
         if: ${{ inputs.release-checks }}
         env:
           SCRIPT_NAME: 'check:release'
-        run: bash "$RNW/scripts/checks/run-script.sh" "$SCRIPT_NAME"
-      # RNW_ACTIONLINT / RNW_SHELLCHECK reach the fallback only. A consumer that
+        run: bash "$WORKFLOWS_DIR/scripts/checks/run-script.sh" "$SCRIPT_NAME"
+      # WORKFLOWS_ACTIONLINT / WORKFLOWS_SHELLCHECK reach the fallback only. A consumer that
       # ships check:ci owns that decision itself, which is the point of the seam.
       - name: Lint CI (actionlint / shellcheck)
         if: ${{ inputs.actionlint || inputs.shellcheck }}
         env:
-          RNW_ACTIONLINT: ${{ inputs.actionlint }}
-          RNW_SHELLCHECK: ${{ inputs.shellcheck }}
-        run: bash "$RNW/scripts/checks/run-consumer-or.sh" 'check:ci' scripts/ci/lint-ci.sh
+          WORKFLOWS_ACTIONLINT: ${{ inputs.actionlint }}
+          WORKFLOWS_SHELLCHECK: ${{ inputs.shellcheck }}
+        run: bash "$WORKFLOWS_DIR/scripts/checks/run-consumer-or.sh" 'check:ci' scripts/ci/lint-ci.sh
   commits:
     if: ${{ inputs.commitlint && github.event_name == 'pull_request' && github.actor != 'dependabot[bot]' }}
     runs-on: ${{ inputs.linux-runner }}
@@ -350,14 +350,14 @@ jobs:
         with:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
-          path: .rnw
+          path: .workflows
           persist-credentials: false
       - name: Setup
-        uses: ./.rnw/.github/actions/setup
+        uses: ./.workflows/.github/actions/setup
         with:
           working-directory: ${{ inputs.working-directory }}
       - name: Commitlint
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
           PR_COMMITS_RANGE: ${{ inputs.commitlint-commits && format('{0}..{1}', github.event.pull_request.base.sha, github.sha) || '' }}
-        run: bash "$RNW/scripts/checks/commitlint.sh"
+        run: bash "$WORKFLOWS_DIR/scripts/checks/commitlint.sh"

@@ -9,13 +9,13 @@ set -euo pipefail
 source "$(dirname "$0")/../lib/common.sh"
 source "$(dirname "$0")/../lib/e2e-env.sh"
 
-platform="$(rnw_platform "${1:-}")"
+platform="$(workflows_platform "${1:-}")"
 require_cmd curl
-base="http://localhost:$RNW_METRO_PORT"
+base="http://localhost:$WORKFLOWS_METRO_PORT"
 
 tail_metro_log() {
-  log "--- tail of $RNW_OUT/metro.log ---"
-  tail -50 "$RNW_OUT/metro.log" >&2 || true
+  log "--- tail of $WORKFLOWS_OUT/metro.log ---"
+  tail -50 "$WORKFLOWS_OUT/metro.log" >&2 || true
 }
 
 ready=false
@@ -27,9 +27,9 @@ for i in $(seq 1 90); do
   fi
   # Metro that died on a port clash or a config error is never coming back;
   # waiting out the full 180s only hides the reason in a timeout message.
-  if [ -f "$RNW_OUT/metro.pid" ] && ! kill -0 "$(cat "$RNW_OUT/metro.pid")" 2>/dev/null; then
+  if [ -f "$WORKFLOWS_OUT/metro.pid" ] && ! kill -0 "$(cat "$WORKFLOWS_OUT/metro.pid")" 2>/dev/null; then
     tail_metro_log
-    die "Metro (pid $(cat "$RNW_OUT/metro.pid")) exited before becoming ready"
+    die "Metro (pid $(cat "$WORKFLOWS_OUT/metro.pid")) exited before becoming ready"
   fi
   sleep 2
 done

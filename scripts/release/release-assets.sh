@@ -14,7 +14,7 @@
 #                      this mode uploads nothing and does not touch SHA256SUMS)
 #
 # Every mode except `append` uploads whatever of the fixed asset set is present in
-# $RNW_ASSETS_DIR (`--clobber`, so re-running a stage is safe) together with a
+# $WORKFLOWS_ASSETS_DIR (`--clobber`, so re-running a stage is safe) together with a
 # freshly computed SHA256SUMS. The list is fixed on purpose: a release whose
 # assets vary run to run cannot be verified by a downstream script.
 #
@@ -24,7 +24,7 @@
 # pre-release and its tag once the upload has succeeded.
 #
 # The carried-forward files never overwrite this run's: they land in a scratch
-# directory and are copied into $RNW_ASSETS_DIR only where no file of that name
+# directory and are copied into $WORKFLOWS_ASSETS_DIR only where no file of that name
 # is already there. Both sides carry build-info.json, store-notes.json,
 # notes-store.txt and notes.md, and the source is by definition an *earlier*
 # stage - promoting a beta from an internal pre-release with --clobber shipped
@@ -33,7 +33,7 @@
 # fingerprint gate downstream as its baseline.
 #
 # Env: TAG (required), TITLE, TARGET_SHA, NOTES_FILE, APPEND_TITLE, FROM_TAG,
-#      DELETE_SOURCE, RNW_ASSETS_DIR (default $RNW_OUT/assets), GH_TOKEN,
+#      DELETE_SOURCE, WORKFLOWS_ASSETS_DIR (default $WORKFLOWS_OUT/assets), GH_TOKEN,
 #      GH_REPO.
 set -euo pipefail
 source "$(dirname "$0")/../lib/common.sh"
@@ -42,15 +42,15 @@ require_cmd gh
 
 mode="${1:?usage: release-assets.sh create-prerelease|promote|latest|append}"
 tag="${TAG:?release-assets.sh needs TAG}"
-assets_dir="${RNW_ASSETS_DIR:-$RNW_OUT/assets}"
+assets_dir="${WORKFLOWS_ASSETS_DIR:-$WORKFLOWS_OUT/assets}"
 
 # The body scratch files sit in $RUNNER_TEMP and would die with the runner, but
 # a local run should not litter and a leftover body must never be picked up by
 # a later invocation.
-body_file="${RUNNER_TEMP:-/tmp}/rnw-release-body.md"
+body_file="${RUNNER_TEMP:-/tmp}/workflows-release-body.md"
 stripped_file="$body_file.stripped"
 # Where a $FROM_TAG release's assets are staged before being merged in.
-carry_dir="${RUNNER_TEMP:-/tmp}/rnw-carry-assets"
+carry_dir="${RUNNER_TEMP:-/tmp}/workflows-carry-assets"
 trap 'rm -f "$body_file" "$stripped_file"; rm -rf "$carry_dir"' EXIT
 
 # The fixed asset set, as basename globs. Anything else in the directory is
@@ -272,8 +272,8 @@ case "$mode" in
     # body starts with `## [x.y.z](...)` - so a heading scan stops at the notes'
     # own heading and leaves their tail behind, stacking a little more of it on
     # every re-run. Markers bound the block regardless of its content.
-    begin_marker="<!-- rnw:append:$title -->"
-    end_marker="<!-- /rnw:append:$title -->"
+    begin_marker="<!-- workflows:append:$title -->"
+    end_marker="<!-- /workflows:append:$title -->"
     gh release view "$tag" --json body --jq '.body' > "$body_file"
     if grep -qxF "$begin_marker" "$body_file"; then
       awk -v b="$begin_marker" -v e="$end_marker" '
@@ -305,7 +305,7 @@ case "$mode" in
     # No upload_assets here, deliberately. `append` records what a store action
     # did (a rollout percentage, a halt) from a job that has no binaries staged:
     # an upload would attach nothing and, worse, regenerate SHA256SUMS over
-    # whatever happens to be in $RNW_ASSETS_DIR - replacing the checksum file
+    # whatever happens to be in $WORKFLOWS_ASSETS_DIR - replacing the checksum file
     # that describes the release's real assets with one computed from an empty
     # or partial directory. append touches the body, nothing else.
     ;;

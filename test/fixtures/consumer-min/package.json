@@ -6,7 +6,7 @@
     "Shape mirrors blinkbitcoin/react-native-mobile-template @ ca4d2ad: same",
     "script names, `knip` as a devDependency and deliberately NOT as a script",
     "(a script named `knip` fails expo-doctor's package.json check).",
-    "Point RNW_CONSUMER_ROOT at a real checkout to assert against that instead."
+    "Point WORKFLOWS_CONSUMER_ROOT at a real checkout to assert against that instead."
   ],
   "name": "consumer-min-fixture",
   "version": "0.0.0",

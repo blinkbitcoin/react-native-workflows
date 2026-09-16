@@ -65,7 +65,7 @@ cache_setup() {
   export RUNNER_TEMP
   ROOT="$BATS_TEST_TMPDIR/consumer"
   mkdir -p "$ROOT"
-  export RNW_CONSUMER_ROOT="$ROOT"
+  export WORKFLOWS_CONSUMER_ROOT="$ROOT"
   export GITHUB_SHA=cafebabe
   STUB="$BATS_TEST_TMPDIR/bin"
   mkdir -p "$STUB"
@@ -83,7 +83,7 @@ stub_pnpm() {
   chmod +x "$STUB/pnpm"
 }
 
-cached_file() { find "$RUNNER_TEMP" -name 'rnw-expo-config-*.json' 2>/dev/null; }
+cached_file() { find "$RUNNER_TEMP" -name 'workflows-expo-config-*.json' 2>/dev/null; }
 
 @test "a failed expo config leaves no cache file behind" {
   cache_setup

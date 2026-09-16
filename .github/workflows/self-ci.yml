@@ -38,15 +38,15 @@ jobs:
           # Nothing here pushes, and the suite runs the template's own scripts.
           persist-credentials: false
       - uses: jdx/mise-action@v4
-      # RNW_CONSUMER_ROOT as well as RNW_TEMPLATE_DIR: the first is what
+      # WORKFLOWS_CONSUMER_ROOT as well as WORKFLOWS_TEMPLATE_DIR: the first is what
       # consumer-contract.bats reads, the second what the parity cases read.
-      # RNW_PARITY_REQUIRED turns a would-be skip into a failure - see
+      # WORKFLOWS_PARITY_REQUIRED turns a would-be skip into a failure - see
       # parity_skip in test/test_helper.bash.
       - name: Run the suite against a real consumer
         env:
-          RNW_TEMPLATE_DIR: ${{ github.workspace }}/.template
-          RNW_CONSUMER_ROOT: ${{ github.workspace }}/.template
-          RNW_PARITY_REQUIRED: '1'
+          WORKFLOWS_TEMPLATE_DIR: ${{ github.workspace }}/.template
+          WORKFLOWS_CONSUMER_ROOT: ${{ github.workspace }}/.template
+          WORKFLOWS_PARITY_REQUIRED: '1'
         run: mise exec -- bats test/
 
   pr-title:

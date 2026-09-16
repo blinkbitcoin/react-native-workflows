@@ -9,32 +9,32 @@ set -euo pipefail
 source "$(dirname "$0")/../lib/common.sh"
 source "$(dirname "$0")/../lib/e2e-env.sh"
 
-platform="$(rnw_platform "${1:-}")"
-app_id="$(rnw_app_id "$platform")"
-log "launching $app_id on $platform (dev-client=$RNW_DEV_CLIENT)"
+platform="$(workflows_platform "${1:-}")"
+app_id="$(workflows_app_id "$platform")"
+log "launching $app_id on $platform (dev-client=$WORKFLOWS_DEV_CLIENT)"
 
 # The bundle request Metro logs is the launch's receipt; anything before it can
 # be an app that started and died on the launcher.
-metro_log="$RNW_OUT/metro.log"
+metro_log="$WORKFLOWS_OUT/metro.log"
 [ -f "$metro_log" ] || die "no $metro_log - run metro-start.sh first"
 before=$(( $(wc -l < "$metro_log") + 1 ))
 
 if [ "$platform" = ios ]; then
-  udid="$(rnw_sim_udid)"
-  if [ "$RNW_DEV_CLIENT" = "true" ]; then
-    scheme="$(rnw_scheme)"
+  udid="$(workflows_sim_udid)"
+  if [ "$WORKFLOWS_DEV_CLIENT" = "true" ]; then
+    scheme="$(workflows_scheme)"
     xcrun simctl openurl "$udid" \
-      "$scheme://expo-development-client/?url=http%3A%2F%2Flocalhost%3A$RNW_METRO_PORT"
+      "$scheme://expo-development-client/?url=http%3A%2F%2Flocalhost%3A$WORKFLOWS_METRO_PORT"
   else
     xcrun simctl launch "$udid" "$app_id"
   fi
 else
-  if [ "$RNW_DEV_CLIENT" = "true" ]; then
-    scheme="$(rnw_scheme)"
+  if [ "$WORKFLOWS_DEV_CLIENT" = "true" ]; then
+    scheme="$(workflows_scheme)"
     # 10.0.2.2 is the emulator's alias for the host loopback; `adb reverse`
     # covers the app's own localhost traffic but not this launch URL.
     adb shell am start -a android.intent.action.VIEW \
-      -d "$scheme://expo-development-client/?url=http%3A%2F%2F10.0.2.2%3A$RNW_METRO_PORT"
+      -d "$scheme://expo-development-client/?url=http%3A%2F%2F10.0.2.2%3A$WORKFLOWS_METRO_PORT"
   else
     adb shell am start -n "$app_id/.MainActivity"
   fi

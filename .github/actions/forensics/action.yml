@@ -5,7 +5,7 @@ inputs:
     description: Artifact name
     default: 'forensics'
   path:
-    description: Path to upload (defaults to $RNW_OUT/forensics)
+    description: Path to upload (defaults to $WORKFLOWS_OUT/forensics)
     default: ''
   junit:
     description: Optional path to a junit XML file to summarize
@@ -21,7 +21,7 @@ runs:
       uses: actions/upload-artifact@v7
       with:
         name: ${{ inputs.name }}
-        path: ${{ inputs.path != '' && inputs.path || format('{0}/forensics', env.RNW_OUT) }}
+        path: ${{ inputs.path != '' && inputs.path || format('{0}/forensics', env.WORKFLOWS_OUT) }}
         if-no-files-found: ignore
         retention-days: ${{ inputs.retention-days }}
     - name: Summarize forensics artifact

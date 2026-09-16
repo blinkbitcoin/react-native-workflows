@@ -51,8 +51,8 @@ runs:
       env:
         WORKING_DIRECTORY: ${{ inputs.working-directory }}
       run: bash "${{ github.action_path }}/../../../scripts/ci/pnpm-install.sh"
-    - name: Export RNW environment
+    - name: Export WORKFLOWS_DIR environment
       shell: bash
       env:
         WORKING_DIRECTORY: ${{ inputs.working-directory }}
-      run: bash "${{ github.action_path }}/../../../scripts/ci/rnw-env.sh"
+      run: bash "${{ github.action_path }}/../../../scripts/ci/workflows-env.sh"

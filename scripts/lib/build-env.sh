@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Publish the caller's non-secret build environment ($RNW_BUILD_ENV, a flat JSON
+# Publish the caller's non-secret build environment ($WORKFLOWS_BUILD_ENV, a flat JSON
 # object) into $GITHUB_ENV, so values like OTA_ENABLED, EXPO_UPDATES_URL,
 # EXPO_PUBLIC_*, ANDROID_UPLOAD_CERT_SHA256 or STORE_NOTES_INCLUDE_CHANGELOG
 # reach prebuild, the fastlane lanes, the verify scripts and the notes generator.
@@ -15,30 +15,30 @@
 # anyone who can see the run. Refusing here is the difference between a caller
 # noticing at once and a credential quietly ending up in a public log.
 #
-# A key that belongs to this workflow family (RNW_*) or to the runner itself
+# A key that belongs to this workflow family (WORKFLOWS_*) or to the runner itself
 # (GITHUB_*, RUNNER_*, ACTIONS_*, PATH, HOME, LD_*, DYLD_*, NODE_OPTIONS) is
 # refused for a different reason: build-env is published before fingerprint.sh
-# runs, so `{"RNW_FP_IOS":"<baseline>"}` would hand the OTA fingerprint gate a
-# caller-supplied constant to compare its baseline against, and RNW_ASSETS_DIR /
-# RNW_RELEASE_META_DIR would repoint the artifact paths mid-job.
+# runs, so `{"WORKFLOWS_FINGERPRINT_IOS":"<baseline>"}` would hand the OTA fingerprint gate a
+# caller-supplied constant to compare its baseline against, and WORKFLOWS_ASSETS_DIR /
+# WORKFLOWS_RELEASE_META_DIR would repoint the artifact paths mid-job.
 #
 # Values may contain anything, including newlines: they go into $GITHUB_ENV
 # through gh_env, which switches to the heredoc form rather than emitting a
 # second `KEY=` line the runner would read as another variable.
 #
-# Usage: source it, then rnw_publish_build_env
+# Usage: source it, then workflows_publish_build_env
 # shellcheck shell=bash
 
-rnw_publish_build_env() {
+workflows_publish_build_env() {
   local json count
-  json="${RNW_BUILD_ENV:-}"
+  json="${WORKFLOWS_BUILD_ENV:-}"
   if [ -z "$json" ] || [ "$json" = '{}' ]; then
     log "build-env is empty - nothing to publish"
     return 0
   fi
   require_cmd node
 
-  local env_file="${RUNNER_TEMP:-/tmp}/rnw-build-env.env"
+  local env_file="${RUNNER_TEMP:-/tmp}/workflows-build-env.env"
   # `if !`, not a bare call: the scratch file must not survive a rejection
   # either, and errexit would abort before any cleanup could run.
   #
@@ -47,8 +47,8 @@ rnw_publish_build_env() {
   # - which is exactly what had happened.
   local validator
   validator="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/env-validate.mjs"
-  if ! RNW_ENV_VALIDATE_JSON="$json" \
-    RNW_ENV_VALIDATE_LABEL=build-env \
+  if ! WORKFLOWS_ENV_VALIDATE_JSON="$json" \
+    WORKFLOWS_ENV_VALIDATE_LABEL=build-env \
     node "$validator" > "$env_file"; then
     rm -f "$env_file"
     exit 1

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Fetch a GitHub release's body into $RNW_OUT/release-body.md and point
+# Fetch a GitHub release's body into $WORKFLOWS_OUT/release-body.md and point
 # RELEASE_BODY_FILE at it, so notes.sh generates store notes from what was
 # actually published rather than from the commit log.
 #
@@ -17,7 +17,7 @@ require_cmd gh
 
 tag="${1:-}"
 [ -n "$tag" ] || die "no release tag given - expo-prepare's release-tag input is empty"
-dest="$RNW_OUT/release-body.md"
+dest="$WORKFLOWS_OUT/release-body.md"
 
 group "release body ($tag)"
 gh release view "$tag" --json body --jq '.body' > "$dest" ||

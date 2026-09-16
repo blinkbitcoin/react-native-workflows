@@ -1,6 +1,6 @@
 // The one validator for caller-supplied JSON objects whose keys become
-// environment variables. Two inputs feed this: $RNW_BUILD_ENV (via
-// scripts/lib/build-env.sh) and $RNW_ENV_JSON (via scripts/release/env-json.sh).
+// environment variables. Two inputs feed this: $WORKFLOWS_BUILD_ENV (via
+// scripts/lib/build-env.sh) and $WORKFLOWS_ENV_JSON (via scripts/release/env-json.sh).
 //
 // They used to carry a copy of these rules each, and the copies had drifted in
 // the direction that matters: env-json had no credential-name refusal and no
@@ -19,7 +19,7 @@
 // caller noticing immediately and a credential quietly landing in a public log.
 //
 // Usage as a CLI (what the two shell scripts do):
-//   RNW_ENV_VALIDATE_JSON='{"A":"1"}' RNW_ENV_VALIDATE_LABEL=build-env \
+//   WORKFLOWS_ENV_VALIDATE_JSON='{"A":"1"}' WORKFLOWS_ENV_VALIDATE_LABEL=build-env \
 //     node scripts/lib/env-validate.mjs
 // It writes `key\0value\0` pairs to stdout and exits non-zero, with an ::error::
 // annotation naming the offending key, on any violation.
@@ -35,12 +35,12 @@ export const NEVER = new Set([
   'MATCH_GIT_BASIC_AUTHORIZATION',
 ]);
 
-// Names owned by this workflow family or by the runner. RNW_FP_IOS /
-// RNW_FP_ANDROID are the sharp end: build-env is published before fingerprint.sh
+// Names owned by this workflow family or by the runner. WORKFLOWS_FINGERPRINT_IOS /
+// WORKFLOWS_FINGERPRINT_ANDROID are the sharp end: build-env is published before fingerprint.sh
 // runs, so a caller-supplied value there hands the OTA fingerprint gate a
-// constant to compare its baseline against. RNW_ASSETS_DIR and
-// RNW_RELEASE_META_DIR would repoint the artifact paths mid-job.
-export const RESERVED = /^(RNW_|GITHUB_|RUNNER_|ACTIONS_|LD_|DYLD_)|^(PATH|HOME|NODE_OPTIONS)$/;
+// constant to compare its baseline against. WORKFLOWS_ASSETS_DIR and
+// WORKFLOWS_RELEASE_META_DIR would repoint the artifact paths mid-job.
+export const RESERVED = /^(WORKFLOWS_|GITHUB_|RUNNER_|ACTIONS_|LD_|DYLD_)|^(PATH|HOME|NODE_OPTIONS)$/;
 
 // Two name rules, because the case difference between the two inputs is
 // deliberate and documented, not drift. build-env feeds prebuild, the verify
@@ -86,7 +86,7 @@ export function validateEnvJson(raw, label, opts = {}) {
     }
     // Upper-cased before the credential and reserved checks: with lower-case
     // names permitted, a case-sensitive rule would wave `sentry_auth_token` and
-    // `rnw_fp_ios` straight through the two checks that exist to stop them.
+    // `workflows_fp_ios` straight through the two checks that exist to stop them.
     const upper = k.toUpperCase();
     if (SECRETISH.test(upper) || NEVER.has(upper)) {
       throw new Error(
@@ -107,11 +107,11 @@ export function validateEnvJson(raw, label, opts = {}) {
 }
 
 // CLI. Guarded so the module can be imported by tests without running.
-if (process.env.RNW_ENV_VALIDATE_JSON !== undefined) {
-  const label = process.env.RNW_ENV_VALIDATE_LABEL || 'env';
+if (process.env.WORKFLOWS_ENV_VALIDATE_JSON !== undefined) {
+  const label = process.env.WORKFLOWS_ENV_VALIDATE_LABEL || 'env';
   try {
-    const allowLowerCase = process.env.RNW_ENV_VALIDATE_ALLOW_LOWERCASE === '1';
-    for (const [k, v] of validateEnvJson(process.env.RNW_ENV_VALIDATE_JSON, label, {
+    const allowLowerCase = process.env.WORKFLOWS_ENV_VALIDATE_ALLOW_LOWERCASE === '1';
+    for (const [k, v] of validateEnvJson(process.env.WORKFLOWS_ENV_VALIDATE_JSON, label, {
       allowLowerCase,
     })) {
       // NUL-separated, not line-separated: a value may legitimately contain a

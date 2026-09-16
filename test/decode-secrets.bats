@@ -9,7 +9,7 @@ setup() {
   SECRETS="$BATS_TEST_TMPDIR/secrets"
   GH_ENV="$BATS_TEST_TMPDIR/gh_env"
   : > "$GH_ENV"
-  export RNW_SECRETS_DIR="$SECRETS" GITHUB_ENV="$GH_ENV"
+  export WORKFLOWS_SECRETS_DIR="$SECRETS" GITHUB_ENV="$GH_ENV"
 }
 
 b64() { printf '%s' "$1" | base64 | tr -d '\n'; }

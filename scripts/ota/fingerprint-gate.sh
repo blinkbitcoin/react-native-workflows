@@ -24,7 +24,7 @@ for platform in ios android; do
   if [ -z "$expected" ] || [ "$expected" = "null" ]; then
     die "$file has no fingerprint.$platform - it was written by an older build-info.sh; re-run the release"
   fi
-  actual="$(rnw_fingerprint "$platform")"
+  actual="$(workflows_fingerprint "$platform")"
   if [ "$expected" = "$actual" ]; then
     log "$platform fingerprint matches ($actual)"
   else

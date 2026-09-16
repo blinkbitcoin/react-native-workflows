@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Publish the flat JSON object in $RNW_ENV_JSON into $GITHUB_ENV so a fastlane
+# Publish the flat JSON object in $WORKFLOWS_ENV_JSON into $GITHUB_ENV so a fastlane
 # lane can read caller-supplied values it was not designed to take as
 # arguments (APP_VARIANT, a store track name, ...).
 #
@@ -23,12 +23,12 @@
 set -euo pipefail
 source "$(dirname "$0")/../lib/common.sh"
 
-env_file="${RUNNER_TEMP:-/tmp}/rnw-env-json.env"
+env_file="${RUNNER_TEMP:-/tmp}/workflows-env-json.env"
 trap 'rm -f "$env_file"' EXIT
 
-json="${RNW_ENV_JSON:-}"
+json="${WORKFLOWS_ENV_JSON:-}"
 if [ -z "$json" ] || [ "$json" = '{}' ]; then
-  log "RNW_ENV_JSON is empty - nothing to publish"
+  log "WORKFLOWS_ENV_JSON is empty - nothing to publish"
   exit 0
 fi
 require_cmd node
@@ -45,9 +45,9 @@ require_cmd node
 # documented in docs/consumer-guide.md and is the only one; the credential,
 # reserved-name and scalar rules are identical, and the validator upper-cases
 # each key before applying them so a lower-case name cannot dodge them.
-RNW_ENV_VALIDATE_JSON="$json" \
-  RNW_ENV_VALIDATE_LABEL=RNW_ENV_JSON \
-  RNW_ENV_VALIDATE_ALLOW_LOWERCASE=1 \
+WORKFLOWS_ENV_VALIDATE_JSON="$json" \
+  WORKFLOWS_ENV_VALIDATE_LABEL=WORKFLOWS_ENV_JSON \
+  WORKFLOWS_ENV_VALIDATE_ALLOW_LOWERCASE=1 \
   node "$(dirname "$0")/../lib/env-validate.mjs" > "$env_file"
 
 while IFS= read -r -d '' key && IFS= read -r -d '' value; do

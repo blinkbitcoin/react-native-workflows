@@ -20,13 +20,13 @@
 # that record taken mid-job and must never be able to reintroduce a stale value.
 # When there is no base record at all, the first platform copy becomes it.
 #
-# Env: RNW_ASSETS_DIR (default target directory).
+# Env: WORKFLOWS_ASSETS_DIR (default target directory).
 # Usage: merge-build-info.sh [DIR]
 set -euo pipefail
 source "$(dirname "$0")/../lib/common.sh"
 source "$(dirname "$0")/../lib/release-env.sh"
 
-dir="${1:-$RNW_ASSETS_DIR}"
+dir="${1:-$WORKFLOWS_ASSETS_DIR}"
 [ -d "$dir" ] || { log "no $dir - nothing to merge"; exit 0; }
 
 overlays=()

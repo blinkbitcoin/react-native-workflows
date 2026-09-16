@@ -210,8 +210,8 @@ lane_step_count() {
 # fixture, never an outdated one. So a real checkout wins whenever there is one,
 # and the fixture is the fallback that says so.
 template_lanes() {
-  if [ -n "${RNW_TEMPLATE_DIR:-}" ] && [ -f "$RNW_TEMPLATE_DIR/fastlane/lanes/shared.rb" ]; then
-    printf '%s' "$RNW_TEMPLATE_DIR/fastlane/lanes/shared.rb"
+  if [ -n "${WORKFLOWS_TEMPLATE_DIR:-}" ] && [ -f "$WORKFLOWS_TEMPLATE_DIR/fastlane/lanes/shared.rb" ]; then
+    printf '%s' "$WORKFLOWS_TEMPLATE_DIR/fastlane/lanes/shared.rb"
   else
     printf '%s' "$FIXTURES/consumer-min/fastlane/lanes/shared.rb"
   fi
@@ -224,7 +224,7 @@ template_lanes() {
     "$FIXTURES"/*)
       # Not a failure - the check still runs - but the thing it runs against is a
       # snapshot that nothing keeps current.
-      echo "# checked against the committed fixture, NOT a template checkout: set RNW_TEMPLATE_DIR" >&3
+      echo "# checked against the committed fixture, NOT a template checkout: set WORKFLOWS_TEMPLATE_DIR" >&3
       ;;
   esac
   wanted="$(grep -oE "ENV\['APP_REVIEW_[A-Z0-9_]*'\]" "$TEMPLATE_LANES" |
@@ -250,10 +250,10 @@ template_lanes() {
 # lines against a real file of 457 before anything looked. This is what makes the
 # staleness loud, in the one dimension the fixture is actually used for.
 @test "the committed lanes fixture still carries the same App Review names as the template" {
-  template_dir="${RNW_TEMPLATE_DIR:-}"
-  [ -n "$template_dir" ] || parity_skip "fixture freshness NOT verified: set RNW_TEMPLATE_DIR to a template checkout"
+  template_dir="${WORKFLOWS_TEMPLATE_DIR:-}"
+  [ -n "$template_dir" ] || parity_skip "fixture freshness NOT verified: set WORKFLOWS_TEMPLATE_DIR to a template checkout"
   real="$template_dir/fastlane/lanes/shared.rb"
-  [ -f "$real" ] || parity_skip "fixture freshness NOT verified: no lanes at $real (set RNW_TEMPLATE_DIR)"
+  [ -f "$real" ] || parity_skip "fixture freshness NOT verified: no lanes at $real (set WORKFLOWS_TEMPLATE_DIR)"
   fixture="$FIXTURES/consumer-min/fastlane/lanes/shared.rb"
   names() { grep -oE "ENV\['APP_REVIEW_[A-Z0-9_]*'\]" "$1" | sed "s/ENV\['//; s/'\]//" | sort -u; }
   [ "$(names "$fixture")" = "$(names "$real")" ] || fail "the lanes fixture is stale - refresh it from the template:
@@ -300,31 +300,31 @@ $(names "$real")"
     || fail "the consumer guide still documents a different notes-locales default"
 }
 
-# The digest step writes an enriched build-info.json into $RNW_OUTPUT_DIR; the
+# The digest step writes an enriched build-info.json into $WORKFLOWS_OUTPUT_DIR; the
 # in-job verify has to read *that* one, or artifacts.apkSha256 is never there
 # and the lane's apk-sha check silently skips.
 @test "expo-build-android's verify reads the build-info carrying the digests" {
   f="$REPO_ROOT/.github/workflows/expo-build-android.yml"
   got=$(yq -r '[.jobs[].steps[] | select(.name == "Fastlane android verify")][0].env.BUILD_INFO_FILE' "$f")
-  [ "$got" = '${{ env.RNW_OUTPUT_DIR }}/build-info.json' ] \
+  [ "$got" = '${{ env.WORKFLOWS_OUTPUT_DIR }}/build-info.json' ] \
     || fail "the android verify step reads BUILD_INFO_FILE '$got'"
   n=$(yq -r '[.jobs[].steps[]? | select((.run? // "") | test("release/artifact-hashes.sh"))] | length' "$f")
   [ "$n" -eq 1 ] || fail "expo-build-android does not run artifact-hashes.sh exactly once"
 }
 
-# $RNW is published by the setup composite action. A job that never runs setup
-# expands `$RNW/scripts/…` to `/scripts/…` and exits 127 on every call - a
+# $WORKFLOWS_DIR is published by the setup composite action. A job that never runs setup
+# expands `$WORKFLOWS_DIR/scripts/…` to `/scripts/…` and exits 127 on every call - a
 # workflow that cannot work at all, and one no unit test would ever reach.
-@test "no run: step uses \$RNW in a job that never runs the setup action" {
+@test "no run: step uses \$WORKFLOWS_DIR in a job that never runs the setup action" {
   for w in "${WORKFLOWS[@]}"; do
     while read -r j; do
       [ -n "$j" ] || continue
       # This family's own composite action specifically - not actions/setup-node
-      # or gradle/actions/setup-gradle, neither of which publishes $RNW.
-      setup=$(yq -r "[.jobs.\"$j\".steps[]? | select((.uses // \"\") | test(\"rnw/.github/actions/setup\"))] | length" "$w")
+      # or gradle/actions/setup-gradle, neither of which publishes $WORKFLOWS_DIR.
+      setup=$(yq -r "[.jobs.\"$j\".steps[]? | select((.uses // \"\") | test(\"workflows/.github/actions/setup\"))] | length" "$w")
       [ "$setup" -eq 0 ] || continue
-      bad=$(yq -r "[.jobs.\"$j\".steps[]? | select((.run // \"\") | test(\"RNW/\")) | .name] | join(\", \")" "$w")
-      [ -z "$bad" ] || fail "$(basename "$w") job '$j' never runs the setup action but uses \$RNW in: $bad"
+      bad=$(yq -r "[.jobs.\"$j\".steps[]? | select((.run // \"\") | test(\"WORKFLOWS_DIR/\")) | .name] | join(\", \")" "$w")
+      [ -z "$bad" ] || fail "$(basename "$w") job '$j' never runs the setup action but uses \$WORKFLOWS_DIR in: $bad"
     done <<<"$(yq -r '.jobs | keys | .[]' "$w")"
   done
 }
@@ -356,18 +356,18 @@ $(names "$real")"
 }
 
 # fastlane-lane builds nothing: the binaries its lanes upload were downloaded
-# into $RNW_ASSETS_DIR. The lanes read $RNW_OUTPUT_DIR, so the two have to be
+# into $WORKFLOWS_ASSETS_DIR. The lanes read $WORKFLOWS_OUTPUT_DIR, so the two have to be
 # the same directory here - and only here; the build workflows keep
-# RNW_OUTPUT_DIR as the directory the lane *writes* to.
-@test "fastlane-lane points RNW_OUTPUT_DIR at the downloaded artifacts" {
+# WORKFLOWS_OUTPUT_DIR as the directory the lane *writes* to.
+@test "fastlane-lane points WORKFLOWS_OUTPUT_DIR at the downloaded artifacts" {
   f="$REPO_ROOT/.github/workflows/fastlane-lane.yml"
-  got=$(yq -r '[.jobs.lane.steps[] | select(.name == "Fastlane lane")][0].env.RNW_OUTPUT_DIR' "$f")
-  [ "$got" = '${{ env.RNW_ASSETS_DIR }}' ] \
-    || fail "fastlane-lane's lane step sets RNW_OUTPUT_DIR to '$got'"
+  got=$(yq -r '[.jobs.lane.steps[] | select(.name == "Fastlane lane")][0].env.WORKFLOWS_OUTPUT_DIR' "$f")
+  [ "$got" = '${{ env.WORKFLOWS_ASSETS_DIR }}' ] \
+    || fail "fastlane-lane's lane step sets WORKFLOWS_OUTPUT_DIR to '$got'"
   for w in expo-build-ios expo-build-android; do
     b="$REPO_ROOT/.github/workflows/$w.yml"
-    n=$(yq -r '[.jobs[].steps[]? | select((.env.RNW_OUTPUT_DIR? // "") != "")] | length' "$b")
-    [ "$n" -eq 0 ] || fail "$w.yml overrides RNW_OUTPUT_DIR, which is where its lane writes"
+    n=$(yq -r '[.jobs[].steps[]? | select((.env.WORKFLOWS_OUTPUT_DIR? // "") != "")] | length' "$b")
+    [ "$n" -eq 0 ] || fail "$w.yml overrides WORKFLOWS_OUTPUT_DIR, which is where its lane writes"
   done
 }
 
@@ -516,30 +516,30 @@ $(names "$real")"
   done
 }
 
-@test "every job with a run: step checks out .rnw from the workflow's own repo/sha" {
+@test "every job with a run: step checks out .workflows from the workflow's own repo/sha" {
   for w in "${WORKFLOWS[@]}"; do
     job_names=$(yq -r '.jobs | keys | .[]' "$w")
     for j in $job_names; do
       has_run=$(yq -r "[.jobs.\"$j\".steps[]? | select(has(\"run\"))] | length" "$w")
       if [ "$has_run" -gt 0 ]; then
-        rnw_checkout=$(yq -r "[.jobs.\"$j\".steps[]? | select(.uses? == \"actions/checkout@v7\") | select(.with.path? == \".rnw\")] | length" "$w")
-        [ "$rnw_checkout" -gt 0 ]
+        workflows_checkout=$(yq -r "[.jobs.\"$j\".steps[]? | select(.uses? == \"actions/checkout@v7\") | select(.with.path? == \".workflows\")] | length" "$w")
+        [ "$workflows_checkout" -gt 0 ]
       fi
     done
   done
 }
 
-@test "the .rnw checkout uses job.workflow_repository and job.workflow_sha (not github.* or any other form) and sets persist-credentials: false" {
+@test "the .workflows checkout uses job.workflow_repository and job.workflow_sha (not github.* or any other form) and sets persist-credentials: false" {
   for w in "${WORKFLOWS[@]}"; do
     job_names=$(yq -r '.jobs | keys | .[]' "$w")
     for j in $job_names; do
-      rnw_step_count=$(yq -r "[.jobs.\"$j\".steps[]? | select(.uses? == \"actions/checkout@v7\") | select(.with.path? == \".rnw\")] | length" "$w")
-      if [ "$rnw_step_count" -gt 0 ]; then
-        repo=$(yq -r "[.jobs.\"$j\".steps[]? | select(.uses? == \"actions/checkout@v7\") | select(.with.path? == \".rnw\")][0].with.repository" "$w")
-        ref=$(yq -r "[.jobs.\"$j\".steps[]? | select(.uses? == \"actions/checkout@v7\") | select(.with.path? == \".rnw\")][0].with.ref" "$w")
+      workflows_step_count=$(yq -r "[.jobs.\"$j\".steps[]? | select(.uses? == \"actions/checkout@v7\") | select(.with.path? == \".workflows\")] | length" "$w")
+      if [ "$workflows_step_count" -gt 0 ]; then
+        repo=$(yq -r "[.jobs.\"$j\".steps[]? | select(.uses? == \"actions/checkout@v7\") | select(.with.path? == \".workflows\")][0].with.repository" "$w")
+        ref=$(yq -r "[.jobs.\"$j\".steps[]? | select(.uses? == \"actions/checkout@v7\") | select(.with.path? == \".workflows\")][0].with.ref" "$w")
         # persist-credentials: false is what keeps this repo's checkout token out
         # of the consumer workspace; it is as load-bearing as the ref pinning.
-        persist=$(yq -r "[.jobs.\"$j\".steps[]? | select(.uses? == \"actions/checkout@v7\") | select(.with.path? == \".rnw\")][0].with.\"persist-credentials\"" "$w")
+        persist=$(yq -r "[.jobs.\"$j\".steps[]? | select(.uses? == \"actions/checkout@v7\") | select(.with.path? == \".workflows\")][0].with.\"persist-credentials\"" "$w")
         [ "$repo" = '${{ job.workflow_repository }}' ]
         [ "$ref" = '${{ job.workflow_sha }}' ]
         [ "$persist" = "false" ]

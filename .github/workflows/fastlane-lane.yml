@@ -173,12 +173,12 @@ jobs:
         with:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
-          path: .rnw
+          path: .workflows
           persist-credentials: false
-      - name: Publish RNW environment
-        run: bash ".rnw/scripts/release/env-publish.sh"
+      - name: Publish WORKFLOWS_DIR environment
+        run: bash ".workflows/scripts/release/env-publish.sh"
       - name: Setup
-        uses: ./.rnw/.github/actions/setup
+        uses: ./.workflows/.github/actions/setup
         with:
           working-directory: ${{ inputs.working-directory }}
           ruby: ${{ inputs.ruby }}
@@ -188,39 +188,39 @@ jobs:
         with:
           pattern: ${{ inputs.artifacts }}
           # One flat directory: a lane is given file paths, not artifact names,
-          # and merge-multiple keeps `$RNW_ASSETS_DIR/app.ipa` stable no matter
+          # and merge-multiple keeps `$WORKFLOWS_ASSETS_DIR/app.ipa` stable no matter
           # which artifact carried it.
           merge-multiple: true
-          path: ${{ env.RNW_ASSETS_DIR }}
+          path: ${{ env.WORKFLOWS_ASSETS_DIR }}
       - name: Publish build-env
         env:
-          RNW_BUILD_ENV: ${{ inputs.build-env }}
-        run: bash "$RNW/scripts/release/build-env.sh"
+          WORKFLOWS_BUILD_ENV: ${{ inputs.build-env }}
+        run: bash "$WORKFLOWS_DIR/scripts/release/build-env.sh"
       - name: Publish env-json
         env:
-          RNW_ENV_JSON: ${{ inputs.env-json }}
-        run: bash "$RNW/scripts/release/env-json.sh"
+          WORKFLOWS_ENV_JSON: ${{ inputs.env-json }}
+        run: bash "$WORKFLOWS_DIR/scripts/release/env-json.sh"
       - name: Decode secrets
         env:
           ASC_KEY_P8_BASE64: ${{ secrets.ASC_KEY_P8_BASE64 }}
           ANDROID_UPLOAD_KEYSTORE_BASE64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}
           PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
-        run: bash "$RNW/scripts/release/decode-secrets.sh"
+        run: bash "$WORKFLOWS_DIR/scripts/release/decode-secrets.sh"
       - name: Fastlane lane
         env:
           PLATFORM: ${{ inputs.platform }}
           LANE: ${{ inputs.lane }}
           LANE_ARGS: ${{ inputs.lane-args }}
-          # The lanes read their binaries out of RNW_OUTPUT_DIR, but this
+          # The lanes read their binaries out of WORKFLOWS_OUTPUT_DIR, but this
           # workflow does not build anything: the .ipa/.aab it operates on were
-          # downloaded into RNW_ASSETS_DIR by the step above. Pointing
-          # RNW_OUTPUT_DIR at that directory is what makes `upload_internal`,
+          # downloaded into WORKFLOWS_ASSETS_DIR by the step above. Pointing
+          # WORKFLOWS_OUTPUT_DIR at that directory is what makes `upload_internal`,
           # `promote_beta` and `release_production` find them here - without it
-          # a lane looks in an empty $RNW_OUT and reports "no binary".
-          RNW_OUTPUT_DIR: ${{ env.RNW_ASSETS_DIR }}
-          BUILD_INFO_FILE: ${{ env.RNW_ASSETS_DIR }}/build-info.json
-          RELEASE_NOTES_STORE_FILE: ${{ env.RNW_ASSETS_DIR }}/notes-store.txt
-          STORE_NOTES_JSON: ${{ env.RNW_ASSETS_DIR }}/store-notes.json
+          # a lane looks in an empty $WORKFLOWS_OUT and reports "no binary".
+          WORKFLOWS_OUTPUT_DIR: ${{ env.WORKFLOWS_ASSETS_DIR }}
+          BUILD_INFO_FILE: ${{ env.WORKFLOWS_ASSETS_DIR }}/build-info.json
+          RELEASE_NOTES_STORE_FILE: ${{ env.WORKFLOWS_ASSETS_DIR }}/notes-store.txt
+          STORE_NOTES_JSON: ${{ env.WORKFLOWS_ASSETS_DIR }}/store-notes.json
           MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
           MATCH_GIT_URL: ${{ secrets.MATCH_GIT_URL }}
           MATCH_GIT_BASIC_AUTHORIZATION: ${{ secrets.MATCH_GIT_BASIC_AUTHORIZATION }}
@@ -244,4 +244,4 @@ jobs:
           APP_REVIEW_NOTES: ${{ secrets.APP_REVIEW_NOTES }}
         # LANE_ARGS reaches fastlane.sh through the environment, not as an
         # unquoted expansion here: the script splits it into arguments itself.
-        run: bash "$RNW/scripts/release/fastlane.sh" "$PLATFORM" "$LANE"
+        run: bash "$WORKFLOWS_DIR/scripts/release/fastlane.sh" "$PLATFORM" "$LANE"

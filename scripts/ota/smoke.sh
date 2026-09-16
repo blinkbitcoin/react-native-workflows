@@ -23,7 +23,7 @@ fi
 require_cmd curl
 
 platform="${OTA_SMOKE_PLATFORM:-ios}"
-body="${RUNNER_TEMP:-/tmp}/rnw-ota-manifest"
+body="${RUNNER_TEMP:-/tmp}/workflows-ota-manifest"
 trap 'rm -f "$body"' EXIT
 
 # Built as an array so an unset runtime version contributes no argument at all

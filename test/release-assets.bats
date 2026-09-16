@@ -10,45 +10,45 @@ setup() {
   STUB="$BATS_TEST_TMPDIR/bin"
   ASSETS="$BATS_TEST_TMPDIR/assets"
   mkdir -p "$STUB" "$ASSETS"
-  export RNW_TEST_LOG="$BATS_TEST_TMPDIR/gh.log"
-  export RNW_TEST_BODY="$BATS_TEST_TMPDIR/body.md"
-  export RNW_TEST_EXISTS="$BATS_TEST_TMPDIR/exists"
-  export RNW_TEST_SOURCE_EXISTS="$BATS_TEST_TMPDIR/source-exists"
-  export RNW_TEST_SOURCE_TAG="v1.2.3-build.42"
-  export RNW_TEST_SOURCE_ASSETS="$BATS_TEST_TMPDIR/source-assets"
+  export WORKFLOWS_TEST_LOG="$BATS_TEST_TMPDIR/gh.log"
+  export WORKFLOWS_TEST_BODY="$BATS_TEST_TMPDIR/body.md"
+  export WORKFLOWS_TEST_EXISTS="$BATS_TEST_TMPDIR/exists"
+  export WORKFLOWS_TEST_SOURCE_EXISTS="$BATS_TEST_TMPDIR/source-exists"
+  export WORKFLOWS_TEST_SOURCE_TAG="v1.2.3-build.42"
+  export WORKFLOWS_TEST_SOURCE_ASSETS="$BATS_TEST_TMPDIR/source-assets"
   # Touched by a test to make every `gh release view` fail the way a 403, a 429
   # or a dropped connection does: non-zero, but not a 404.
-  export RNW_TEST_LOOKUP_FAILS="$BATS_TEST_TMPDIR/lookup-fails"
-  mkdir -p "$RNW_TEST_SOURCE_ASSETS"
-  : > "$RNW_TEST_LOG"
-  printf 'Initial release notes.\n' > "$RNW_TEST_BODY"
+  export WORKFLOWS_TEST_LOOKUP_FAILS="$BATS_TEST_TMPDIR/lookup-fails"
+  mkdir -p "$WORKFLOWS_TEST_SOURCE_ASSETS"
+  : > "$WORKFLOWS_TEST_LOG"
+  printf 'Initial release notes.\n' > "$WORKFLOWS_TEST_BODY"
   cat > "$STUB/gh" <<'SH'
 #!/usr/bin/env bash
-printf '%s\n' "$*" >> "$RNW_TEST_LOG"
+printf '%s\n' "$*" >> "$WORKFLOWS_TEST_LOG"
 case "$1 $2" in
   "release view")
     case "$*" in
       *"--json url"*) printf 'https://example.test/releases/%s\n' "$3"; exit 0 ;;
-      *"--json body"*) cat "$RNW_TEST_BODY"; exit 0 ;;
+      *"--json body"*) cat "$WORKFLOWS_TEST_BODY"; exit 0 ;;
     esac
     # gh's real wording for a missing release, on stderr. The script matches the
     # message, not the status, because `gh release view` exits 1 for a 404, a
     # 403, a 429 and a dropped connection alike - and only the 404 is an answer.
-    if [ -f "$RNW_TEST_LOOKUP_FAILS" ]; then
+    if [ -f "$WORKFLOWS_TEST_LOOKUP_FAILS" ]; then
       echo "error connecting to api.github.com (HTTP 403)" >&2
       exit 1
     fi
-    if [ "$3" = "$RNW_TEST_SOURCE_TAG" ]; then
-      [ -f "$RNW_TEST_SOURCE_EXISTS" ] || { echo "release not found" >&2; exit 1; }
+    if [ "$3" = "$WORKFLOWS_TEST_SOURCE_TAG" ]; then
+      [ -f "$WORKFLOWS_TEST_SOURCE_EXISTS" ] || { echo "release not found" >&2; exit 1; }
       exit 0
     fi
-    [ -f "$RNW_TEST_EXISTS" ] || { echo "release not found" >&2; exit 1; }
+    [ -f "$WORKFLOWS_TEST_EXISTS" ] || { echo "release not found" >&2; exit 1; }
     exit 0
     ;;
-  "release create") : > "$RNW_TEST_EXISTS"; exit 0 ;;
+  "release create") : > "$WORKFLOWS_TEST_EXISTS"; exit 0 ;;
   "release download")
-    # Serves the source pre-release's assets out of $RNW_TEST_SOURCE_ASSETS.
-    [ -f "$RNW_TEST_SOURCE_EXISTS" ] || exit 1
+    # Serves the source pre-release's assets out of $WORKFLOWS_TEST_SOURCE_ASSETS.
+    [ -f "$WORKFLOWS_TEST_SOURCE_EXISTS" ] || exit 1
     dir=""
     prev=""
     for a in "$@"; do
@@ -56,16 +56,16 @@ case "$1 $2" in
       prev="$a"
     done
     [ -n "$dir" ] || exit 1
-    cp "$RNW_TEST_SOURCE_ASSETS"/* "$dir"/ 2>/dev/null
+    cp "$WORKFLOWS_TEST_SOURCE_ASSETS"/* "$dir"/ 2>/dev/null
     exit 0
     ;;
-  "release delete") rm -f "$RNW_TEST_SOURCE_EXISTS"; exit 0 ;;
+  "release delete") rm -f "$WORKFLOWS_TEST_SOURCE_EXISTS"; exit 0 ;;
   "release edit")
     # Mirror --notes-file into the stored body, so a second `append` sees the
     # body the first one wrote - which is the whole point of the re-run test.
     prev=""
     for a in "$@"; do
-      [ "$prev" = "--notes-file" ] && cp "$a" "$RNW_TEST_BODY"
+      [ "$prev" = "--notes-file" ] && cp "$a" "$WORKFLOWS_TEST_BODY"
       prev="$a"
     done
     exit 0
@@ -75,16 +75,16 @@ exit 0
 SH
   chmod +x "$STUB/gh"
   export PATH="$STUB:$PATH"
-  export RNW_OUT="$BATS_TEST_TMPDIR/out" RNW_ASSETS_DIR="$ASSETS" RUNNER_TEMP="$BATS_TEST_TMPDIR/tmp"
+  export WORKFLOWS_OUT="$BATS_TEST_TMPDIR/out" WORKFLOWS_ASSETS_DIR="$ASSETS" RUNNER_TEMP="$BATS_TEST_TMPDIR/tmp"
   mkdir -p "$RUNNER_TEMP"
   unset GITHUB_OUTPUT TITLE TARGET_SHA NOTES_FILE APPEND_TITLE FROM_TAG DELETE_SOURCE
 }
 
 source_release() {
-  : > "$RNW_TEST_SOURCE_EXISTS"
-  printf 'built ipa\n' > "$RNW_TEST_SOURCE_ASSETS/app.ipa"
-  printf 'built aab\n' > "$RNW_TEST_SOURCE_ASSETS/app.aab"
-  printf 'stale sums\n' > "$RNW_TEST_SOURCE_ASSETS/SHA256SUMS"
+  : > "$WORKFLOWS_TEST_SOURCE_EXISTS"
+  printf 'built ipa\n' > "$WORKFLOWS_TEST_SOURCE_ASSETS/app.ipa"
+  printf 'built aab\n' > "$WORKFLOWS_TEST_SOURCE_ASSETS/app.aab"
+  printf 'stale sums\n' > "$WORKFLOWS_TEST_SOURCE_ASSETS/SHA256SUMS"
 }
 
 assets() {
@@ -99,9 +99,9 @@ release() { run bash "$REPO_ROOT/scripts/release/release-assets.sh" "$@"; }
   assets
   TAG=v1.2.3 TITLE='Release 1.2.3' TARGET_SHA=deadbeef release create-prerelease
   [ "$status" -eq 0 ] || fail "exited $status: $output"
-  grep -q -- "release create v1.2.3 --prerelease .*--title Release 1.2.3.*--target deadbeef" "$RNW_TEST_LOG" \
-    || fail "unexpected create argv: $(cat "$RNW_TEST_LOG")"
-  upload="$(grep '^release upload' "$RNW_TEST_LOG")"
+  grep -q -- "release create v1.2.3 --prerelease .*--title Release 1.2.3.*--target deadbeef" "$WORKFLOWS_TEST_LOG" \
+    || fail "unexpected create argv: $(cat "$WORKFLOWS_TEST_LOG")"
+  upload="$(grep '^release upload' "$WORKFLOWS_TEST_LOG")"
   contains "$upload" "build-info.json" || fail "build-info.json was not uploaded: $upload"
   contains "$upload" "app.ipa" || fail "app.ipa was not uploaded: $upload"
   contains "$upload" "SHA256SUMS" || fail "SHA256SUMS was not uploaded: $upload"
@@ -121,37 +121,37 @@ release() { run bash "$REPO_ROOT/scripts/release/release-assets.sh" "$@"; }
 }
 
 @test "promote leaves the release out of latest, latest marks it" {
-  : > "$RNW_TEST_EXISTS"
+  : > "$WORKFLOWS_TEST_EXISTS"
   # Both modes now refuse to publish an empty release, and this case is about
   # the --latest flags, so give it something to publish.
   printf 'ipa\n' > "$ASSETS/app.ipa"
   TAG=v1.2.3 release promote
   [ "$status" -eq 0 ] || fail "promote exited $status: $output"
-  grep -q -- "release edit v1.2.3 --prerelease=false --latest=false" "$RNW_TEST_LOG" \
-    || fail "unexpected promote argv: $(cat "$RNW_TEST_LOG")"
-  : > "$RNW_TEST_LOG"
+  grep -q -- "release edit v1.2.3 --prerelease=false --latest=false" "$WORKFLOWS_TEST_LOG" \
+    || fail "unexpected promote argv: $(cat "$WORKFLOWS_TEST_LOG")"
+  : > "$WORKFLOWS_TEST_LOG"
   TAG=v1.2.3 release latest
   [ "$status" -eq 0 ] || fail "latest exited $status: $output"
-  grep -q -- "release edit v1.2.3 --prerelease=false --latest$" "$RNW_TEST_LOG" \
-    || fail "unexpected latest argv: $(cat "$RNW_TEST_LOG")"
+  grep -q -- "release edit v1.2.3 --prerelease=false --latest$" "$WORKFLOWS_TEST_LOG" \
+    || fail "unexpected latest argv: $(cat "$WORKFLOWS_TEST_LOG")"
 }
 
 @test "promote on a release that does not exist is fatal" {
-  rm -f "$RNW_TEST_EXISTS"
+  rm -f "$WORKFLOWS_TEST_EXISTS"
   TAG=v9.9.9 release promote
   [ "$status" -ne 0 ] || fail "promoted a release that does not exist: $output"
   contains "$output" "does not exist" || fail "unexpected message: $output"
 }
 
 @test "promote carries the source pre-release's assets forward and regenerates SHA256SUMS" {
-  : > "$RNW_TEST_EXISTS"
+  : > "$WORKFLOWS_TEST_EXISTS"
   source_release
   printf 'info\n' > "$ASSETS/build-info.json"
-  TAG=v1.2.3 FROM_TAG="$RNW_TEST_SOURCE_TAG" release promote
+  TAG=v1.2.3 FROM_TAG="$WORKFLOWS_TEST_SOURCE_TAG" release promote
   [ "$status" -eq 0 ] || fail "exited $status: $output"
-  grep -q "^release download $RNW_TEST_SOURCE_TAG .*--clobber" "$RNW_TEST_LOG" \
-    || fail "the source assets were not downloaded: $(cat "$RNW_TEST_LOG")"
-  upload="$(grep '^release upload v1.2.3' "$RNW_TEST_LOG")"
+  grep -q "^release download $WORKFLOWS_TEST_SOURCE_TAG .*--clobber" "$WORKFLOWS_TEST_LOG" \
+    || fail "the source assets were not downloaded: $(cat "$WORKFLOWS_TEST_LOG")"
+  upload="$(grep '^release upload v1.2.3' "$WORKFLOWS_TEST_LOG")"
   contains "$upload" "app.ipa" || fail "the carried-forward ipa was not uploaded: $upload"
   contains "$upload" "app.aab" || fail "the carried-forward aab was not uploaded: $upload"
   contains "$upload" "build-info.json" || fail "this run's own asset was dropped: $upload"
@@ -164,120 +164,120 @@ release() { run bash "$REPO_ROOT/scripts/release/release-assets.sh" "$@"; }
   grep -q "^$expected  app.ipa$" "$ASSETS/SHA256SUMS" || fail "wrong digest for the carried ipa"
 }
 
-# N1: the download used to land in $RNW_ASSETS_DIR with --clobber, so the source
+# N1: the download used to land in $WORKFLOWS_ASSETS_DIR with --clobber, so the source
 # pre-release's build-info.json and notes (an *earlier* stage's) replaced this
 # run's - on the release record and in the OTA gate's baseline.
 @test "this run's release-meta wins over the source pre-release's copy" {
-  : > "$RNW_TEST_EXISTS"
+  : > "$WORKFLOWS_TEST_EXISTS"
   source_release
   printf 'this-run\n' > "$ASSETS/build-info.json"
   printf 'this-run notes\n' > "$ASSETS/notes.md"
-  printf 'source\n' > "$RNW_TEST_SOURCE_ASSETS/build-info.json"
-  printf 'source notes\n' > "$RNW_TEST_SOURCE_ASSETS/notes.md"
-  TAG=v1.2.3 FROM_TAG="$RNW_TEST_SOURCE_TAG" release promote
+  printf 'source\n' > "$WORKFLOWS_TEST_SOURCE_ASSETS/build-info.json"
+  printf 'source notes\n' > "$WORKFLOWS_TEST_SOURCE_ASSETS/notes.md"
+  TAG=v1.2.3 FROM_TAG="$WORKFLOWS_TEST_SOURCE_TAG" release promote
   [ "$status" -eq 0 ] || fail "exited $status: $output"
   [ "$(cat "$ASSETS/build-info.json")" = "this-run" ] \
     || fail "the source build-info.json overwrote this run's: $(cat "$ASSETS/build-info.json")"
   [ "$(cat "$ASSETS/notes.md")" = "this-run notes" ] \
     || fail "the source notes overwrote this run's: $(cat "$ASSETS/notes.md")"
   # The binaries this run does not have still come across.
-  upload="$(grep '^release upload v1.2.3' "$RNW_TEST_LOG")"
+  upload="$(grep '^release upload v1.2.3' "$WORKFLOWS_TEST_LOG")"
   contains "$upload" "app.aab" || fail "the carried-forward aab was dropped: $upload"
 }
 
 # N2: with no carried asset, promote used to take the release out of pre-release
 # with nothing attached and then (with delete-source) delete the tested bytes.
 @test "promote refuses a from-tag release that carries no assets" {
-  : > "$RNW_TEST_EXISTS"
-  : > "$RNW_TEST_SOURCE_EXISTS"
-  rm -f "$RNW_TEST_SOURCE_ASSETS"/*
+  : > "$WORKFLOWS_TEST_EXISTS"
+  : > "$WORKFLOWS_TEST_SOURCE_EXISTS"
+  rm -f "$WORKFLOWS_TEST_SOURCE_ASSETS"/*
   printf 'this-run\n' > "$ASSETS/build-info.json"
-  TAG=v1.2.3 FROM_TAG="$RNW_TEST_SOURCE_TAG" DELETE_SOURCE=true release promote
+  TAG=v1.2.3 FROM_TAG="$WORKFLOWS_TEST_SOURCE_TAG" DELETE_SOURCE=true release promote
   [ "$status" -ne 0 ] || fail "promoted an empty source release: $output"
   contains "$output" "refusing to promote an empty release" || fail "unexpected message: $output"
-  ! grep -q '^release delete' "$RNW_TEST_LOG" || fail "deleted the source anyway: $(cat "$RNW_TEST_LOG")"
-  ! grep -q '^release upload' "$RNW_TEST_LOG" || fail "uploaded before the check: $(cat "$RNW_TEST_LOG")"
-  ! grep -q -- '--prerelease=false' "$RNW_TEST_LOG" || fail "took the release out of pre-release anyway"
-  [ -f "$RNW_TEST_SOURCE_EXISTS" ] || fail "the source pre-release is gone"
+  ! grep -q '^release delete' "$WORKFLOWS_TEST_LOG" || fail "deleted the source anyway: $(cat "$WORKFLOWS_TEST_LOG")"
+  ! grep -q '^release upload' "$WORKFLOWS_TEST_LOG" || fail "uploaded before the check: $(cat "$WORKFLOWS_TEST_LOG")"
+  ! grep -q -- '--prerelease=false' "$WORKFLOWS_TEST_LOG" || fail "took the release out of pre-release anyway"
+  [ -f "$WORKFLOWS_TEST_SOURCE_EXISTS" ] || fail "the source pre-release is gone"
 }
 
 @test "promote does not delete the source unless asked" {
-  : > "$RNW_TEST_EXISTS"
+  : > "$WORKFLOWS_TEST_EXISTS"
   source_release
-  TAG=v1.2.3 FROM_TAG="$RNW_TEST_SOURCE_TAG" release promote
+  TAG=v1.2.3 FROM_TAG="$WORKFLOWS_TEST_SOURCE_TAG" release promote
   [ "$status" -eq 0 ] || fail "exited $status: $output"
-  ! grep -q '^release delete' "$RNW_TEST_LOG" || fail "deleted the source without delete-source"
-  [ -f "$RNW_TEST_SOURCE_EXISTS" ] || fail "the source pre-release is gone"
+  ! grep -q '^release delete' "$WORKFLOWS_TEST_LOG" || fail "deleted the source without delete-source"
+  [ -f "$WORKFLOWS_TEST_SOURCE_EXISTS" ] || fail "the source pre-release is gone"
 }
 
 @test "promote with delete-source removes the pre-release and its tag, after the upload" {
-  : > "$RNW_TEST_EXISTS"
+  : > "$WORKFLOWS_TEST_EXISTS"
   source_release
-  TAG=v1.2.3 FROM_TAG="$RNW_TEST_SOURCE_TAG" DELETE_SOURCE=true release promote
+  TAG=v1.2.3 FROM_TAG="$WORKFLOWS_TEST_SOURCE_TAG" DELETE_SOURCE=true release promote
   [ "$status" -eq 0 ] || fail "exited $status: $output"
-  grep -q "^release delete $RNW_TEST_SOURCE_TAG --yes --cleanup-tag$" "$RNW_TEST_LOG" \
-    || fail "the source was not deleted with its tag: $(cat "$RNW_TEST_LOG")"
+  grep -q "^release delete $WORKFLOWS_TEST_SOURCE_TAG --yes --cleanup-tag$" "$WORKFLOWS_TEST_LOG" \
+    || fail "the source was not deleted with its tag: $(cat "$WORKFLOWS_TEST_LOG")"
   # Ordering is the safety property: deleting first would leave no copy of the
   # binaries anywhere if the upload then failed.
-  upload_line="$(grep -n '^release upload' "$RNW_TEST_LOG" | head -1 | cut -d: -f1)"
-  delete_line="$(grep -n '^release delete' "$RNW_TEST_LOG" | head -1 | cut -d: -f1)"
+  upload_line="$(grep -n '^release upload' "$WORKFLOWS_TEST_LOG" | head -1 | cut -d: -f1)"
+  delete_line="$(grep -n '^release delete' "$WORKFLOWS_TEST_LOG" | head -1 | cut -d: -f1)"
   [ "$upload_line" -lt "$delete_line" ] || fail "the source was deleted before the upload"
 }
 
 @test "re-running a promote whose source is already deleted still succeeds" {
-  : > "$RNW_TEST_EXISTS"
+  : > "$WORKFLOWS_TEST_EXISTS"
   source_release
-  TAG=v1.2.3 FROM_TAG="$RNW_TEST_SOURCE_TAG" DELETE_SOURCE=true release promote
+  TAG=v1.2.3 FROM_TAG="$WORKFLOWS_TEST_SOURCE_TAG" DELETE_SOURCE=true release promote
   [ "$status" -eq 0 ] || fail "first promote exited $status: $output"
-  first_upload="$(grep '^release upload v1.2.3' "$RNW_TEST_LOG")"
-  : > "$RNW_TEST_LOG"
-  TAG=v1.2.3 FROM_TAG="$RNW_TEST_SOURCE_TAG" DELETE_SOURCE=true release promote
+  first_upload="$(grep '^release upload v1.2.3' "$WORKFLOWS_TEST_LOG")"
+  : > "$WORKFLOWS_TEST_LOG"
+  TAG=v1.2.3 FROM_TAG="$WORKFLOWS_TEST_SOURCE_TAG" DELETE_SOURCE=true release promote
   [ "$status" -eq 0 ] || fail "re-run exited $status: $output"
   contains "$output" "already promoted and deleted" || fail "unexpected message on re-run: $output"
-  [ "$first_upload" = "$(grep '^release upload v1.2.3' "$RNW_TEST_LOG")" ] \
+  [ "$first_upload" = "$(grep '^release upload v1.2.3' "$WORKFLOWS_TEST_LOG")" ] \
     || fail "the re-run uploaded a different asset set"
 }
 
 @test "append adds the section under its heading" {
-  : > "$RNW_TEST_EXISTS"
+  : > "$WORKFLOWS_TEST_EXISTS"
   printf -- '- rolled out to 10%%\n' > "$BATS_TEST_TMPDIR/section.md"
   TAG=v1.2.3 NOTES_FILE="$BATS_TEST_TMPDIR/section.md" APPEND_TITLE='Store rollout' release append
   [ "$status" -eq 0 ] || fail "exited $status: $output"
-  contains "$(cat "$RNW_TEST_BODY")" "Initial release notes." || fail "the existing body was dropped"
-  contains "$(cat "$RNW_TEST_BODY")" "## Store rollout" || fail "no heading in: $(cat "$RNW_TEST_BODY")"
-  contains "$(cat "$RNW_TEST_BODY")" "rolled out to 10%" || fail "no section body in: $(cat "$RNW_TEST_BODY")"
+  contains "$(cat "$WORKFLOWS_TEST_BODY")" "Initial release notes." || fail "the existing body was dropped"
+  contains "$(cat "$WORKFLOWS_TEST_BODY")" "## Store rollout" || fail "no heading in: $(cat "$WORKFLOWS_TEST_BODY")"
+  contains "$(cat "$WORKFLOWS_TEST_BODY")" "rolled out to 10%" || fail "no section body in: $(cat "$WORKFLOWS_TEST_BODY")"
 }
 
 @test "append is idempotent - a re-run yields a byte-identical body" {
-  : > "$RNW_TEST_EXISTS"
+  : > "$WORKFLOWS_TEST_EXISTS"
   printf -- '- rolled out to 10%%\n' > "$BATS_TEST_TMPDIR/section.md"
   TAG=v1.2.3 NOTES_FILE="$BATS_TEST_TMPDIR/section.md" APPEND_TITLE='Store rollout' release append
   [ "$status" -eq 0 ] || fail "first append exited $status: $output"
-  first="$(cat "$RNW_TEST_BODY")"
+  first="$(cat "$WORKFLOWS_TEST_BODY")"
   TAG=v1.2.3 NOTES_FILE="$BATS_TEST_TMPDIR/section.md" APPEND_TITLE='Store rollout' release append
   [ "$status" -eq 0 ] || fail "second append exited $status: $output"
-  second="$(cat "$RNW_TEST_BODY")"
+  second="$(cat "$WORKFLOWS_TEST_BODY")"
   [ "$first" = "$second" ] || fail "re-running append changed the body:
 --- first ---
 $first
 --- second ---
 $second"
-  [ "$(grep -c '^## Store rollout$' "$RNW_TEST_BODY")" -eq 1 ] \
-    || fail "the section is duplicated: $(cat "$RNW_TEST_BODY")"
+  [ "$(grep -c '^## Store rollout$' "$WORKFLOWS_TEST_BODY")" -eq 1 ] \
+    || fail "the section is duplicated: $(cat "$WORKFLOWS_TEST_BODY")"
 }
 
 @test "a re-run with different content replaces the section rather than stacking it" {
-  : > "$RNW_TEST_EXISTS"
+  : > "$WORKFLOWS_TEST_EXISTS"
   printf -- '- rolled out to 10%%\n' > "$BATS_TEST_TMPDIR/section.md"
   TAG=v1.2.3 NOTES_FILE="$BATS_TEST_TMPDIR/section.md" APPEND_TITLE='Store rollout' release append
   [ "$status" -eq 0 ] || fail "first append exited $status: $output"
   printf -- '- rolled out to 100%%\n' > "$BATS_TEST_TMPDIR/section.md"
   TAG=v1.2.3 NOTES_FILE="$BATS_TEST_TMPDIR/section.md" APPEND_TITLE='Store rollout' release append
   [ "$status" -eq 0 ] || fail "second append exited $status: $output"
-  body="$(cat "$RNW_TEST_BODY")"
+  body="$(cat "$WORKFLOWS_TEST_BODY")"
   contains "$body" "rolled out to 100%" || fail "the new content is missing: $body"
   not_contains "$body" "rolled out to 10%\n" || fail "the stale content survived: $body"
-  [ "$(grep -c '^## Store rollout$' "$RNW_TEST_BODY")" -eq 1 ] || fail "the section is duplicated: $body"
+  [ "$(grep -c '^## Store rollout$' "$WORKFLOWS_TEST_BODY")" -eq 1 ] || fail "the section is duplicated: $body"
 }
 
 # The regression U1 was: the strip ran from the heading to the next `## `, so a
@@ -286,7 +286,7 @@ $second"
 # writes `## <version> (<build>)`, and a release-please body starts with
 # `## [x.y.z](...)`.
 @test "append is idempotent when the notes file itself starts with a ## heading" {
-  : > "$RNW_TEST_EXISTS"
+  : > "$WORKFLOWS_TEST_EXISTS"
   cat > "$BATS_TEST_TMPDIR/section.md" <<'EOF'
 ## [1.2.3](https://example.test/compare/v1.2.2...v1.2.3) (2026-09-06)
 
@@ -300,25 +300,25 @@ $second"
 EOF
   TAG=v1.2.3 NOTES_FILE="$BATS_TEST_TMPDIR/section.md" APPEND_TITLE='Release notes' release append
   [ "$status" -eq 0 ] || fail "first append exited $status: $output"
-  first="$(cat "$RNW_TEST_BODY")"
+  first="$(cat "$WORKFLOWS_TEST_BODY")"
   TAG=v1.2.3 NOTES_FILE="$BATS_TEST_TMPDIR/section.md" APPEND_TITLE='Release notes' release append
   [ "$status" -eq 0 ] || fail "second append exited $status: $output"
-  second="$(cat "$RNW_TEST_BODY")"
+  second="$(cat "$WORKFLOWS_TEST_BODY")"
   [ "$first" = "$second" ] || fail "re-running append changed the body:
 --- first ($(printf '%s' "$first" | wc -l | tr -d ' ') lines) ---
 $first
 --- second ($(printf '%s' "$second" | wc -l | tr -d ' ') lines) ---
 $second"
-  [ "$(grep -c '^- a feature$' "$RNW_TEST_BODY")" -eq 1 ] \
-    || fail "the notes body is duplicated: $(cat "$RNW_TEST_BODY")"
-  [ "$(grep -c '^### Bug Fixes$' "$RNW_TEST_BODY")" -eq 1 ] \
-    || fail "a subsection survived the strip: $(cat "$RNW_TEST_BODY")"
+  [ "$(grep -c '^- a feature$' "$WORKFLOWS_TEST_BODY")" -eq 1 ] \
+    || fail "the notes body is duplicated: $(cat "$WORKFLOWS_TEST_BODY")"
+  [ "$(grep -c '^### Bug Fixes$' "$WORKFLOWS_TEST_BODY")" -eq 1 ] \
+    || fail "a subsection survived the strip: $(cat "$WORKFLOWS_TEST_BODY")"
 }
 
 @test "append migrates a body written before the markers existed, without stacking" {
-  : > "$RNW_TEST_EXISTS"
+  : > "$WORKFLOWS_TEST_EXISTS"
   # Exactly what the pre-marker version of this script produced.
-  cat > "$RNW_TEST_BODY" <<'EOF'
+  cat > "$WORKFLOWS_TEST_BODY" <<'EOF'
 Initial release notes.
 
 ## Store rollout
@@ -328,16 +328,16 @@ EOF
   printf -- '- rolled out to 100%%\n' > "$BATS_TEST_TMPDIR/section.md"
   TAG=v1.2.3 NOTES_FILE="$BATS_TEST_TMPDIR/section.md" APPEND_TITLE='Store rollout' release append
   [ "$status" -eq 0 ] || fail "migration append exited $status: $output"
-  [ "$(grep -c '^## Store rollout$' "$RNW_TEST_BODY")" -eq 1 ] \
-    || fail "the legacy section was not replaced: $(cat "$RNW_TEST_BODY")"
-  not_contains "$(cat "$RNW_TEST_BODY")" "rolled out to 10%
-" || fail "the legacy content survived: $(cat "$RNW_TEST_BODY")"
-  grep -qxF '<!-- rnw:append:Store rollout -->' "$RNW_TEST_BODY" \
-    || fail "the migrated body carries no marker: $(cat "$RNW_TEST_BODY")"
-  first="$(cat "$RNW_TEST_BODY")"
+  [ "$(grep -c '^## Store rollout$' "$WORKFLOWS_TEST_BODY")" -eq 1 ] \
+    || fail "the legacy section was not replaced: $(cat "$WORKFLOWS_TEST_BODY")"
+  not_contains "$(cat "$WORKFLOWS_TEST_BODY")" "rolled out to 10%
+" || fail "the legacy content survived: $(cat "$WORKFLOWS_TEST_BODY")"
+  grep -qxF '<!-- workflows:append:Store rollout -->' "$WORKFLOWS_TEST_BODY" \
+    || fail "the migrated body carries no marker: $(cat "$WORKFLOWS_TEST_BODY")"
+  first="$(cat "$WORKFLOWS_TEST_BODY")"
   TAG=v1.2.3 NOTES_FILE="$BATS_TEST_TMPDIR/section.md" APPEND_TITLE='Store rollout' release append
   [ "$status" -eq 0 ] || fail "second append exited $status: $output"
-  [ "$first" = "$(cat "$RNW_TEST_BODY")" ] || fail "the run after migration was not idempotent"
+  [ "$first" = "$(cat "$WORKFLOWS_TEST_BODY")" ] || fail "the run after migration was not idempotent"
 }
 
 # append runs after a store action, from a job with no binaries staged: an
@@ -345,20 +345,20 @@ EOF
 # partial directory, replacing the checksum file that describes the release's
 # real assets.
 @test "append touches the body and nothing else" {
-  : > "$RNW_TEST_EXISTS"
+  : > "$WORKFLOWS_TEST_EXISTS"
   assets
   printf 'real sums\n' > "$ASSETS/SHA256SUMS"
   printf -- '- rolled out to 10%%\n' > "$BATS_TEST_TMPDIR/section.md"
   TAG=v1.2.3 NOTES_FILE="$BATS_TEST_TMPDIR/section.md" APPEND_TITLE='Store rollout' release append
   [ "$status" -eq 0 ] || fail "exited $status: $output"
-  ! grep -q '^release upload' "$RNW_TEST_LOG" || fail "append uploaded assets: $(cat "$RNW_TEST_LOG")"
+  ! grep -q '^release upload' "$WORKFLOWS_TEST_LOG" || fail "append uploaded assets: $(cat "$WORKFLOWS_TEST_LOG")"
   [ "$(cat "$ASSETS/SHA256SUMS")" = "real sums" ] \
     || fail "append regenerated SHA256SUMS: $(cat "$ASSETS/SHA256SUMS")"
-  contains "$(cat "$RNW_TEST_BODY")" "rolled out to 10%" || fail "the body was not updated"
+  contains "$(cat "$WORKFLOWS_TEST_BODY")" "rolled out to 10%" || fail "the body was not updated"
 }
 
 @test "append without a notes file is fatal" {
-  : > "$RNW_TEST_EXISTS"
+  : > "$WORKFLOWS_TEST_EXISTS"
   TAG=v1.2.3 release append
   [ "$status" -ne 0 ] || fail "appended nothing successfully: $output"
   contains "$output" "NOTES_FILE" || fail "unexpected message: $output"
@@ -376,7 +376,7 @@ EOF
   TAG=v1.2.3 release create-prerelease
   [ "$status" -eq 0 ] || fail "exited $status with an empty assets dir: $output"
   contains "$output" "no release assets found" || fail "unexpected message: $output"
-  ! grep -q '^release upload' "$RNW_TEST_LOG" || fail "uploaded with nothing to upload"
+  ! grep -q '^release upload' "$WORKFLOWS_TEST_LOG" || fail "uploaded with nothing to upload"
 }
 
 @test "publishing an empty release is fatal, not a shrug" {
@@ -385,15 +385,15 @@ EOF
   # DELETE_SOURCE the tested bytes are deleted right after. A guard for this
   # existed but sat inside the carry-forward branch, so every path that skipped
   # that branch walked straight past it.
-  : > "$RNW_TEST_EXISTS"
+  : > "$WORKFLOWS_TEST_EXISTS"
   TAG=v1.2.3 release latest
   [ "$status" -ne 0 ] || fail "published an empty release: $output"
   contains "$output" "refusing to publish" || fail "unexpected message: $output"
-  ! grep -q '^release upload' "$RNW_TEST_LOG" || fail "uploaded anyway"
+  ! grep -q '^release upload' "$WORKFLOWS_TEST_LOG" || fail "uploaded anyway"
 }
 
 @test "promoting an empty release is fatal even with no FROM_TAG at all" {
-  : > "$RNW_TEST_EXISTS"
+  : > "$WORKFLOWS_TEST_EXISTS"
   TAG=v1.2.3 release promote
   [ "$status" -ne 0 ] || fail "promoted an empty release: $output"
   contains "$output" "refusing to publish" || fail "unexpected message: $output"
@@ -407,18 +407,18 @@ EOF
 # empty-release guard that lived inside the other branch, and publish.
 
 @test "a failed FROM_TAG lookup stops the promote instead of guessing" {
-  : > "$RNW_TEST_EXISTS"
-  : > "$RNW_TEST_SOURCE_EXISTS"
-  cp "$RNW_TEST_BODY" "$RNW_TEST_SOURCE_ASSETS/notes.md"
-  : > "$RNW_TEST_LOOKUP_FAILS"
-  TAG=v1.2.3 FROM_TAG="$RNW_TEST_SOURCE_TAG" release promote
+  : > "$WORKFLOWS_TEST_EXISTS"
+  : > "$WORKFLOWS_TEST_SOURCE_EXISTS"
+  cp "$WORKFLOWS_TEST_BODY" "$WORKFLOWS_TEST_SOURCE_ASSETS/notes.md"
+  : > "$WORKFLOWS_TEST_LOOKUP_FAILS"
+  TAG=v1.2.3 FROM_TAG="$WORKFLOWS_TEST_SOURCE_TAG" release promote
   [ "$status" -ne 0 ] || fail "a 403 was read as 'the source is gone': $output"
   contains "$output" "refusing" || fail "unexpected message: $output"
-  ! grep -q '^release edit' "$RNW_TEST_LOG" || fail "took the release out of pre-release on a guess"
+  ! grep -q '^release edit' "$WORKFLOWS_TEST_LOG" || fail "took the release out of pre-release on a guess"
 }
 
 @test "a failed lookup of the target release stops every mode" {
-  : > "$RNW_TEST_LOOKUP_FAILS"
+  : > "$WORKFLOWS_TEST_LOOKUP_FAILS"
   for mode in create-prerelease promote latest append; do
     TAG=v1.2.3 release "$mode"
     [ "$status" -ne 0 ] || fail "$mode continued after a failed lookup: $output"
@@ -430,5 +430,5 @@ EOF
   # on telling those apart, and so does the promote re-run path.
   TAG=v1.2.3 release create-prerelease
   [ "$status" -eq 0 ] || fail "a missing release was treated as a lookup failure: $output"
-  grep -q '^release create' "$RNW_TEST_LOG" || fail "it did not create the release: $(cat "$RNW_TEST_LOG")"
+  grep -q '^release create' "$WORKFLOWS_TEST_LOG" || fail "it did not create the release: $(cat "$WORKFLOWS_TEST_LOG")"
 }

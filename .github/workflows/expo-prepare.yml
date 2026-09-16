@@ -105,7 +105,7 @@ jobs:
       actions: read
     env:
       WORKING_DIRECTORY: ${{ inputs.working-directory }}
-      RNW_STAGE: ${{ inputs.stage }}
+      WORKFLOWS_STAGE: ${{ inputs.stage }}
     outputs:
       version: ${{ steps.version.outputs.version }}
       build-number: ${{ steps.version.outputs.build-number }}
@@ -131,15 +131,15 @@ jobs:
         with:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
-          path: .rnw
+          path: .workflows
           persist-credentials: false
-      - name: Publish RNW environment
-        run: bash ".rnw/scripts/release/env-publish.sh"
+      - name: Publish WORKFLOWS_DIR environment
+        run: bash ".workflows/scripts/release/env-publish.sh"
       - name: Resolve target sha
         id: sha
         env:
           RELEASE_TAG: ${{ inputs.release-tag }}
-        run: bash ".rnw/scripts/release/target-sha.sh" "$RELEASE_TAG"
+        run: bash ".workflows/scripts/release/target-sha.sh" "$RELEASE_TAG"
       - name: Require a green upstream run
         if: ${{ inputs.require-green-workflow != '' }}
         env:
@@ -148,25 +148,25 @@ jobs:
           REQUIRE_GREEN_WORKFLOW: ${{ inputs.require-green-workflow }}
           # The resolved target sha, not github.sha - see target-sha.sh.
           REQUIRE_GREEN_SHA: ${{ steps.sha.outputs.sha }}
-        run: bash ".rnw/scripts/release/require-green-run.sh" "$REQUIRE_GREEN_WORKFLOW" "$REQUIRE_GREEN_SHA"
+        run: bash ".workflows/scripts/release/require-green-run.sh" "$REQUIRE_GREEN_WORKFLOW" "$REQUIRE_GREEN_SHA"
       - name: Setup
-        uses: ./.rnw/.github/actions/setup
+        uses: ./.workflows/.github/actions/setup
         with:
           working-directory: ${{ inputs.working-directory }}
       - name: Publish build-env
         env:
-          RNW_BUILD_ENV: ${{ inputs.build-env }}
-        run: bash "$RNW/scripts/release/build-env.sh"
+          WORKFLOWS_BUILD_ENV: ${{ inputs.build-env }}
+        run: bash "$WORKFLOWS_DIR/scripts/release/build-env.sh"
       - name: Resolve version
         id: version
         env:
           BUILD_NUMBER_OFFSET: ${{ inputs.build-number-offset }}
           RELEASE_PR_TITLE: ${{ github.event.pull_request.title }}
           GH_TOKEN: ${{ github.token }}
-        run: bash "$RNW/scripts/release/resolve-version.sh"
+        run: bash "$WORKFLOWS_DIR/scripts/release/resolve-version.sh"
       - name: Fingerprint
         id: fingerprint
-        run: bash "$RNW/scripts/release/fingerprint.sh"
+        run: bash "$WORKFLOWS_DIR/scripts/release/fingerprint.sh"
       # APP_VERSION / APP_BUILD_NUMBER are passed explicitly from the Resolve
       # version step's outputs rather than picked up from $GITHUB_ENV. The script
       # that resolves them has no business also publishing them into the job's
@@ -178,7 +178,7 @@ jobs:
         env:
           APP_VERSION: ${{ steps.version.outputs.version }}
           APP_BUILD_NUMBER: ${{ steps.version.outputs.build-number }}
-        run: bash "$RNW/scripts/release/build-info.sh"
+        run: bash "$WORKFLOWS_DIR/scripts/release/build-info.sh"
       # Before the notes step, and only when asked: it publishes RELEASE_BODY_FILE
       # into $GITHUB_ENV, which the notes step below picks up in preference to
       # its own release-body-file input.
@@ -188,7 +188,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ inputs.repository || github.repository }}
           RELEASE_TAG: ${{ inputs.release-tag }}
-        run: bash "$RNW/scripts/release/release-body.sh" "$RELEASE_TAG"
+        run: bash "$WORKFLOWS_DIR/scripts/release/release-body.sh" "$RELEASE_TAG"
       - name: Release notes
         env:
           APP_VERSION: ${{ steps.version.outputs.version }}
@@ -203,12 +203,12 @@ jobs:
           # the job env, so the `||` is what makes the input the fallback rather
           # than the override.
           RELEASE_BODY_FILE: ${{ env.RELEASE_BODY_FILE || inputs.release-body-file }}
-        run: bash "$RNW/scripts/release/notes.sh"
+        run: bash "$WORKFLOWS_DIR/scripts/release/notes.sh"
       - name: Upload release-meta
         uses: actions/upload-artifact@v7
         with:
           name: ${{ inputs.release-meta-artifact }}
-          path: ${{ env.RNW_RELEASE_META_DIR }}
+          path: ${{ env.WORKFLOWS_RELEASE_META_DIR }}
           retention-days: 30
           overwrite: true
           if-no-files-found: error

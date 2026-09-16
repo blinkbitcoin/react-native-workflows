@@ -47,9 +47,9 @@ and the E2E mock-API hooks — is [the consumer guide's
 template passes `release-checks: true`), so only its **trigger block** is held
 to the fixture — that is the half a second docs rule would creep back into.
 
-Every job checks your app out, then checks *this repo* out into `.rnw/` at
+Every job checks your app out, then checks *this repo* out into `.workflows/` at
 the exact ref/sha that defines the running job, then runs its scripts through
-`$RNW` — you never reference anything under `scripts/` or
+`$WORKFLOWS_DIR` — you never reference anything under `scripts/` or
 `.github/actions/` directly. Full caller examples (`web.yml`, `pr-closed.yml`,
 `pr-title.yml`) and every input/output/secret table:
 [docs/consumer-guide.md](docs/consumer-guide.md).
@@ -105,20 +105,20 @@ that needs a real GitHub remote, in order:
    ship the `scripts/e2e/ci-mock-api-{up,down}.sh` hooks the smoke `e2e` job
    wires in — the template does. Confirm all three jobs (`checks`, `unit`,
    `e2e`) go green before relying on the weekly cron.
-4. **Verify the `.rnw` self-checkout on that first run.** Every job checks
-   this repo out into `.rnw/` via `repository: ${{ job.workflow_repository }}`,
+4. **Verify the `.workflows` self-checkout on that first run.** Every job checks
+   this repo out into `.workflows/` via `repository: ${{ job.workflow_repository }}`,
    `ref: ${{ job.workflow_sha }}` — the job context's fields for the reusable
    workflow file that defines the running job, not the caller. Open the
    checkout step's log and confirm it resolved to
    `blinkbitcoin/react-native-workflows` at the calling ref's sha. Do this
    again after any change to a file under `.github/workflows/`: a regression
    here would silently check out the wrong repo (or the consumer's own) into
-   `.rnw` and break every step that references `$RNW`.
+   `.workflows` and break every step that references `$WORKFLOWS_DIR`.
 5. **Set the consumer repo variables.** `E2E_IOS=true` on any consumer whose
    iOS suite should run on every push/PR (macOS runners bill at 10x, so opt in
-   deliberately per consumer); `RNW_MACOS_RUNNER` only if iOS should move off
+   deliberately per consumer); `WORKFLOWS_MACOS_RUNNER` only if iOS should move off
    `macos-26` onto a different or self-hosted label. Both are read in the
-   template's `ci.yml` as `vars.E2E_IOS` / `vars.RNW_MACOS_RUNNER`.
+   template's `ci.yml` as `vars.E2E_IOS` / `vars.WORKFLOWS_MACOS_RUNNER`.
 
 No secrets are required for any of this — every workflow in this family runs on
 `github.token`, and `consumer-token` is optional (only for a *private* smoke

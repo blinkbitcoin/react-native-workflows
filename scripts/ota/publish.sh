@@ -11,7 +11,7 @@
 # wrong job.
 #
 # What is published is the export scripts/ota/export.sh produced in
-# $RNW_OTA_DIR - the bytes the fingerprint gate vetted, in that order. Letting
+# $WORKFLOWS_OTA_DIR - the bytes the fingerprint gate vetted, in that order. Letting
 # the CLI export for itself would publish an artifact nothing in this pipeline
 # ever looked at, built after the gate ran.
 #
@@ -43,8 +43,8 @@ case "$rollout" in
 esac
 [ "$rollout" -ge 0 ] && [ "$rollout" -le 100 ] || die "ROLLOUT must be between 0 and 100 (got '$rollout')"
 
-[ -d "$RNW_OTA_DIR" ] && [ -n "$(ls -A "$RNW_OTA_DIR" 2>/dev/null)" ] ||
-  die "no export at $RNW_OTA_DIR - run scripts/ota/export.sh first"
+[ -d "$WORKFLOWS_OTA_DIR" ] && [ -n "$(ls -A "$WORKFLOWS_OTA_DIR" 2>/dev/null)" ] ||
+  die "no export at $WORKFLOWS_OTA_DIR - run scripts/ota/export.sh first"
 
 root="$(consumer_root)"
 cd "$root"
@@ -64,7 +64,7 @@ group "ota publish ($channel @ ${rollout}%)"
 npx "eoas@$OTA_CLI_VERSION" publish \
   --branch "$channel" \
   --rollout-percentage "$rollout" \
-  --input-dir "$RNW_OTA_DIR" \
+  --input-dir "$WORKFLOWS_OTA_DIR" \
   --skip-bundler \
   --non-interactive
 endgroup

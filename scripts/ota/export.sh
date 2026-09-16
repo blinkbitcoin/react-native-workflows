@@ -13,18 +13,18 @@ require_cmd npx
 
 root="$(consumer_root)"
 cd "$root"
-rm -rf "$RNW_OTA_DIR"
-mkdir -p "$RNW_OTA_DIR"
+rm -rf "$WORKFLOWS_OTA_DIR"
+mkdir -p "$WORKFLOWS_OTA_DIR"
 
 group "expo export (ota)"
-CI=1 npx expo export --platform all --source-maps --output-dir "$RNW_OTA_DIR"
+CI=1 npx expo export --platform all --source-maps --output-dir "$WORKFLOWS_OTA_DIR"
 endgroup
 
 # On content, not on the directory: mkdir -p above already guarantees the
 # directory exists, so `[ -d ]` here could never fire.
-[ -n "$(ls -A "$RNW_OTA_DIR" 2>/dev/null)" ] ||
-  die "expo export produced no output in $RNW_OTA_DIR"
-[ -f "$RNW_OTA_DIR/metadata.json" ] ||
-  die "expo export wrote no metadata.json in $RNW_OTA_DIR - the export is not a publishable update"
+[ -n "$(ls -A "$WORKFLOWS_OTA_DIR" 2>/dev/null)" ] ||
+  die "expo export produced no output in $WORKFLOWS_OTA_DIR"
+[ -f "$WORKFLOWS_OTA_DIR/metadata.json" ] ||
+  die "expo export wrote no metadata.json in $WORKFLOWS_OTA_DIR - the export is not a publishable update"
 log "ota export contents:"
-ls -l "$RNW_OTA_DIR" >&2
+ls -l "$WORKFLOWS_OTA_DIR" >&2

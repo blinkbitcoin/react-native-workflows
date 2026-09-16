@@ -10,21 +10,21 @@ load test_helper
 setup() {
   STUB="$BATS_TEST_TMPDIR/bin"
   mkdir -p "$STUB"
-  export RNW_TEST_LOG="$BATS_TEST_TMPDIR/cmd.log"
-  : > "$RNW_TEST_LOG"
+  export WORKFLOWS_TEST_LOG="$BATS_TEST_TMPDIR/cmd.log"
+  : > "$WORKFLOWS_TEST_LOG"
   cat > "$STUB/curl" <<'SH'
 #!/usr/bin/env bash
-printf 'curl %s\n' "$*" >> "$RNW_TEST_LOG"
+printf 'curl %s\n' "$*" >> "$WORKFLOWS_TEST_LOG"
 prev=""; out=""
 for a in "$@"; do [ "$prev" = "-o" ] && out="$a"; prev="$a"; done
-[ "${RNW_TEST_CURL_FAIL:-}" = "true" ] && exit 22
-[ -n "$out" ] && printf '%s' "${RNW_TEST_JAR-jar bytes}" > "$out"
+[ "${WORKFLOWS_TEST_CURL_FAIL:-}" = "true" ] && exit 22
+[ -n "$out" ] && printf '%s' "${WORKFLOWS_TEST_JAR-jar bytes}" > "$out"
 exit 0
 SH
   cat > "$STUB/java" <<'SH'
 #!/usr/bin/env bash
-printf 'java %s\n' "$*" >> "$RNW_TEST_LOG"
-exit "${RNW_TEST_JAVA_STATUS:-0}"
+printf 'java %s\n' "$*" >> "$WORKFLOWS_TEST_LOG"
+exit "${WORKFLOWS_TEST_JAVA_STATUS:-0}"
 SH
   chmod +x "$STUB/curl" "$STUB/java"
   export PATH="$STUB:$PATH"
@@ -39,12 +39,12 @@ install() { run bash "$REPO_ROOT/scripts/ci/bundletool-install.sh"; }
 @test "downloads the pinned version and publishes BUNDLETOOL_JAR" {
   BUNDLETOOL_VERSION=1.18.1 install
   [ "$status" -eq 0 ] || fail "exited $status: $output"
-  contains "$(grep '^curl ' "$RNW_TEST_LOG")" \
+  contains "$(grep '^curl ' "$WORKFLOWS_TEST_LOG")" \
     "https://github.com/google/bundletool/releases/download/1.18.1/bundletool-all-1.18.1.jar" \
-    || fail "unexpected url: $(cat "$RNW_TEST_LOG")"
+    || fail "unexpected url: $(cat "$WORKFLOWS_TEST_LOG")"
   grep -qx "BUNDLETOOL_JAR=$RUNNER_TEMP/bundletool.jar" "$GITHUB_ENV" \
     || fail "BUNDLETOOL_JAR was not published: $(cat "$GITHUB_ENV")"
-  contains "$(cat "$RNW_TEST_LOG")" "java -jar" || fail "the jar was never run: $(cat "$RNW_TEST_LOG")"
+  contains "$(cat "$WORKFLOWS_TEST_LOG")" "java -jar" || fail "the jar was never run: $(cat "$WORKFLOWS_TEST_LOG")"
 }
 
 @test "an unset version is fatal" {
@@ -68,17 +68,17 @@ install() { run bash "$REPO_ROOT/scripts/ci/bundletool-install.sh"; }
   PATH="$STUB:$nojava" BUNDLETOOL_VERSION=1.18.1 install
   [ "$status" -ne 0 ] || fail "installed bundletool with no JRE: $output"
   contains "$output" "java is not on PATH" || fail "unexpected message: $output"
-  [ ! -s "$RNW_TEST_LOG" ] || fail "downloaded anyway: $(cat "$RNW_TEST_LOG")"
+  [ ! -s "$WORKFLOWS_TEST_LOG" ] || fail "downloaded anyway: $(cat "$WORKFLOWS_TEST_LOG")"
 }
 
 @test "a failed download is fatal" {
-  RNW_TEST_CURL_FAIL=true BUNDLETOOL_VERSION=1.18.1 install
+  WORKFLOWS_TEST_CURL_FAIL=true BUNDLETOOL_VERSION=1.18.1 install
   [ "$status" -ne 0 ] || fail "a failed download was ignored: $output"
   contains "$output" "could not download bundletool" || fail "unexpected message: $output"
 }
 
 @test "an empty download is fatal" {
-  RNW_TEST_JAR='' BUNDLETOOL_VERSION=1.18.1 install
+  WORKFLOWS_TEST_JAR='' BUNDLETOOL_VERSION=1.18.1 install
   [ "$status" -ne 0 ] || fail "accepted an empty jar: $output"
   contains "$output" "empty file" || fail "unexpected message: $output"
 }
@@ -100,7 +100,7 @@ install() { run bash "$REPO_ROOT/scripts/ci/bundletool-install.sh"; }
 }
 
 @test "a jar that does not run is fatal" {
-  RNW_TEST_JAVA_STATUS=1 BUNDLETOOL_VERSION=1.18.1 install
+  WORKFLOWS_TEST_JAVA_STATUS=1 BUNDLETOOL_VERSION=1.18.1 install
   [ "$status" -ne 0 ] || fail "accepted a jar that does not run: $output"
   contains "$output" "does not run" || fail "unexpected message: $output"
 }

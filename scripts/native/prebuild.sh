@@ -8,7 +8,7 @@ set -euo pipefail
 source "$(dirname "$0")/../lib/common.sh"
 source "$(dirname "$0")/../lib/e2e-env.sh"
 
-platform="$(rnw_platform "${1:-}")"
+platform="$(workflows_platform "${1:-}")"
 require_cmd pnpm
 root="$(consumer_root)"
 cd "$root"

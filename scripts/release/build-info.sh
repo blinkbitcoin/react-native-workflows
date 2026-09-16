@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Write $RNW_RELEASE_META_DIR/build-info.json - the one machine-readable record
+# Write $WORKFLOWS_RELEASE_META_DIR/build-info.json - the one machine-readable record
 # of what a release build actually is. Every later stage reads it: the OTA
 # fingerprint gate compares against `fingerprint`, the store lanes read
 # `version`/`buildNumber`, and the GitHub release ships it as an asset.
@@ -8,8 +8,8 @@
 #   {sha, version, buildNumber, stage, fingerprint:{ios,android},
 #    expoSdk, reactNative, workflowRunId, artifacts:{}}
 #
-# Env: APP_VERSION, APP_BUILD_NUMBER (resolve-version.sh), FP_IOS, FP_ANDROID
-# (fingerprint.sh), RNW_STAGE, RNW_SHA (target-sha.sh; falls back to
+# Env: APP_VERSION, APP_BUILD_NUMBER (resolve-version.sh), FINGERPRINT_IOS, FINGERPRINT_ANDROID
+# (fingerprint.sh), WORKFLOWS_STAGE, WORKFLOWS_SHA (target-sha.sh; falls back to
 # GITHUB_SHA), GITHUB_RUN_ID.
 # Usage: build-info.sh
 set -euo pipefail
@@ -18,8 +18,8 @@ source "$(dirname "$0")/../lib/release-env.sh"
 require_cmd node
 
 root="$(consumer_root)"
-mkdir -p "$RNW_RELEASE_META_DIR"
-dest="$RNW_RELEASE_META_DIR/build-info.json"
+mkdir -p "$WORKFLOWS_RELEASE_META_DIR"
+dest="$WORKFLOWS_RELEASE_META_DIR/build-info.json"
 
 [ -n "${APP_VERSION:-}" ] || die "APP_VERSION is not set - run resolve-version.sh first"
 [ -n "${APP_BUILD_NUMBER:-}" ] || die "APP_BUILD_NUMBER is not set - run resolve-version.sh first"
@@ -28,8 +28,8 @@ dest="$RNW_RELEASE_META_DIR/build-info.json"
 # program below are JS template literals and must reach node unexpanded.
 BUILD_INFO_DEST="$dest" \
   BUILD_INFO_ROOT="$root" \
-  BUILD_INFO_SHA="${RNW_SHA:-${GITHUB_SHA:-$(git -C "$root" rev-parse HEAD 2>/dev/null || echo unknown)}}" \
-  BUILD_INFO_STAGE="${RNW_STAGE:-development}" \
+  BUILD_INFO_SHA="${WORKFLOWS_SHA:-${GITHUB_SHA:-$(git -C "$root" rev-parse HEAD 2>/dev/null || echo unknown)}}" \
+  BUILD_INFO_STAGE="${WORKFLOWS_STAGE:-development}" \
   node --input-type=module -e '
 import { writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -62,8 +62,8 @@ const info = {
   buildNumber: Number(process.env.APP_BUILD_NUMBER),
   stage: process.env.BUILD_INFO_STAGE,
   fingerprint: {
-    ios: process.env.FP_IOS || null,
-    android: process.env.FP_ANDROID || null,
+    ios: process.env.FINGERPRINT_IOS || null,
+    android: process.env.FINGERPRINT_ANDROID || null,
   },
   expoSdk: installed("expo"),
   reactNative: installed("react-native"),

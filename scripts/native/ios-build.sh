@@ -15,13 +15,13 @@ require_cmd xcodebuild
 root="$(consumer_root)"
 cd "$root"
 
-# RNW_XCODE selects a runner's Xcode before anything reads xcodebuild's version.
-if [ -n "${RNW_XCODE:-}" ]; then
-  log "selecting Xcode $RNW_XCODE"
-  sudo xcode-select -s "/Applications/Xcode_$RNW_XCODE.app"
+# WORKFLOWS_XCODE selects a runner's Xcode before anything reads xcodebuild's version.
+if [ -n "${WORKFLOWS_XCODE:-}" ]; then
+  log "selecting Xcode $WORKFLOWS_XCODE"
+  sudo xcode-select -s "/Applications/Xcode_$WORKFLOWS_XCODE.app"
 fi
 
-scheme="$(rnw_ios_scheme)"
+scheme="$(workflows_ios_scheme)"
 log "Xcode scheme: $scheme"
 
 # xcbeautify keeps the log readable; without it the raw xcodebuild output is
@@ -49,7 +49,7 @@ set -e
 endgroup
 [ "$status" -eq 0 ] || die "xcodebuild failed with status $status"
 
-app="$RNW_IOS_PRODUCTS_DIR/$scheme.app"
+app="$WORKFLOWS_IOS_PRODUCTS_DIR/$scheme.app"
 [ -d "$app" ] || die "build succeeded but $app is missing"
 log "built $app"
 gh_output app_path "$root/$app"

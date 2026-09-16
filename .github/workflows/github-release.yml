@@ -101,10 +101,10 @@ jobs:
         with:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
-          path: .rnw
+          path: .workflows
           persist-credentials: false
-      - name: Publish RNW environment
-        run: bash ".rnw/scripts/release/env-publish.sh"
+      - name: Publish WORKFLOWS_DIR environment
+        run: bash ".workflows/scripts/release/env-publish.sh"
       # A release created with the default GITHUB_TOKEN does not trigger other
       # workflows, so a `release: published` caller downstream would never fire.
       # An App token does. Configure both secrets or neither: the id is what
@@ -125,28 +125,28 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           name: ${{ inputs.notes-artifact }}
-          path: ${{ env.RNW_ASSETS_DIR }}
+          path: ${{ env.WORKFLOWS_ASSETS_DIR }}
       - name: Download assets
         if: ${{ inputs.assets-artifacts != '' }}
         uses: actions/download-artifact@v8
         with:
           pattern: ${{ inputs.assets-artifacts }}
           merge-multiple: true
-          path: ${{ env.RNW_ASSETS_DIR }}
+          path: ${{ env.WORKFLOWS_ASSETS_DIR }}
       # After both downloads, before the upload: the release's build-info.json
       # is expo-prepare's record plus the `artifacts` digests each platform job
       # recorded for the bytes it built. Only `artifacts` is taken from those
       # copies - a platform record is a mid-job snapshot and must not put a
       # stale sha or stage back on the release.
       #
-      # The literal `.rnw/…` path, like every other step in this job: $RNW is
+      # The literal `.workflows/…` path, like every other step in this job: $WORKFLOWS_DIR is
       # published by the setup composite action, and this job deliberately never
       # runs it (it installs nothing - it only talks to the GitHub API). A
-      # `$RNW/…` path here would expand to `/scripts/…` and exit 127 on every
+      # `$WORKFLOWS_DIR/…` path here would expand to `/scripts/…` and exit 127 on every
       # single call. The script needs `node`, which the GitHub-hosted image
       # ships; a self-hosted linux-runner must too.
       - name: Merge platform build-info
-        run: bash ".rnw/scripts/release/merge-build-info.sh"
+        run: bash ".workflows/scripts/release/merge-build-info.sh"
       - name: Release assets
         id: assets
         env:
@@ -159,5 +159,5 @@ jobs:
           APPEND_TITLE: ${{ inputs.append-title }}
           FROM_TAG: ${{ inputs.from-tag }}
           DELETE_SOURCE: ${{ inputs.delete-source }}
-          NOTES_FILE: ${{ env.RNW_ASSETS_DIR }}/${{ inputs.notes-file }}
-        run: bash ".rnw/scripts/release/release-assets.sh" "$MODE"
+          NOTES_FILE: ${{ env.WORKFLOWS_ASSETS_DIR }}/${{ inputs.notes-file }}
+        run: bash ".workflows/scripts/release/release-assets.sh" "$MODE"

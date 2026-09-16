@@ -10,7 +10,7 @@
 # exact failure this script exists to make impossible. A missing asset is fatal
 # for the same reason: there is no such thing as a silent pass here.
 #
-# Usage: baseline.sh TAG [DEST]   (default DEST: $RNW_ASSETS_DIR/build-info.json)
+# Usage: baseline.sh TAG [DEST]   (default DEST: $WORKFLOWS_ASSETS_DIR/build-info.json)
 # Env: GH_TOKEN, GH_REPO.
 set -euo pipefail
 source "$(dirname "$0")/../lib/common.sh"
@@ -19,7 +19,7 @@ require_cmd gh
 
 tag="${1:-}"
 [ -n "$tag" ] || die "no baseline tag given - expo-ota-publish's baseline-tag input is required whenever ota-enabled is true"
-dest="${2:-$RNW_ASSETS_DIR/build-info.json}"
+dest="${2:-$WORKFLOWS_ASSETS_DIR/build-info.json}"
 
 mkdir -p "$(dirname "$dest")"
 rm -f "$dest"

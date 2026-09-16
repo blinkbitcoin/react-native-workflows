@@ -18,22 +18,22 @@ jobs:
       # data from the github context, so there is nothing to check the
       # consumer out for. The react-native-workflows checkout below is still
       # required by the shape rule that every job with a `run:` step checks
-      # out .rnw. Setup never runs here (no $RNW), so the script is reached
-      # through the plain .rnw/ checkout path, the same way checks.yml's
+      # out .workflows. Setup never runs here (no $WORKFLOWS_DIR), so the script is reached
+      # through the plain .workflows/ checkout path, the same way checks.yml's
       # `changes` job reaches changed-class.sh.
       - name: Checkout react-native-workflows
         uses: actions/checkout@v7
         with:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
-          path: .rnw
+          path: .workflows
           persist-credentials: false
       - name: Cancel in-flight runs for this PR's head sha
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: bash ".rnw/scripts/ci/cancel-runs.sh"
+        run: bash ".workflows/scripts/ci/cancel-runs.sh"
   badges-cleanup:
     # A fork PR's run has no token that can push to the base repository, and it
     # never published a badge directory in the first place (badges.yml skips
@@ -47,7 +47,7 @@ jobs:
       # Unlike the cancel job this one does need the consumer checkout: it is
       # that checkout's `origin` (and its persisted credentials) that the
       # gh-pages push goes through. Setup never runs here either - the script is
-      # plain git - so it is reached through the .rnw/ path, not $RNW.
+      # plain git - so it is reached through the .workflows/ path, not $WORKFLOWS_DIR.
       #
       # `ref` is pinned, and pinned to the *base* branch specifically. Left to
       # itself, actions/checkout resolves `github.ref` on a pull_request event,
@@ -68,9 +68,9 @@ jobs:
         with:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
-          path: .rnw
+          path: .workflows
           persist-credentials: false
       - name: Drop this branch's badges from gh-pages
         env:
           BRANCH: ${{ github.event.pull_request.head.ref }}
-        run: bash ".rnw/scripts/ci/badges-cleanup.sh"
+        run: bash ".workflows/scripts/ci/badges-cleanup.sh"
