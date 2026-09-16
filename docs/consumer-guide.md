@@ -43,7 +43,7 @@ it is the one worth checking before you move the pin.
 ## Consumer `ci.yml`
 
 ```yaml
-name: ci
+name: CI
 on:
   push:
     branches: [main]
@@ -61,13 +61,17 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 jobs:
   checks:
+    name: Checks
     uses: blinkbitcoin/react-native-workflows/.github/workflows/checks.yml@v0
   unit:
+    name: Unit
     needs: checks
     if: ${{ needs.checks.outputs.docs-only != 'true' }}
     uses: blinkbitcoin/react-native-workflows/.github/workflows/unit.yml@v0
   e2e:
-    needs: checks
+    name: E2E
+    # `unit` as well as `checks`: a failed unit run then never reaches E2E.
+    needs: [checks, unit]
     if: ${{ needs.checks.outputs.docs-only != 'true' }}
     uses: blinkbitcoin/react-native-workflows/.github/workflows/e2e.yml@v0
     with:
@@ -80,6 +84,7 @@ jobs:
       e2e-setup-script: scripts/e2e/ci-mock-api-up.sh
       e2e-teardown-script: scripts/e2e/ci-mock-api-down.sh
   badges:
+    name: Badges
     needs: [checks, unit, e2e]
     # always(), so a red Unit still gets a red badge. A cancelled upstream job
     # says nothing about the branch, and a docs-only change never ran the jobs
@@ -149,7 +154,7 @@ Notes:
 
 ```yaml
 # .github/workflows/web.yml — only add this if the app has a web target
-name: web
+name: CI / Web
 on:
   pull_request:
     types: [opened, synchronize, reopened]
@@ -162,6 +167,7 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 jobs:
   web:
+    name: Export
     uses: blinkbitcoin/react-native-workflows/.github/workflows/web.yml@v0
     permissions:
       contents: read
@@ -201,7 +207,7 @@ Notes on the `web.yml` caller:
 
 ```yaml
 # .github/workflows/pr-closed.yml
-name: pr-closed
+name: CI / PR Closed
 on:
   pull_request:
     types: [closed]
@@ -210,12 +216,13 @@ permissions:
   actions: write # required: pr-closed.yml's cancel job needs this to cancel runs
 jobs:
   pr-closed:
+    name: Cleanup
     uses: blinkbitcoin/react-native-workflows/.github/workflows/pr-closed.yml@v0
 ```
 
 ```yaml
 # .github/workflows/pr-title.yml
-name: pr-title
+name: CI / PR Title
 on:
   pull_request:
     types: [edited]
@@ -223,6 +230,7 @@ permissions:
   contents: read
 jobs:
   pr-title:
+    name: Title
     # `edited` also fires for a body-only edit; only re-lint when the title
     # itself changed (`opened`/`synchronize` are already covered by ci.yml's
     # checks.yml `commitlint` toggle, which lints the same PR title).
@@ -534,7 +542,7 @@ family removed from `ci.yml`):
 
 ```yaml
 # .github/workflows/codeql.yml
-name: codeql
+name: CI / CodeQL
 on:
   push:
     branches: [main]
@@ -549,6 +557,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   codeql:
+    name: Analyze
     uses: blinkbitcoin/react-native-workflows/.github/workflows/codeql.yml@v0
 ```
 

@@ -1,4 +1,4 @@
-name: codeql
+name: CI / CodeQL
 on:
   push:
     branches: [main]
@@ -13,4 +13,5 @@ concurrency:
   cancel-in-progress: true
 jobs:
   codeql:
+    name: Analyze
     uses: blinkbitcoin/react-native-workflows/.github/workflows/codeql.yml@v0
