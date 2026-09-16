@@ -2,8 +2,8 @@
 
 # React Native Workflows
 
-**The CI your app repo does not have to write.**<br>
-Reusable GitHub Actions workflows for building, testing and shipping Expo apps.
+Shared GitHub Actions workflows for building, testing and releasing<br>
+the team's React Native (Expo) apps.
 
 [![CI](https://github.com/blinkbitcoin/react-native-workflows/actions/workflows/self-ci.yml/badge.svg?branch=main)](https://github.com/blinkbitcoin/react-native-workflows/actions/workflows/self-ci.yml?query=branch%3Amain)
 [![Smoke](https://github.com/blinkbitcoin/react-native-workflows/actions/workflows/self-smoke.yml/badge.svg?branch=main)](https://github.com/blinkbitcoin/react-native-workflows/actions/workflows/self-smoke.yml?query=branch%3Amain)
@@ -19,15 +19,15 @@ Continuous integration for a React Native app is not a config file. It is
 seventy shell scripts: install an Android SDK, boot an emulator that does not
 hang, wait for Metro, hash the native inputs so a build cache means something,
 decode signing secrets without leaving them on disk, upload a build and then
-prove the thing you uploaded is the thing you built.
+prove that the artifact uploaded is the one that was built.
 
-Every app repo writes them, each one slightly differently, and then fixes the
-same bug three times. They live here instead. Your app repo gets a forty-line
-`ci.yml` that names the workflows it wants.
+Kept here rather than copied into each app repo, where they drift apart and the
+same bug gets fixed three times. An app repo carries a forty-line `ci.yml`
+naming the workflows it calls; everything those workflows do lives here.
 
 ```mermaid
 flowchart LR
-  subgraph consumer [your app repo]
+  subgraph consumer [the app repo]
     caller["ci.yml — 40 lines"]
   end
   subgraph here [react-native-workflows @v0]
@@ -40,15 +40,15 @@ flowchart LR
 
 **Where to start** — three ways through this repository:
 
-| You are | Your path |
+| Task | Where to look |
 | --- | --- |
-| **Adopting it**<br>in an app repo | [Calling it](#calling-it) — the caller to copy<br>[Pinning](#pinning) — why `@v0` moves<br>[What it needs from you](#what-it-needs-from-you) — no secrets, two variables |
+| **Adopting it**<br>in an app repo | [Calling it](#calling-it) — the caller to copy<br>[Pinning](#pinning) — why `@v0` moves<br>[What a consumer provides](#what-a-consumer-provides) — no secrets, two variables |
 | **Debugging**<br>a red run | [Every workflow and its jobs](#every-workflow-and-its-jobs) — which job owns the failure<br>[forensics.md](docs/forensics.md) — what a failed E2E run left behind<br>[cache-keys.md](docs/cache-keys.md) — why the cache missed |
-| **Changing**<br>this repo | [Repository layout](#repository-layout) — where a change belongs<br>[CONTRIBUTING.md](CONTRIBUTING.md) — worktrees, commits, what a change carries<br>[consumer-guide.md](docs/consumer-guide.md) — the contract you must not break |
+| **Changing**<br>this repo | [Repository layout](#repository-layout) — where a change belongs<br>[CONTRIBUTING.md](CONTRIBUTING.md) — worktrees, commits, what a change carries<br>[consumer-guide.md](docs/consumer-guide.md) — the contract callers rely on |
 
 ## Calling it
 
-`.github/workflows/ci.yml` in your app repo:
+`.github/workflows/ci.yml` in the app repo:
 
 ```yaml
 name: CI
@@ -85,19 +85,19 @@ it that way, so the example in the docs cannot drift from the one under test.
 
 ## How a job works
 
-Every job checks *your* repo out, then checks *this* repo out into
+Every job checks the *consumer* repo out, then checks *this* repo out into
 `.workflows/` at the exact ref that defines the running job, then runs its
-scripts through `$WORKFLOWS_DIR`. You never reference anything under `scripts/`
-yourself, and a job can never straddle two versions of this repo.
+scripts through `$WORKFLOWS_DIR`. A caller never references anything under
+`scripts/` directly, and a job can never straddle two versions of this repo.
 
-What runs inside is your own `package.json` script wherever you have one —
-`pnpm lint` is yours, not ours — with a script here as the fallback. CI runs
-what you run locally, and says in the log which of the two it picked.
+What runs inside is the consumer's own `package.json` script wherever it has
+one — `pnpm lint` belongs to the app repo — with a script here as the fallback.
+CI runs what a developer runs locally, and logs which of the two it picked.
 
 ## Every workflow and its jobs
 
-Job names are what you read in the Actions graph, so they are listed here next
-to what makes them fail. A consumer's run shows `<your job name> / <job name
+Job names are what the Actions graph shows, so they are listed here next to
+what makes them fail. A consumer's run renders `<caller job name> / <job name
 below>` — `Checks / Dependencies`, `E2E / Build Android`.
 
 ### On a pull request or a push
@@ -105,7 +105,7 @@ below>` — `Checks / Dependencies`, `E2E / Build Android`.
 | Workflow | Jobs | Each job's responsibility |
 | --- | --- | --- |
 | `checks.yml` | `Changes` | Classifies the diff. Its `docs-only` output is what lets every other job skip |
-| | `Code` | Typecheck, lint, format, knip, spell — the fast gates you run as `make check-code` |
+| | `Code` | Typecheck, lint, format, knip, spell — the fast gates `make check-code` runs |
 | | `Generated` | i18n catalogs and GraphQL codegen are committed and match their sources |
 | | `Docs` | Doc freshness, command tables, table widths, mermaid blocks parse |
 | | `Dependencies` | Expo SDK drift, vulnerability audit, lockfile provenance, licences |
@@ -121,7 +121,7 @@ below>` — `Checks / Dependencies`, `E2E / Build Android`.
 | | `Playwright` | The browser suite against that export |
 | | `Deploy` | Publishes to GitHub Pages |
 | `badges.yml` | `Publish` | Renders unit, E2E and coverage badges and pushes `gh-pages/badges/<branch>/` |
-| `codeql.yml` | `Changes`<br>`Analyze` | Same docs-only classifier, then CodeQL on your query suite. Informational, never required |
+| `codeql.yml` | `Changes`<br>`Analyze` | Same docs-only classifier, then CodeQL on the consumer's query suite. Informational, never required |
 | `pr-title.yml` | `Title` | Conventional Commits lint on the PR title |
 | `pr-closed.yml` | `Cancel runs`<br>`Clean badges` | Cancels the closed PR's in-flight runs, deletes its badge directory |
 
@@ -153,7 +153,7 @@ below>` — `Checks / Dependencies`, `E2E / Build Android`.
 | --- | --- |
 | `.github/workflows/` | The 17 workflows above. Thin: a workflow wires inputs and calls a script |
 | `.github/actions/` | Five composite actions — `setup`, `maestro`, `native-key`, `free-disk`, `forensics` — the steps repeated across workflows |
-| `scripts/checks/` | One gate each: audit, codegen, commitlint, expo-doctor, i18n.<br>Plus `run-script.sh` and `run-consumer-or.sh`, which decide<br>between your script and ours |
+| `scripts/checks/` | One gate each: audit, codegen, commitlint, expo-doctor, i18n.<br>Plus `run-script.sh` and `run-consumer-or.sh`, which decide<br>between the consumer's script and this repo's |
 | `scripts/ci/` | Runner plumbing: Android SDK, KVM, disk pressure, pnpm store, badges, cancel-runs, tool versions |
 | `scripts/e2e/` | The E2E machine: simulator and emulator boot, Metro start and wait, Maestro run, timeouts, forensics collection |
 | `scripts/native/` | Prebuild, pods, and the iOS and Android build and packaging steps |
@@ -168,16 +168,16 @@ below>` — `Checks / Dependencies`, `E2E / Build Android`.
 ## Pinning
 
 Pin `@v0`. It is a moving tag that `self-release.yml` re-points at each
-release, so you take fixes without editing eleven caller files, and a breaking
+release, so fixes arrive without editing eleven caller files, and a breaking
 change arrives as `@v1` rather than as a red build on a Monday morning. Pin a
-full version instead if you would rather approve every change yourself —
+full version instead when every change should be reviewed before it lands —
 [Versioning](docs/consumer-guide.md#versioning) covers both.
 
-## What it needs from you
+## What a consumer provides
 
 **No secrets.** Every workflow here runs on `github.token`. Store credentials
-only ever enter the release workflows you choose to call, from your own repo's
-secrets.
+only ever enter the release workflows a repo chooses to call, from that repo's
+own secrets.
 
 Two repo variables are worth setting. `E2E_IOS=true` runs the iOS suite on
 every push — macOS runners bill at ten times the Linux rate, so it is opt-in
@@ -186,14 +186,14 @@ per repo, and a single PR can have it with an `e2e:ios` label instead.
 self-hosted box.
 
 Two optional secrets. `RELEASE_PLEASE_TOKEN`, because a PR opened with
-`github.token` does not trigger CI and you probably want release PRs checked.
-And `consumer-token`, only if your smoke target is private.
+`github.token` does not trigger CI, and release PRs should be checked before
+merge. And `consumer-token`, only when the smoke target is private.
 
 ## Documentation
 
 [**Consumer guide**](docs/consumer-guide.md) is the contract: every input,
 output and secret, the full caller examples, and the gotchas encoded here so
-you do not have to rediscover them. The rest explain the parts that surprise
+they do not have to be rediscovered. The rest explain the parts that surprise
 people — [**cache keys**](docs/cache-keys.md) (what invalidates a cache),
 [**forensics**](docs/forensics.md) (what a failed E2E run leaves behind),
 [**runners**](docs/runners.md) (labels, billing, KVM, disk).
