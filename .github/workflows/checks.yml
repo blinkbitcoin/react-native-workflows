@@ -46,6 +46,10 @@ on:
         description: Run the consumer's spell script
         type: boolean
         default: true
+      docs-check:
+        description: Run the consumer's check:docs script (docs freshness, the AGENTS.md command table, table widths, diagram parsing)
+        type: boolean
+        default: true
       i18n:
         description: Run i18n:extract and assert it produced no uncommitted changes
         type: boolean
@@ -194,6 +198,19 @@ jobs:
         if: ${{ inputs.spell }}
         env:
           SCRIPT_NAME: spell
+        run: bash "$RNW/scripts/checks/run-script.sh" "$SCRIPT_NAME"
+      # The consumer's docs gate. It is handed the event shape rather than
+      # working it out: a docs-freshness heuristic needs a diff base, and on a
+      # PR that base is the target branch, not HEAD~1. PR_AUTHOR is what lets
+      # the consumer exempt a bot's dependency bump from "you changed
+      # architecture without touching docs".
+      - name: Docs
+        if: ${{ inputs.docs-check }}
+        env:
+          SCRIPT_NAME: 'check:docs'
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
         run: bash "$RNW/scripts/checks/run-script.sh" "$SCRIPT_NAME"
       - name: i18n
         if: ${{ inputs.i18n }}

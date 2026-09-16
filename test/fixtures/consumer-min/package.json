@@ -32,6 +32,7 @@
     "format": "node -e 0",
     "format:check": "node -e 0",
     "spell": "node -e 0",
+    "check:docs": "node -e 0",
     "i18n:extract": "node -e 0",
     "i18n:check": "node -e 0",
     "codegen": "node -e 0",

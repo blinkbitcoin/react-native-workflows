@@ -104,9 +104,10 @@ Notes:
   come back unnoticed.
 - **What a docs-only change still costs.** Only `unit` and `e2e` skip.
   `checks.yml`'s own `code` job has no `docs-only` gate, so a documentation
-  push to `main` still runs typecheck, lint, format, knip, spell and audit —
-  which is the point: those are the checks a documentation change can break
-  (a typo, a reflowed table, a dead link in a doc knip tracks). Before this
+  push to `main` still runs typecheck, lint, format, knip, spell, `check:docs`
+  and audit — which is the point: those are the checks a documentation change
+  can break (a typo, a reflowed table, a dead link in a doc knip tracks, a
+  diagram that stopped parsing). Before this
   trigger lost its `paths-ignore` the workflow did not run at all on such a
   push, so it also never caught them.
 
@@ -249,6 +250,7 @@ mental model).
 | `format` | `true` | Run `format:check` |
 | `knip` | `true` | Run `knip` |
 | `spell` | `true` | Run `spell` |
+| `docs-check` | `true` | Run `check:docs` with `EVENT_NAME`, `BASE_REF` and `PR_AUTHOR` in the environment — the consumer's docs gate (freshness heuristic, command table, table widths, diagram parsing). `PR_AUTHOR` is what lets the consumer exempt a bot's dependency bump from a "docs not updated" warning |
 | `i18n` | `false` | Run `i18n:extract`, then fail if it produced uncommitted changes |
 | `graphql-codegen` | `false` | Run `codegen`, then fail if it produced uncommitted changes |
 | `expo-doctor` | `true` | Run `expo-doctor` (via `pnpm exec` if a devDependency, else `pnpm dlx`) |
@@ -1042,6 +1044,7 @@ line for line, both repos read on the same date):
 | `format:check` | `checks.yml` (`format`) | yes |
 | `knip` | `checks.yml` (`knip`) | **no package script; binary fallback** — falls back to the `knip` binary in `node_modules/.bin` (present: `knip` is a devDependency), so the toggle still works via the binary path. This is deliberate: a `package.json` script literally named `knip` fails `expo-doctor`'s "Check package.json for common issues" ("scripts in package.json conflict with the contents of node_modules/.bin"), and `checks.yml` runs expo-doctor too |
 | `spell` | `checks.yml` (`spell`) | yes (`typos`) |
+| `check:docs` | `checks.yml` (`docs-check` toggle, on by default) | yes (`make check-docs`) — the consumer owns what "docs are in order" means; this family only decides when to ask |
 | `i18n:extract` | `scripts/checks/i18n.sh` (`i18n` toggle, off by default) | yes |
 | `codegen` | `scripts/checks/codegen.sh` (`graphql-codegen` toggle, off by default) | yes |
 | `expo-doctor` binary | `scripts/checks/expo-doctor.sh` (`expo-doctor` toggle) | n/a — `pnpm exec expo-doctor` (devDependency present) |
