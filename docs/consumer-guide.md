@@ -312,6 +312,19 @@ mental model).
 | `docs-only-detection` | `true` | Classify the change as docs-only — on a `pull_request` **and** on a `push` |
 | `docs-globs` | `''` | Extra `\|`-joined POSIX ERE alternatives **added to** the built-in docs pattern (`^docs/\|\.md$\|(^\|/)LICENSE$\|^\.github/ISSUE_TEMPLATE/\|^\.github/PULL_REQUEST_TEMPLATE`), not a replacement for it |
 
+Jobs: `Changes`, `Code`, `Generated`, `Docs`, `Dependencies`, `Prebuild`,
+`Bundle secrets`, `Release`, `Tooling`, `Commits` — grouped by **who acts on a
+failure**, not by what is cheapest to run. A red `Dependencies` means a
+vulnerability, a licence problem or an SDK drift and belongs to whoever owns
+operations; a red `Code` is a lint error and belongs to the author. They used to
+share one box called `code`, where a CVE and a formatting nit looked identical
+until you opened the log.
+
+Each job pays its own checkout and install, roughly 30-45s, and they run in
+parallel — so this costs runner time rather than wall clock. The five gates
+inside `Code` stay together on purpose: same person, same fix (`make
+check-code`), seconds each.
+
 Outputs: `docs-only` (`'true'` when every changed file matched the docs
 globs; empty when detection is disabled). Secrets: `consumer-token` (optional).
 

@@ -448,10 +448,12 @@ $(names "$real")"
 @test "checks.yml's audit step keeps its timeout, its soft-on-PR expression and a step-level fetch timeout" {
   command -v yq >/dev/null || skip "yq not installed"
   f="$REPO_ROOT/.github/workflows/checks.yml"
-  step='.jobs.code.steps[] | select(.name == "Audit")'
+  # Across all jobs, not one named job: the gates are grouped by who acts on a
+  # failure, and which group a step sits in is allowed to change.
+  step='.jobs[].steps[]? | select(.name == "Audit")'
 
   found=$(yq -r "[$step] | length" "$f")
-  [ "$found" -eq 1 ] || fail "expected exactly one 'Audit' step in checks.yml's code job, found $found"
+  [ "$found" -eq 1 ] || fail "expected exactly one 'Audit' step in checks.yml, found $found"
 
   t=$(yq -r "$step | .\"timeout-minutes\" // \"\"" "$f")
   [ "$t" = "5" ] || fail "the Audit step must carry timeout-minutes: 5, got '$t'"
@@ -729,7 +731,7 @@ $(names "$real")"
   command -v yq >/dev/null || skip "yq not installed"
   f="$REPO_ROOT/.github/workflows/checks.yml"
   for name in "Prebuild check" "Bundle secrets"; do
-    t=$(yq -r ".jobs.code.steps[] | select(.name == \"$name\") | .\"timeout-minutes\" // \"\"" "$f")
+    t=$(yq -r ".jobs[].steps[]? | select(.name == \"$name\") | .\"timeout-minutes\" // \"\"" "$f")
     [ -n "$t" ] || fail "the '$name' step has no timeout-minutes"
   done
 }
