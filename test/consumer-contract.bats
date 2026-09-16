@@ -194,3 +194,163 @@ on_block() {
   [ "$status" -eq 0 ]
   [ "$output" = "null" ]
 }
+
+# --- the CI gate set and the consumer's `make` gate set are the same set ------
+#
+# The template's Makefile used to head its gate section "each is what CI runs",
+# and AGENTS.md repeated it. It was not true: i18n drift, codegen drift,
+# lockfile provenance and the licence check all ran through `make check` and
+# through no CI job at all, so a green local gate implied coverage CI was not
+# providing. Nothing detected the gap, because the claim lived in a comment.
+#
+# These cases move the claim into a mechanism. They read the CI side out of the
+# workflow YAML and the local side out of the consumer's Makefile, so neither
+# is a hand-maintained list that can go stale on its own.
+
+# Every SCRIPT_NAME the reusable workflows hand to run-script.sh or
+# run-consumer-or.sh, one per line.
+# Steps gated on an input that defaults to false are excluded: those gates are
+# opt-in in CI by design (a prebuild of both platforms and a web export are
+# minutes each), so `make ci` not running them is the intended arrangement, not
+# drift. `make check-slow` is where they live locally.
+ci_script_names() {
+  local optional f line name cond
+  # Inputs that default to false. Their steps are opt-in in CI by design - a
+  # prebuild of both platforms and a web export are minutes each - so `make ci`
+  # not running them is the intended arrangement, not drift. `make check-slow`
+  # is where they live locally.
+  optional="$(yq -r '.on.workflow_call.inputs | to_entries[] | select(.value.default == false) | .key' \
+    "$REPO_ROOT/.github/workflows/checks.yml")"
+  {
+    # One file per call: yq separates multiple documents with `---`.
+    for f in checks unit; do
+      yq -r '.jobs[].steps[]?
+        | select((.run? // "") | test("run-script.sh|run-consumer-or.sh"))
+        | ((.env.SCRIPT_NAME // "") + "\t" + (.if // ""))' \
+        "$REPO_ROOT/.github/workflows/$f.yml"
+    done | while IFS=$'\t' read -r name cond; do
+      [ -n "$name" ] || continue
+      skip_this=false
+      while read -r opt; do
+        [ -n "$opt" ] || continue
+        case "$cond" in *"inputs.$opt"*) skip_this=true ;; esac
+      done <<<"$optional"
+      [ "$skip_this" = true ] || printf '%s\n' "$name"
+    done
+    # run-consumer-or.sh takes the name as a positional argument, not env. Its
+    # five steps are all gated on inputs that default to true.
+    grep -oE "run-consumer-or\.sh\" '[^']+'" "$REPO_ROOT/.github/workflows/checks.yml" |
+      sed "s/.*'\\(.*\\)'/\\1/"
+  } | grep -v '^$' | grep -v '\${{' | sort -u
+}
+
+# Every target reachable from `make TARGET` in the consumer, following
+# prerequisites transitively. Parsed rather than executed: running `make` here
+# would run the gates themselves.
+make_reachable() {
+  MAKE_START="$1" node -e '
+const fs = require("node:fs");
+const src = fs.readFileSync(process.argv[1], "utf8");
+const deps = new Map();
+for (const line of src.split("\n")) {
+  // `target: dep dep ## description` - recipe lines are indented, so a
+  // leading-space line is never a rule.
+  const m = /^([A-Za-z0-9_-]+):([^=]*)$/.exec(line);
+  if (!m) continue;
+  const rhs = m[2].split("##")[0].trim();
+  deps.set(m[1], rhs ? rhs.split(/\s+/) : []);
+}
+const seen = new Set();
+const walk = (t) => {
+  if (seen.has(t)) return;
+  seen.add(t);
+  for (const d of deps.get(t) || []) walk(d);
+};
+walk(process.env.MAKE_START);
+console.log([...seen].join("\n"));
+' "$CONSUMER/Makefile"
+}
+
+# The recipe text of every target reachable from `make TARGET`, so a script
+# name can be looked for in what those recipes actually run.
+make_recipes() {
+  MAKE_TARGETS="$(make_reachable "$1" | tr '\n' ' ')" node -e '
+const fs = require("node:fs");
+const want = new Set(process.env.MAKE_TARGETS.trim().split(/\s+/));
+const out = [];
+let current = null;
+for (const line of fs.readFileSync(process.argv[1], "utf8").split("\n")) {
+  const m = /^([A-Za-z0-9_-]+):([^=]*)$/.exec(line);
+  if (m) { current = m[1]; continue; }
+  if (current && /^\s/.test(line) && want.has(current)) out.push(line);
+}
+console.log(out.join("\n"));
+' "$CONSUMER/Makefile"
+}
+
+@test "every script CI runs is reachable from the consumer's make ci" {
+  require_consumer
+  command -v yq >/dev/null || skip "yq not installed"
+  [ -f "$CONSUMER/Makefile" ] || parity_skip "no Makefile at $CONSUMER - cannot compare the two gate sets"
+
+  names="$(ci_script_names)"
+  [ "$(grep -c . <<<"$names")" -ge 10 ] \
+    || fail "parsed only '$names' from the workflow YAML - has the step shape changed?"
+
+  recipes="$(make_recipes ci)"
+  [ -n "$recipes" ] || fail "parsed no recipe lines from $CONSUMER/Makefile's ci target"
+
+  targets="$(make_reachable ci)"
+  missing=()
+  while read -r name; do
+    [ -n "$name" ] || continue
+    # Three ways a CI script can be reachable locally:
+    #   1. a recipe runs it by name          (`pnpm typecheck`)
+    #   2. a recipe runs its dashed spelling  (rare, but cheap to allow)
+    #   3. it maps onto a make target of the dashed name, which is how the
+    #      make-wrapping scripts work: `check:release` is `make check-release`,
+    #      whose recipe mentions neither spelling.
+    alt="${name//:/-}"
+    grep -qF -- "$name" <<<"$recipes" && continue
+    grep -qF -- "$alt" <<<"$recipes" && continue
+    grep -qxF -- "$alt" <<<"$targets" && continue
+    missing+=("$name")
+  done <<<"$names"
+
+  [ "${#missing[@]}" -eq 0 ] || fail "CI runs these, and \`make ci\` in $CONSUMER does not reach them: ${missing[*]}
+This is the drift the gate inventory exists to stop: a gate CI makes that a
+developer cannot run locally with one command."
+}
+
+@test "every gate the consumer's make check runs has a CI step" {
+  require_consumer
+  command -v yq >/dev/null || skip "yq not installed"
+  [ -f "$CONSUMER/Makefile" ] || parity_skip "no Makefile at $CONSUMER - cannot compare the two gate sets"
+
+  # The direction that would have caught all four orphans. Each entry is a
+  # marker that appears in a `make check` recipe, paired with the CI script name
+  # that must exist for it. A gate added to `make check` with no CI step is the
+  # failure being prevented, so a new row here is part of adding a gate.
+  recipes="$(make_recipes check)"
+  names="$(ci_script_names)"
+  for pair in \
+    'pnpm typecheck|typecheck' \
+    'pnpm lint|lint' \
+    'pnpm format:check|format:check' \
+    'pnpm spell|spell' \
+    'pnpm i18n:check|i18n:check' \
+    'pnpm codegen:check|codegen:check' \
+    'pnpm deps:check|deps:check' \
+    'pnpm deps:audit|deps:audit' \
+    'pnpm deps:licenses|deps:licenses' \
+    'check-docs|check:docs' \
+    'check-ci|check:ci' \
+    'check-release|check:release'; do
+    marker="${pair%%|*}"
+    script="${pair##*|}"
+    if grep -qF -- "$marker" <<<"$recipes"; then
+      grep -qxF "$script" <<<"$names" \
+        || fail "\`make check\` runs '$marker' but no CI step calls '$script' - that gate would run on developer machines and nowhere else"
+    fi
+  done
+}

@@ -289,7 +289,7 @@ mental model).
 | `docs-check` | `true` | Run `check:docs` with `EVENT_NAME`, `BASE_REF` and `PR_AUTHOR` in the environment — the consumer's docs gate (freshness heuristic, command table, table widths, diagram parsing). `PR_AUTHOR` is what lets the consumer exempt a bot's dependency bump from a "docs not updated" warning |
 | `i18n` | `false` | Run the consumer's `i18n:check`, or `i18n:extract` + a clean-tree assertion when it ships none |
 | `graphql-codegen` | `false` | Run the consumer's `codegen:check`, or `codegen` + a clean-tree assertion when it ships none |
-| `expo-doctor` | `true` | Run the consumer's `deps:check`, or `expo-doctor` alone when it ships none. The template's script is `expo install --check && expo-doctor`, and the SDK-drift half is exactly what CI used to miss |
+| `expo-doctor` | `true` | Run the consumer's `deps:check`, or `expo-doctor` alone when it ships none |
 | `audit` | `true` | Run the consumer's `deps:audit`, or `pnpm audit --prod` at `audit-level` when it ships none |
 | `audit-level` | `high` | Minimum severity that fails the audit |
 | `audit-soft-on-pr` | `true` | Make a failing audit advisory on a `pull_request` (`continue-on-error`). It stays blocking on `push`, `release` and `workflow_dispatch`. Set `false` to block PRs too |
@@ -1182,13 +1182,18 @@ linters — go through `scripts/checks/run-consumer-or.sh NAME FALLBACK`: it run
 your `NAME` script when you ship one, and this repo's own implementation when
 you do not. Which branch it took is in the run log.
 
-That seam exists because the two implementations had already drifted. This
-repo's `expo-doctor.sh` ran `expo-doctor`, while the template's `deps:check`
-runs `expo install --check && expo-doctor` — so SDK version drift was checked on
-developer machines and in no CI job. `audit.sh` likewise ran `pnpm audit` while
-the template's `deps:audit` also checks lockfile provenance. A gate you define
-and the gate CI runs have to be the same gate, or a green `make check` is a
-claim about coverage CI does not have.
+That seam exists because the two implementations had already drifted. `audit.sh`
+ran `pnpm audit` while the template's `deps:audit` also checks lockfile
+provenance, so that half ran on developer machines and in no CI job.
+`checks/i18n.sh` catches an untracked new catalog through `assert_clean_paths`
+where the template's script, a bare `git diff`, did not. And `expo-doctor.sh`
+ran `expo-doctor` alone where the template's `deps:check` also runs
+`expo install --check` — the two overlap (expo-doctor validates installed
+versions against the SDK too), so nothing was unchecked there, but two
+implementations of one gate is still two things to keep in step.
+
+A gate you define and the gate CI runs have to be the same gate, or a green
+`make check` is a claim about coverage CI does not have.
 
 Verified against `react-native-mobile-template`'s `package.json` (`pnpm run`
 line for line, both repos read on the same date):
@@ -1205,7 +1210,7 @@ line for line, both repos read on the same date):
 | `i18n:extract` | `scripts/checks/i18n.sh`, the fallback when a consumer ships no `i18n:check` | yes |
 | `codegen:check` | `checks.yml` (`graphql-codegen` toggle, off by default) — preferred over `scripts/checks/codegen.sh` | yes |
 | `codegen` | `scripts/checks/codegen.sh`, the fallback when a consumer ships no `codegen:check` | yes |
-| `deps:check` | `checks.yml` (`expo-doctor` toggle) — preferred over `scripts/checks/expo-doctor.sh` | yes (`expo install --check && expo-doctor`) — the SDK-drift half is why the consumer's script is preferred |
+| `deps:check` | `checks.yml` (`expo-doctor` toggle) — preferred over `scripts/checks/expo-doctor.sh` | yes (`expo install --check && expo-doctor`) |
 | `deps:audit` | `checks.yml` (`audit` toggle) — preferred over `scripts/checks/audit.sh` | yes (`pnpm audit --prod` + lockfile provenance) |
 | `check:ci` | `checks.yml` (`actionlint`/`shellcheck` toggles) — preferred over `scripts/ci/lint-ci.sh` | not yet in the template; the fallback runs |
 | commitlint binary | `scripts/checks/commitlint.sh` (`commitlint` toggle, `pr-title.yml`) | n/a — `pnpm exec commitlint` when `@commitlint/cli` is a devDependency (it is), else `npx` with a pinned fallback config |

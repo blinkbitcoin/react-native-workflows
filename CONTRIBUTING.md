@@ -100,6 +100,12 @@ Do not add it to a plain local run unless you have supplied a checkout.
   `test/consumer-contract.bats` keeps the guide's examples and the fixtures
   byte-identical, and separately checks the live consumer's `on:` block when
   `RNW_CONSUMER_ROOT` points at one.
+- **A new gate** - a step in `checks.yml` or `unit.yml` - needs the matching
+  target in the consumer's `Makefile`, reachable from `make ci`. The two cases
+  at the end of `test/consumer-contract.bats` read the workflow YAML and the
+  consumer's Makefile and fail in both directions, so "CI and `make` run the
+  same gates" is a mechanism rather than a comment. It used to be a comment,
+  and four gates ran locally and in no CI job at all.
 - **A change to a script the consumer also ships** — today
   `scripts/release/resolve-version.sh` and `scripts/release/build-info.sh` —
   has to move both copies. They are contract-identical, not byte-identical, and
