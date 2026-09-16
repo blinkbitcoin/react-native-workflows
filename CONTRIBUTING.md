@@ -65,6 +65,30 @@ gate on every PR. Escape hatches exist for genuinely broken tooling
 (`git commit --no-verify`, `LEFTHOOK=0 git push`), and personal additions go in
 a gitignored `lefthook-local.yml` rather than in `lefthook.yml`.
 
+### The parity cases, and the four skips you will see
+
+Several cases compare a script here against the consumer's own copy of it —
+`resolve-version.sh`, `build-info.sh`, and the App Review names the fastlane
+lanes read. This repo serves any consumer, so it has no business guessing where
+one sits on your machine: without a checkout to point at, those cases **skip**,
+and say `parity NOT verified` rather than implying the two copies agree.
+
+Point them at a checkout to run them:
+
+```sh
+RNW_TEMPLATE_DIR=../react-native-mobile-template \
+RNW_CONSUMER_ROOT=../react-native-mobile-template \
+  mise exec -- bats test/
+```
+
+`RNW_TEMPLATE_DIR` is what the parity cases read; `RNW_CONSUMER_ROOT` is what
+`consumer-contract.bats` reads. Setting both is the configuration CI uses.
+
+Add `RNW_PARITY_REQUIRED=1` to turn a would-be skip into a failure. `self-ci.yml`'s
+`parity` job sets it, because a parity case that silently runs against nothing
+and reports green is the exact failure the whole mechanism exists to prevent.
+Do not add it to a plain local run unless you have supplied a checkout.
+
 ## What a change usually needs
 
 - **A script change** needs a `test/*.bats` case, with every assertion ending
@@ -76,6 +100,11 @@ a gitignored `lefthook-local.yml` rather than in `lefthook.yml`.
   `test/consumer-contract.bats` keeps the guide's examples and the fixtures
   byte-identical, and separately checks the live consumer's `on:` block when
   `RNW_CONSUMER_ROOT` points at one.
+- **A change to a script the consumer also ships** — today
+  `scripts/release/resolve-version.sh` and `scripts/release/build-info.sh` —
+  has to move both copies. They are contract-identical, not byte-identical, and
+  the parity cases above are what holds them together; run them with
+  `RNW_TEMPLATE_DIR` set before you push, because a laptop run skips them.
 - **A tool version bump** moves `scripts/lib/versions.sh` *and* the mirrors in
   `.mise.toml` and the workflow defaults; `make check-versions` is what fails
   otherwise.

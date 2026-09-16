@@ -40,10 +40,10 @@ waits on a dependency install. It folds together:
 | CocoaPods (`ios/Pods`, `~/Library/Caches/CocoaPods`) | `pods-{os}-{hash}`, restore-keys prefix `pods-{os}-` | `native-key` action → `scripts/ci/native-keys.sh` (`pods-key` output) | `e2e.yml` job `build-ios`, `actions/cache@v6` (a prefix hit is fine: `pod install` reconciles) |
 | pnpm store | `pnpm-{os}-{hashFiles('**/pnpm-lock.yaml')}`, restore-keys prefix `pnpm-{os}-` | `setup` action (path from `scripts/ci/pnpm-store-path.sh`) | every workflow that runs `setup` |
 | Maestro CLI (`~/.maestro`, excluding `tests/` and `logs/`) | `maestro-{os}-{version}-v2` | `maestro` action (version = its `version` input, pinned to `MAESTRO_VERSION`) | `e2e.yml` jobs `ios`, `android` |
-| Android system image | `sysimg-v1-{api}-default-x86_64` | `e2e.yml` job `android` (literal key; `{api}` = `android-api-level`) | `actions/cache@v6` over `$ANDROID_SDK_DIR/system-images/android-{api}` |
-| AVD + adb keys | `avd-v1-{api}-x86_64-default-hidedialogs` | `e2e.yml` job `android` (literal key) | `actions/cache@v6` over `~/.android/avd/*`, `~/.android/adb*`; a miss bakes a snapshot via `scripts/e2e/android-emulator.sh snapshot-bake` |
+| Android system image | `sysimg-{ver}-{api}-default-x86_64` | `e2e.yml` job `android` (`{api}` = `android-api-level`) | `actions/cache@v6` over `$ANDROID_SDK_DIR/system-images/android-{api}` |
+| AVD + adb keys | `avd-{ver}-{api}-x86_64-default-hidedialogs` | `e2e.yml` job `android` | `actions/cache@v6` over `~/.android/avd/*`, `~/.android/adb*`; a miss bakes a snapshot via `scripts/e2e/android-emulator.sh snapshot-bake` |
 | Playwright browsers | `playwright-{os}-{pwversion}` | `web.yml` job `playwright` (version from `scripts/web/playwright-cache-key.sh`, which wraps `scripts/web/playwright-version.sh`) | `web.yml` playwright job |
-| Gradle | managed by `gradle/actions/setup-gradle` | that action | `e2e.yml` job `build-android` (`cache-read-only` off main) |
+| Gradle | managed by `gradle/actions/setup-gradle` | that action | `e2e.yml` job `build-android` and `expo-build-android.yml`; only the `default-branch` ref writes it, every other ref reads it |
 | mise tools | managed by `jdx/mise-action` (`cache: true`) | that action | `setup` and `native-key` actions |
 
 Notes:
@@ -59,7 +59,15 @@ Notes:
   key miss, so a warm key would keep restoring the fat entry forever. Bump it
   again with any future change to what this cache holds.
 - `{ver}` is the `native-cache-version` input, `{os}`/`{arch}` come from the
-  runner, and `{hash}` is the native dependency hash above.
+  runner, and `{hash}` is the native dependency hash above. The system-image and
+  AVD keys used to bake `v1` in as a literal while this page and three input
+  descriptions all promised the bump reached every native cache; they did not,
+  so a stale AVD outlived the bump meant to clear it. `test/workflow-shape.bats`
+  now refuses any workflow cache key with a version baked in.
+- The Maestro CLI key's `-v2` is deliberately **not** `{ver}`: that cache holds
+  the CLI, not build output, and nothing about a native rebuild invalidates it.
+  It lives in a composite action rather than a workflow, which is also why the
+  bats rule above does not reach it.
 - The iOS app cache carries the generated `ios/*.xcworkspace` alongside the
   built `.app` because `scripts/native/ios-pack.sh` resolves the Xcode scheme
   from the workspace, and on a cache hit no `expo prebuild` has run.
