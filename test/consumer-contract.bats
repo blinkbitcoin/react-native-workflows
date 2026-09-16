@@ -354,3 +354,47 @@ developer cannot run locally with one command."
     fi
   done
 }
+
+# --- a caller must grant what the workflow it calls asks for -----------------
+#
+# GitHub only ever lets a called workflow NARROW the caller's token, never widen
+# it. So a caller capped at `contents: read` calling a workflow whose job wants
+# `security-events: write` does not get a permission error in a step - the whole
+# run dies as a `startup_failure` with no jobs at all, which is close to
+# undebuggable from the UI.
+#
+# That is not hypothetical: every CodeQL run on the consumer failed this way
+# from the day the repo was pushed, and the caller carried a comment asserting
+# the opposite - that the called workflow declaring its own escalation meant
+# nothing had to be granted here.
+#
+# Checked against the fixture, which is what consumers copy.
+
+# The union of permissions every job of a reusable workflow asks for.
+callee_permissions() {
+  yq -r '[.jobs[].permissions // {} | to_entries[] | select(.value == "write") | .key] | unique | .[]' \
+    "$REPO_ROOT/.github/workflows/$1.yml"
+}
+
+@test "every fixture caller grants the write permissions its callee needs" {
+  command -v yq >/dev/null || skip "yq not installed"
+  for f in "$FIXTURES"/consumer-min/.github/workflows/*.yml; do
+    while IFS=$'\t' read -r job called; do
+      [ -n "$called" ] || continue
+      # Only this family's reusable workflows; an action reference is not one.
+      case "$called" in *react-native-workflows/.github/workflows/*) ;; *) continue ;; esac
+      wf=$(basename "${called%@*}" .yml)
+      [ -f "$REPO_ROOT/.github/workflows/$wf.yml" ] || continue
+      # Job-level permissions override the workflow's; absent, the workflow's
+      # apply to every job. pr-closed.yml grants at the top level, and reading
+      # only the job level reported it as under-granted when it is not.
+      granted=$(yq -r "((.jobs.\"$job\".permissions // .permissions) // {}) | to_entries[] | select(.value == \"write\") | .key" "$f")
+      while read -r need; do
+        [ -n "$need" ] || continue
+        grep -qxF "$need" <<<"$granted" \
+          || fail "$(basename "$f") job '$job' calls $wf.yml, whose jobs need '$need: write', but grants: ${granted:-（none）}
+A called workflow cannot widen the caller's token - this run would die as a startup_failure with no jobs."
+      done < <(callee_permissions "$wf")
+    done < <(yq -r '.jobs | to_entries[] | select(.value.uses != null) | .key + "\t" + .value.uses' "$f")
+  done
+}

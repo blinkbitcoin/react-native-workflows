@@ -571,6 +571,13 @@ concurrency:
 jobs:
   codeql:
     name: Analyze
+    # A called workflow can only NARROW the caller's token, so the analyze job's
+    # `security-events: write` has to be granted here or the run dies as a
+    # startup_failure before any job begins.
+    permissions:
+      contents: read
+      actions: read # workflow metadata for the SARIF upload
+      security-events: write # upload the SARIF results
     uses: blinkbitcoin/react-native-workflows/.github/workflows/codeql.yml@v0
 ```
 
