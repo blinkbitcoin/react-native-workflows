@@ -30,6 +30,16 @@ available and is the recommended pin going forward. `@v0` and `@v1` behave
 identically in kind — both are moving tags re-pointed on release — the only
 difference is which major line you're tracking.
 
+### Moving to a version that added `docs-check`
+
+`checks.yml`'s `docs-check` input defaults to **on**, and `run-script.sh` fails
+hard when the named script is absent. So adopting a version of this repo that
+carries it means one of two things in the consumer: add a `"check:docs"`
+script to `package.json`, or pass `docs-check: false` in the caller. This is
+the first default-on toggle whose script name is a house invention rather than
+a near-universal convention (`typecheck`, `lint`, `format:check`, `spell`), so
+it is the one worth checking before you move the pin.
+
 ## Consumer `ci.yml`
 
 ```yaml
