@@ -167,7 +167,17 @@ jobs:
       - name: Fingerprint
         id: fingerprint
         run: bash "$RNW/scripts/release/fingerprint.sh"
+      # APP_VERSION / APP_BUILD_NUMBER are passed explicitly from the Resolve
+      # version step's outputs rather than picked up from $GITHUB_ENV. The script
+      # that resolves them has no business also publishing them into the job's
+      # environment - the consumer ships a contract-identical copy that runs on a
+      # laptop under `make version`, where $GITHUB_ENV does not exist, so a write
+      # here was drift between the two copies that no test could see. Both
+      # scripts below fail loudly when either value is missing.
       - name: Build info
+        env:
+          APP_VERSION: ${{ steps.version.outputs.version }}
+          APP_BUILD_NUMBER: ${{ steps.version.outputs.build-number }}
         run: bash "$RNW/scripts/release/build-info.sh"
       # Before the notes step, and only when asked: it publishes RELEASE_BODY_FILE
       # into $GITHUB_ENV, which the notes step below picks up in preference to
@@ -181,6 +191,8 @@ jobs:
         run: bash "$RNW/scripts/release/release-body.sh" "$RELEASE_TAG"
       - name: Release notes
         env:
+          APP_VERSION: ${{ steps.version.outputs.version }}
+          APP_BUILD_NUMBER: ${{ steps.version.outputs.build-number }}
           NOTES_LOCALES: ${{ inputs.notes-locales }}
           # The consumer's notes.mjs may draft store notes with an LLM; the
           # provider/model live in build-env, only the keys are secrets.

@@ -1109,14 +1109,24 @@ A consumer may also ship its own `scripts/release/resolve-version.sh`.
 `expo-prepare.yml` uses **this repo's copy**, and the two must never *disagree*:
 a tag build and an OTA build of the same commit resolving different versions is
 the failure this guards against. They are **contract-identical, not
-byte-identical** — this repo's copy sources `scripts/lib/common.sh` (so it also
-writes `$GITHUB_ENV` and rejects a non-numeric `BUILD_NUMBER_OFFSET`), while a
-consumer's is standalone. What must match exactly is the contract: print
+byte-identical** — this repo's copy sources `scripts/lib/common.sh`, while a
+consumer's is standalone. **Neither writes `$GITHUB_ENV`**: resolving a version
+and publishing it into a job's environment are two different jobs, and a
+consumer's copy also runs on a developer machine under `make version`, where
+`$GITHUB_ENV` does not exist. `expo-prepare.yml` passes the two values to the
+steps that need them from the resolve step's outputs, explicitly.
+
+Both copies also reject a non-numeric `BUILD_NUMBER_OFFSET`. Bash reads `abc` as
+`0`, which pushes the build number *below* the previous build's, and the stores
+reject that permanently with a message naming neither the variable nor the
+script.
+
+What must match exactly is the contract: print
 `APP_VERSION=X.Y.Z` and `APP_BUILD_NUMBER=N`, write `version` / `build-number`
 to `$GITHUB_OUTPUT`, and resolve in this order, first match wins:
 
 1. a stable `vX.Y.Z` tag pointing at HEAD;
-2. a release-please release commit, `chore(main): release X.Y.Z` — **the
+2. a release-please release commit, `chore(<scope>): release X.Y.Z` — **the
    release build's only source**: on that commit the tag does not exist yet
    (release-please creates it from the same push), a `push` event carries no
    `$RELEASE_PR_TITLE`, and the PR is already closed, so without this the build
@@ -1126,7 +1136,15 @@ to `$GITHUB_OUTPUT`, and resolve in this order, first match wins:
    `Merge pull request #N from …` and the release commit is its second parent —
    so a repository whose merge button is set to "Create a merge commit" would
    otherwise fall silently back to the patch bump. Both are matched anchored, so
-   a merge whose branch name quotes the subject is not a release commit;
+   a merge whose branch name quotes the subject is not a release commit.
+
+   `<scope>` is the **release branch's name**, because that is what release-please
+   scopes its commit with: `chore(main): …` on `main`, `chore(master): …` on
+   `master`. It defaults to `$GITHUB_REF_NAME`, falling back to `main` outside
+   Actions, and `RNW_RELEASE_SCOPE` overrides it for a `release-please-config.json`
+   whose scope is not the branch name. Hardcoding `main` meant a consumer
+   releasing from any other branch matched nothing here and fell through to the
+   patch bump at step 5 — a wrong version on a real release, with no error;
 3. a version inside `$RELEASE_PR_TITLE`;
 4. the open `autorelease: pending` PR's title (only when `GH_TOKEN` is set);
 5. the newest **stable** `vX.Y.Z` tag with its patch component bumped;

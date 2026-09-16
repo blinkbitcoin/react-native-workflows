@@ -20,7 +20,11 @@ setup() {
   git -C "$REPO" init -q -b main
   git -C "$REPO" config user.email t@example.com
   git -C "$REPO" config user.name t
+  # GITHUB_REF_NAME is unset for a sharper reason than the others: it is always
+  # set inside GitHub Actions, it seeds the release scope, and left ambient it
+  # would make every `chore(main)` fixture below pass on a laptop and fail in CI.
   unset GITHUB_OUTPUT GITHUB_ENV RELEASE_PR_TITLE BUILD_NUMBER_OFFSET GH_TOKEN
+  unset GITHUB_REF_NAME RNW_RELEASE_SCOPE
 }
 
 commit() { git -C "$REPO" commit -q --allow-empty -m "${1:-c}"; }
@@ -101,23 +105,30 @@ merge_release_fixture() {
   # guessing where one sits on a particular machine. CI and anyone wanting the
   # parity check points it at a checkout; everyone else gets the skip below.
   template_dir="${RNW_TEMPLATE_DIR:-}"
-  [ -n "$template_dir" ] || skip "parity NOT verified: set RNW_TEMPLATE_DIR to a template checkout"
+  [ -n "$template_dir" ] || parity_skip "parity NOT verified: set RNW_TEMPLATE_DIR to a template checkout"
   other="$template_dir/scripts/release/resolve-version.sh"
   # A skip here means parity with the template's copy was NOT verified by this
   # run -- not that the two copies agree.
-  [ -f "$other" ] || skip "parity NOT verified: no template copy at $other (set RNW_TEMPLATE_DIR)"
+  [ -f "$other" ] || parity_skip "parity NOT verified: no template copy at $other (set RNW_TEMPLATE_DIR)"
   merge_release_fixture
-  # Both halves of the contract: the APP_* lines on stdout, and the file both
-  # copies append to when $GITHUB_OUTPUT is set. Only those are the contract -
-  # with GITHUB_OUTPUT unset this copy also prints its outputs (gh_output's
+  # All three channels: the APP_* lines on stdout, the file both copies append to
+  # when $GITHUB_OUTPUT is set, and $GITHUB_ENV - which neither copy may write.
+  # $GITHUB_ENV used to be excluded here, and it was the one channel where the
+  # two genuinely disagreed, so the exclusion hid the only live drift.
+  #
+  # With GITHUB_OUTPUT unset this copy also prints its outputs (gh_output's
   # documented fallback) where the template's prints nothing, which is a
-  # difference in a path no workflow takes.
+  # difference in a path no workflow takes - hence both are set below.
   mine_out="$BATS_TEST_TMPDIR/mine.out"
   theirs_out="$BATS_TEST_TMPDIR/theirs.out"
+  mine_env="$BATS_TEST_TMPDIR/mine.env"
+  theirs_env="$BATS_TEST_TMPDIR/theirs.env"
   : > "$mine_out"
   : > "$theirs_out"
-  mine="$(GITHUB_OUTPUT="$mine_out" bash "$REPO_ROOT/scripts/release/resolve-version.sh" "$REPO" 2>/dev/null | grep '^APP_')"
-  theirs="$(cd "$REPO" && GITHUB_OUTPUT="$theirs_out" bash "$other" 2>/dev/null | grep '^APP_')"
+  : > "$mine_env"
+  : > "$theirs_env"
+  mine="$(GITHUB_OUTPUT="$mine_out" GITHUB_ENV="$mine_env" bash "$REPO_ROOT/scripts/release/resolve-version.sh" "$REPO" 2>/dev/null | grep '^APP_')"
+  theirs="$(cd "$REPO" && GITHUB_OUTPUT="$theirs_out" GITHUB_ENV="$theirs_env" bash "$other" 2>/dev/null | grep '^APP_')"
   [ "$mine" = "$theirs" ] || fail "the two copies disagree on stdout:
 --- this repo ---
 $mine
@@ -128,7 +139,28 @@ $theirs"
 $(cat "$mine_out")
 --- template ---
 $(cat "$theirs_out")"
+  [ "$(sort "$mine_env")" = "$(sort "$theirs_env")" ] || fail "the two copies disagree on \$GITHUB_ENV:
+--- this repo ---
+$(cat "$mine_env")
+--- template ---
+$(cat "$theirs_env")"
+  [ ! -s "$mine_env" ] || fail "both copies write \$GITHUB_ENV, which neither should: $(cat "$mine_env")"
   contains "$mine" "APP_VERSION=1.2.0" || fail "the fixture did not exercise the merge-commit source: $mine"
+}
+
+# The offset guard is the other place the two copies drifted: the template's had
+# no validation, so a typo'd offset was read as 0 and the build number went
+# backwards. A store rejects that permanently, so both copies must refuse it.
+@test "this copy and the template's both refuse a non-numeric offset" {
+  template_dir="${RNW_TEMPLATE_DIR:-}"
+  [ -n "$template_dir" ] || parity_skip "parity NOT verified: set RNW_TEMPLATE_DIR to a template checkout"
+  other="$template_dir/scripts/release/resolve-version.sh"
+  [ -f "$other" ] || parity_skip "parity NOT verified: no template copy at $other (set RNW_TEMPLATE_DIR)"
+  commit
+  run env BUILD_NUMBER_OFFSET=abc bash "$REPO_ROOT/scripts/release/resolve-version.sh" "$REPO"
+  [ "$status" -ne 0 ] || fail "this copy accepted a non-numeric offset: $output"
+  run env BUILD_NUMBER_OFFSET=abc bash -c "cd '$REPO' && bash '$other'"
+  [ "$status" -ne 0 ] || fail "the template's copy accepted a non-numeric offset: $output"
 }
 
 @test "a tag on HEAD still wins over the release commit subject" {
@@ -238,7 +270,7 @@ $(cat "$theirs_out")"
   contains "$output" "APP_BUILD_NUMBER=1003" || fail "expected 1003, got: $output"
 }
 
-@test "writes version and build-number to GITHUB_OUTPUT and GITHUB_ENV" {
+@test "writes version and build-number to GITHUB_OUTPUT and nothing to GITHUB_ENV" {
   commit
   git -C "$REPO" tag v3.1.4
   out="$BATS_TEST_TMPDIR/gh_output"
@@ -249,8 +281,50 @@ $(cat "$theirs_out")"
   [ "$status" -eq 0 ] || fail "exited $status: $output"
   grep -q '^version=3.1.4$' "$out" || fail "no version=3.1.4 in: $(cat "$out")"
   grep -q '^build-number=1001$' "$out" || fail "no build-number=1001 in: $(cat "$out")"
-  grep -q '^APP_VERSION=3.1.4$' "$env_file" || fail "no APP_VERSION in: $(cat "$env_file")"
-  grep -q '^APP_BUILD_NUMBER=1001$' "$env_file" || fail "no APP_BUILD_NUMBER in: $(cat "$env_file")"
+  # $GITHUB_ENV is deliberately untouched. The consumer's copy never wrote it and
+  # cannot (it also runs under `make version` on a laptop), so a write from this
+  # copy alone was drift the parity test could not see - it compares stdout and
+  # $GITHUB_OUTPUT. expo-prepare.yml now passes the two values to the steps that
+  # need them from this step's outputs, explicitly.
+  [ ! -s "$env_file" ] || fail "resolve-version.sh wrote \$GITHUB_ENV: $(cat "$env_file")"
+}
+
+@test "the release scope follows the branch, so releasing from master works" {
+  commit
+  git -C "$REPO" tag v0.4.9
+  commit 'chore(master): release 1.2.0'
+  GITHUB_REF_NAME=master resolve
+  [ "$status" -eq 0 ] || fail "exited $status: $output"
+  contains "$output" "APP_VERSION=1.2.0" || fail "the master-scoped release was missed: $output"
+}
+
+@test "RNW_RELEASE_SCOPE overrides the branch name" {
+  commit
+  git -C "$REPO" tag v0.4.9
+  commit 'chore(app): release 1.2.0'
+  GITHUB_REF_NAME=main RNW_RELEASE_SCOPE=app resolve
+  [ "$status" -eq 0 ] || fail "exited $status: $output"
+  contains "$output" "APP_VERSION=1.2.0" || fail "RNW_RELEASE_SCOPE was ignored: $output"
+}
+
+@test "a release commit scoped to another branch is not this branch's release" {
+  commit
+  git -C "$REPO" tag v0.4.9
+  commit 'chore(master): release 1.2.0'
+  GITHUB_REF_NAME=main resolve
+  [ "$status" -eq 0 ] || fail "exited $status: $output"
+  contains "$output" "APP_VERSION=0.4.10" || fail "another branch's release was used: $output"
+}
+
+@test "a scope containing a slash is matched literally, not as a regex" {
+  # A branch name is not an ERE. `release/v1` must match `chore(release/v1)`,
+  # and the `.` in a name like `v1.x` must not match any character.
+  commit
+  git -C "$REPO" tag v0.4.9
+  commit 'chore(release/v1): release 1.2.0'
+  GITHUB_REF_NAME='release/v1' resolve
+  [ "$status" -eq 0 ] || fail "exited $status: $output"
+  contains "$output" "APP_VERSION=1.2.0" || fail "a slashed scope was not matched: $output"
 }
 
 @test "a non-numeric BUILD_NUMBER_OFFSET is fatal" {

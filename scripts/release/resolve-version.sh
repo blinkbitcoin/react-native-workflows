@@ -7,14 +7,22 @@
 #   APP_VERSION=X.Y.Z
 #   APP_BUILD_NUMBER=N
 #
-# on stdout, writes `version` / `build-number` to $GITHUB_OUTPUT and exports
-# APP_VERSION / APP_BUILD_NUMBER into $GITHUB_ENV. A consumer that ships its own
-# copy and this one must never disagree, or a tag build and an OTA build of the
-# same commit get different version strings.
+# on stdout and writes `version` / `build-number` to $GITHUB_OUTPUT. A consumer
+# that ships its own copy and this one must never disagree, or a tag build and
+# an OTA build of the same commit get different version strings.
+#
+# It deliberately does NOT write $GITHUB_ENV. Resolving a version and publishing
+# it into a job's environment are two jobs, and the consumer's copy also runs on
+# a developer machine under `make version`, where $GITHUB_ENV does not exist. The
+# steps that need APP_VERSION / APP_BUILD_NUMBER take them from this step's
+# outputs explicitly - see the Build info and Release notes steps in
+# .github/workflows/expo-prepare.yml. That also keeps the two copies comparable:
+# test/resolve-version.bats compares stdout and $GITHUB_OUTPUT, and a write to a
+# third channel from only one copy is a drift the test cannot see.
 #
 # Version, first match wins:
 #   1. a `vX.Y.Z` tag pointing at HEAD (the tag build itself)
-#   2. a release-please release commit (`chore(main): release X.Y.Z`) - HEAD's
+#   2. a release-please release commit (`chore(<scope>): release X.Y.Z`) - HEAD's
 #      own subject after a squash/rebase merge, or HEAD^2's after a merge commit
 #   3. a version inside $RELEASE_PR_TITLE (the release-please PR being built)
 #   4. a version inside the title of the open `autorelease: pending` PR (via gh)
@@ -61,10 +69,22 @@ if [ -n "$tag" ]; then
   origin="tag at HEAD ($tag)"
 fi
 
-# release-please's own release commit, matched on its exact subject shape rather
-# than on any commit that happens to carry a version: `chore(main): release
-# 1.2.0`. The version is taken from that subject, not from a grep of the whole
-# message, so a body mentioning another version cannot win.
+# release-please scopes its release commit with the release branch's name, so the
+# subject on `main` is `chore(main): release 1.2.0` and on `master` it is
+# `chore(master): release 1.2.0`. Hardcoding `main` meant a consumer releasing
+# from any other branch matched nothing here and fell through to the patch bump,
+# stamping a wrong version on a real release - the same class of silent fallback
+# the HEAD^2 lookup below exists to close. $GITHUB_REF_NAME is the branch the
+# workflow is running on, which is the release branch on the push that matters;
+# RNW_RELEASE_SCOPE overrides it for a consumer whose release-please config sets
+# a scope that is not the branch name.
+release_scope="${RNW_RELEASE_SCOPE:-${GITHUB_REF_NAME:-main}}"
+release_prefix="chore($release_scope): release "
+
+# The release commit is matched on its exact subject shape rather than on any
+# commit that happens to carry a version. The version is taken from that subject,
+# not from a grep of the whole message, so a body mentioning another version
+# cannot win.
 #
 # HEAD *and* HEAD^2, matching the template's copy: `HEAD` covers a squash or
 # rebase merge, which carries the PR title as its subject; `HEAD^2` covers a
@@ -80,7 +100,7 @@ release_subject() {
   for rev in HEAD 'HEAD^2'; do
     subject="$(git log -1 --format='%s' "$rev" 2>/dev/null || true)"
     case "$subject" in
-      'chore(main): release '*) printf '%s' "$subject"; return 0 ;;
+      "$release_prefix"*) printf '%s' "$subject"; return 0 ;;
     esac
   done
   printf ''
@@ -89,7 +109,10 @@ release_subject() {
 if [ -z "$version" ]; then
   subject="$(release_subject)"
   if [ -n "$subject" ]; then
-    candidate="$(printf '%s' "$subject" | sed -nE 's/^chore\(main\): release ([0-9]+\.[0-9]+\.[0-9]+).*$/\1/p')"
+    # Strip the prefix literally rather than matching it as a regex: a scope is a
+    # branch name, so it may contain `/`, `.` or `+`, every one of which means
+    # something else inside an ERE or a sed address.
+    candidate="$(printf '%s' "${subject#"$release_prefix"}" | grep -oE '^[0-9]+\.[0-9]+\.[0-9]+' || true)"
     if [ -n "$candidate" ]; then
       version="$candidate"
       origin="release-please release commit ($subject)"
@@ -142,5 +165,3 @@ printf 'APP_VERSION=%s\n' "$version"
 printf 'APP_BUILD_NUMBER=%s\n' "$build"
 gh_output version "$version"
 gh_output build-number "$build"
-gh_env APP_VERSION "$version"
-gh_env APP_BUILD_NUMBER "$build"
