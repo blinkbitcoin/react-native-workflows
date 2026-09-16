@@ -496,3 +496,25 @@ body_of() { sed -n 's/^release create [^ ]* //p' "$WORKFLOWS_TEST_LOG"; }
   TAG=v1.2.3 BODY_NOTE='No store upload.' release latest
   [ "$status" -eq 0 ] || fail "latest exited $status: $output"
 }
+
+@test "a body note also reaches the run summary" {
+  # The release body is the durable record; the run summary is what someone
+  # reading a green run sees without opening the release.
+  printf 'ipa\n' > "$ASSETS/app.ipa"
+  summary="$BATS_TEST_TMPDIR/summary.md"
+  : > "$summary"
+  TAG=v1.2.3 BODY_NOTE='Store uploads were off.' GITHUB_STEP_SUMMARY="$summary" \
+    release create-prerelease
+  [ "$status" -eq 0 ] || fail "exited $status: $output"
+  grep -q 'Store uploads were off.' "$summary" || fail "the note is not in the summary: $(cat "$summary")"
+  grep -q 'v1.2.3' "$summary" || fail "the summary does not name the tag: $(cat "$summary")"
+}
+
+@test "no body note writes nothing to the run summary" {
+  printf 'ipa\n' > "$ASSETS/app.ipa"
+  summary="$BATS_TEST_TMPDIR/summary.md"
+  : > "$summary"
+  TAG=v1.2.3 GITHUB_STEP_SUMMARY="$summary" release create-prerelease
+  [ "$status" -eq 0 ] || fail "exited $status: $output"
+  [ ! -s "$summary" ] || fail "wrote a summary for an unmarked release: $(cat "$summary")"
+}

@@ -207,6 +207,15 @@ if [ -n "${BODY_NOTE:-}" ]; then
     cat "$NOTES_FILE" >> "$note_file"
   fi
   notes_args=(--notes-file "$note_file")
+  # The same fact in the run summary. The release body is the durable record,
+  # but someone looking at a green run wants to know there and then that it did
+  # not do what a release run usually does, without opening the release.
+  if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+    {
+      printf '### %s\n\n' "$tag"
+      printf '%s\n' "$BODY_NOTE"
+    } >> "$GITHUB_STEP_SUMMARY"
+  fi
 fi
 target_args=()
 [ -z "${TARGET_SHA:-}" ] || target_args=(--target "$TARGET_SHA")
