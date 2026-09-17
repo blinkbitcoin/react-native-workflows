@@ -215,7 +215,7 @@ only ever enter the release workflows a repo chooses to call, from that repo's
 own secrets.
 
 Two repo variables are worth setting. `E2E_IOS=true` runs the iOS suite on
-every push — macOS runners bill at ten times the Linux rate, so it is opt-in
+every push — macOS bills at ten times the Linux rate on a private repo, free on a public one, so it is opt-in
 per repo, and a single PR can have it with an `e2e:ios` label instead.
 `WORKFLOWS_MACOS_RUNNER` moves iOS off `macos-26` onto another label or a
 self-hosted box.

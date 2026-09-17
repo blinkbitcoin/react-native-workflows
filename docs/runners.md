@@ -2,10 +2,22 @@
 
 ## macOS billing
 
-GitHub-hosted macOS runners bill at **10x** the Linux rate. `e2e.yml`'s `ios`
-input therefore defaults to `false`, and `android` defaults to `true` — the
-Android suite runs on `ubuntu-latest` at 1x. Turn iOS on deliberately, per
-caller, once you've budgeted for it.
+**On a private repo**, GitHub-hosted macOS runners bill at **10x** the Linux
+rate. `e2e.yml`'s `ios` input therefore defaults to `false`, and `android`
+defaults to `true` — the Android suite runs on `ubuntu-latest` at 1x. Turn iOS
+on deliberately, per caller, once you have budgeted for it.
+
+**On a public repo, standard GitHub-hosted runners are free, macOS included,**
+so there is no billing reason to leave iOS off and it should be on. The default
+stays `false` because it is the safe one for the private app repos this family
+mostly serves — a default that silently spends money is worse than one that
+silently skips a suite — but a public repo should set `E2E_IOS=true` and get
+the coverage for nothing.
+
+What remains true either way is wall-clock: iOS takes roughly three times as
+long as Android, and public repos have their own concurrency caps on macOS
+jobs. That is a scheduling argument, not a cost one, and it is the only reason
+to think twice.
 
 `macos-runner` (default `macos-26`) is a workflow input on every family
 member, so a caller can pin an older or newer image without editing this

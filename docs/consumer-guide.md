@@ -75,9 +75,11 @@ jobs:
     if: ${{ needs.checks.outputs.docs-only != 'true' }}
     uses: blinkbitcoin/shared-workflows/.github/workflows/e2e.yml@v0
     with:
-      # iOS is opt-in (macOS runners bill at 10x): set the repo variable
-      # E2E_IOS=true for every run, or label a single PR `e2e:ios` (the
-      # `labeled` trigger above is what makes the label alone start a run).
+      # iOS is opt-in because macOS bills at 10x on a private repo. On a
+      # public repo standard runners are free, macOS included, so set the repo
+      # variable E2E_IOS=true and take the coverage. Either way a single PR can
+      # opt in with the `e2e:ios` label (the `labeled` trigger above is what
+      # makes the label alone start a run). See docs/runners.md.
       ios: ${{ vars.E2E_IOS == 'true' || contains(github.event.pull_request.labels.*.name, 'e2e:ios') }}
       macos-runner: ${{ vars.WORKFLOWS_MACOS_RUNNER || 'macos-26' }}
       dev-client: true
@@ -391,7 +393,7 @@ No outputs. Secrets: `consumer-token` (optional).
 | `native-cache-version` | `v1` | Bump to invalidate every native cache at once |
 | `default-branch` | `refs/heads/main` | Fully qualified ref of the branch allowed to **write** the Gradle cache; every other ref reads it. Set it if your default branch is not `main`, or the cache is never written and every run pays a cold Gradle |
 | `native-extra-globs` | `''` | Space-separated consumer-relative shell globs whose file contents join the native dependency hash (see [`docs/cache-keys.md`](cache-keys.md)) |
-| `ios` | `false` | Run the iOS build + simulator suite (macOS runners bill at 10x) |
+| `ios` | `false` | Run the iOS build + simulator suite. Default is off because macOS bills at 10x on a private repo; on a public repo it is free, so turn it on |
 | `android` | `true` | Run the Android build + emulator suite |
 | `xcode` | `''` | Xcode version to select (folded into the iOS cache key) |
 | `android-api-level` | `34` | Emulator + system image API level |
@@ -1328,7 +1330,7 @@ paths**, not package.json script names, run via `bash` by
 ## iOS opt-in
 
 iOS E2E defaults to `false` in `e2e.yml` because macOS GitHub-hosted runners
-bill at 10x. Two independent ways to opt in per the `ci.yml` example above:
+bill at 10x on a private repo, and nothing on a public one. Two independent ways to opt in per the `ci.yml` example above:
 
 - Set the repo variable `E2E_IOS=true` to run iOS on every push/PR.
 - Add the `e2e:ios` label to a PR to run it just for that PR (needs
