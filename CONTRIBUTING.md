@@ -43,7 +43,7 @@ Conventional Commits with a closed scope list, enforced by `commitlint` in the
 <type>(<scope>): <subject>
 ```
 
-Scopes: `actions checks ci deps docs e2e lib native ota release self test
+Scopes: `actions checks ci deps dev-config docs e2e lib native ota release self test
 tooling web workflows` (`commitlint.config.mjs` is the source of truth).
 
 Pull requests are **squash-merged**, so GitHub uses the **PR title** as the

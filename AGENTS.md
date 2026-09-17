@@ -1,8 +1,11 @@
 # Agent guide
 
-Reusable GitHub Actions workflows, composite actions and bash scripts for
-building, testing and releasing React Native (Expo) apps. Consumers pin `@v0`
-and call the workflows; nothing here is copied into their repos. The published
+The shared engineering baseline, in two halves. Reusable GitHub Actions
+workflows, composite actions and bash scripts for building, testing and
+releasing React Native (Expo) apps; and `packages/dev-config`, published as
+`@blinkbitcoin/dev-config`, which is the developer tooling a repo installs and
+is not React Native specific. Consumers pin `@v0` and call the workflows;
+nothing here is copied into their repos. The published
 contract is [`docs/consumer-guide.md`](docs/consumer-guide.md) — a change to an
 input, output, secret or env var is a change to every app that pins this repo.
 
@@ -39,7 +42,9 @@ Every row is a make target; nothing here is run through a package manager.
 | `make shellcheck` | shellcheck every script under `scripts/` (bash strict) |
 | `make actionlint` | Lint the workflows and composite actions |
 | `make test` | The bats suite over the pure scripts |
+| `make test-package` | `node:test` over `packages/dev-config` |
 | `make check-versions` | Fail when a workflow default disagrees with `scripts/lib/versions.sh` |
+| `make tool-versions` | Fail when an installed tool is not the version `packages/dev-config/versions.json` pins |
 | `make spell` | typos over the whole repo |
 | `make help` | Show every target with its description |
 
@@ -85,7 +90,7 @@ Every row is a make target; nothing here is run through a package manager.
   because a job-level `permissions:` block replaces the top-level one rather
   than extending it.
 - **Conventional commits with a closed scope enum**
-  (`commitlint.config.mjs`): `actions checks ci deps docs e2e lib native ota
+  (`commitlint.config.mjs`): `actions checks ci deps dev-config docs e2e lib native ota
   release self test tooling web workflows`. Squash merges take the PR title as
   the commit message, so `pr-title.yml` lints the title too.
 - **Releases are release-please's job.** `self-release.yml` cuts the version

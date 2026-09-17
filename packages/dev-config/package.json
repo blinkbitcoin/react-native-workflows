@@ -1,0 +1,30 @@
+{
+  "name": "@blinkbitcoin/dev-config",
+  "version": "0.1.0",
+  "description": "The shared developer-tooling baseline: the pinned tool table and the checks that enforce it.",
+  "license": "MIT",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/blinkbitcoin/shared-workflows.git",
+    "directory": "packages/dev-config"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "files": [
+    "bin",
+    "versions.json",
+    "README.md"
+  ],
+  "exports": {
+    "./versions.json": "./versions.json",
+    "./check-tool-versions": "./bin/check-tool-versions.mjs"
+  },
+  "bin": {
+    "check-tool-versions": "./bin/check-tool-versions.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

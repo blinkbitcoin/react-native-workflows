@@ -6,6 +6,8 @@ export ANDROID_API_LEVEL="34"
 export ACTIONLINT_VERSION="1.7.12"
 export SHELLCHECK_VERSION="0.11.0"
 export YQ_VERSION="4.53.6"
+export TYPOS_VERSION="1.50.1"
+export LEFTHOOK_VERSION="2.1.14"
 # bundletool derives the universal APK from the .aab in the android build lane;
 # no runner image ships it, so scripts/ci/bundletool-install.sh downloads this
 # exact release.

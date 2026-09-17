@@ -15,6 +15,7 @@ export default {
         'checks', // scripts/checks/**   + checks.yml
         'ci', // scripts/ci/**       + self-ci.yml
         'deps', // dependabot and pinned tool bumps
+        'dev-config', // packages/dev-config/** the published npm package
         'docs', // docs/** and README
         'e2e', // scripts/e2e/**      + e2e.yml
         'lib', // scripts/lib/**      shared bash helpers

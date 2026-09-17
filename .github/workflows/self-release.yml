@@ -16,6 +16,10 @@ jobs:
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
+      # Manifest mode namespaces every per-package output by its path. The bare
+      # release_created above is the root package (the workflows themselves);
+      # this one is the npm package, which releases on its own cadence.
+      dev_config_released: ${{ steps.release.outputs['packages/dev-config--release_created'] }}
     steps:
       - name: Release please
         id: release
@@ -24,6 +28,15 @@ jobs:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
           token: ${{ secrets.RELEASE_PLEASE_TOKEN || github.token }}
+
+      # The publish job keys off a path-namespaced output, and a typo there
+      # would make it skip silently rather than fail. Print what release-please
+      # actually released so a wrong key is visible in the run, not months later
+      # in a missing package version.
+      - name: Record which packages released
+        env:
+          PATHS_RELEASED: ${{ steps.release.outputs.paths_released }}
+        run: echo "paths_released=${PATHS_RELEASED:-none}" >> "$GITHUB_STEP_SUMMARY"
   major-tag:
     name: Major tag
     needs: release-please
@@ -44,3 +57,32 @@ jobs:
         env:
           TAG: ${{ needs.release-please.outputs.tag_name }}
         run: bash scripts/self/tag-major.sh
+
+  publish-dev-config:
+    name: Publish dev-config
+    needs: release-please
+    if: ${{ needs.release-please.outputs.dev_config_released == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      packages: write # publish @blinkbitcoin/dev-config to GitHub Packages
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      # registry-url + scope write the .npmrc that routes @blinkbitcoin to
+      # GitHub Packages, which is where the org's other @blinkbitcoin packages
+      # live - so this needs github.token and no separate npm credential.
+      - name: Set up Node and the @blinkbitcoin registry
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          registry-url: https://npm.pkg.github.com
+          scope: '@blinkbitcoin'
+
+      - name: Publish @blinkbitcoin/dev-config
+        working-directory: packages/dev-config
+        run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
