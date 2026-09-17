@@ -79,8 +79,13 @@ workflows_ios_scheme() {
   ws="$(find "$root/ios" -maxdepth 1 -name '*.xcworkspace' 2>/dev/null | head -1)"
   [ -n "$ws" ] || die "no ios/*.xcworkspace in $root - run prebuild.sh ios and pods.sh first"
   ws_name="$(basename "$ws" .xcworkspace)"
-  cfg_name="$(workflows_expo_config ios.scheme-name)"
-  if [ "$ws_name" != "$cfg_name" ]; then
+  # The workspace name is what we return, always. The Expo config is only a
+  # cross-check, and asking for it runs `pnpm exec expo config` - which on a
+  # cache hit means installing the whole dependency tree (~80s) to produce a
+  # warning that changes nothing. Best-effort: when the config is not already
+  # available, skip the comparison rather than make every caller pay for it.
+  if cfg_name="$(workflows_expo_config ios.scheme-name 2>/dev/null)" &&
+    [ -n "$cfg_name" ] && [ "$ws_name" != "$cfg_name" ]; then
     printf '::warning::expo-config scheme-name (%s) disagrees with the generated workspace (%s); using the workspace name\n' \
       "$cfg_name" "$ws_name" >&2
   fi

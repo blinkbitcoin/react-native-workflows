@@ -175,16 +175,24 @@ jobs:
             ${{ inputs.working-directory }}/ios/*.xcworkspace
           key: ${{ steps.keys.outputs.ios-key }}-${{ inputs.ios-configuration }}
           lookup-only: false
-      # Always: ios-pack.sh needs $WORKFLOWS_DIR, pnpm and the expo config even on a hit.
-      # Ruby is only needed by pods.sh, so it is installed on a miss only.
+      # Miss only. On a hit the remaining steps pack a tar and upload it:
+      # ios-pack.sh takes the scheme from the workspace filename, and its
+      # cross-check against the Expo config is best-effort precisely so a warm
+      # run does not install a dependency tree to produce a warning. That was
+      # ~80s of every warm build. $WORKFLOWS_DIR comes from env-publish.sh
+      # above, not from here.
       - name: Setup
+        if: ${{ steps.restore.outputs.cache-hit != 'true' }}
         uses: ./.workflows/.github/actions/setup
         with:
           working-directory: ${{ inputs.working-directory }}
-          ruby: ${{ steps.restore.outputs.cache-hit != 'true' }}
+          ruby: 'true'
       # Before the prebuild, because EXPO_PUBLIC_* is inlined when the bundle is
-      # written - anything published later never reaches the .app.
+      # written - anything published later never reaches the .app. Miss only:
+      # on a hit there is no bundle to write, and the variables are already
+      # baked into the .app being restored (which is why they are in its key).
       - name: Publish build-env
+        if: ${{ steps.restore.outputs.cache-hit != 'true' }}
         env:
           WORKFLOWS_BUILD_ENV: ${{ inputs.build-env }}
         run: bash "$WORKFLOWS_DIR/scripts/release/build-env.sh"
