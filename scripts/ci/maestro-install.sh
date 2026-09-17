@@ -12,11 +12,24 @@ if [ -n "$_maestro_version_override" ]; then
 fi
 require_cmd curl bash
 
+# Maestro prints a first-run analytics notice before anything else, so ask it
+# not to - which also stops CI reporting telemetry on every run.
+export MAESTRO_CLI_NO_ANALYTICS=1
+
 bin="$HOME/.maestro/bin/maestro"
+
+# The first dotted number in the output, not the whole output. Comparing the
+# whole string worked on any machine where maestro had run once and failed on
+# every fresh runner, where the notice above is printed and the check reported
+# `expected 2.10.0, got Anonymous analytics enabled...`. The env var alone
+# would fix today's banner; parsing is what survives the next one.
+maestro_version() {
+  "$1" --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1
+}
 
 installed_version() {
   [ -x "$bin" ] || return 1
-  "$bin" --version 2>/dev/null
+  maestro_version "$bin"
 }
 
 if [ "$(installed_version || true)" != "$MAESTRO_VERSION" ]; then
@@ -26,7 +39,7 @@ if [ "$(installed_version || true)" != "$MAESTRO_VERSION" ]; then
 fi
 
 [ -x "$bin" ] || die "maestro install failed: $bin not found"
-installed="$("$bin" --version)"
+installed="$(maestro_version "$bin")"
 [ "$installed" = "$MAESTRO_VERSION" ] ||
   die "maestro version mismatch: expected $MAESTRO_VERSION, got $installed"
 
