@@ -66,8 +66,12 @@ on:
           Sign with the upload keystore. Off lets the release build fall back to
           the debug keystore (the consumer's signing config plugin does this and
           warns that it did), which still produces an .aab, a universal .apk and
-          a mapping file and needs no Play credentials. Nothing signed this way
-          can be uploaded to a store.
+          a mapping file and needs no Play credentials. Both artifacts carry the
+          project debug certificate, so they install for a smoke test and no
+          store will take them. The consumer's build lane must name that
+          keystore to bundletool: given no --ks it falls back to
+          ~/.android/debug.keystore, which a developer machine has and a runner
+          does not, and then emits an unsigned APK without saying so.
         type: boolean
         default: true
       verify:
