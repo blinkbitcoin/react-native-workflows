@@ -87,6 +87,17 @@ on:
           the iOS jobs whatever `dev-client` says; Android is unaffected.
         type: string
         default: Debug
+      build-env:
+        description: >-
+          Flat JSON object of non-secret build environment variables published
+          before the iOS prebuild, so the bundle embeds them. A Release build
+          resolves .env.production at build time; an exported variable wins over
+          the dotenv file, which is how an E2E build is pointed at a mock API.
+          Folded into the iOS cache key. Keys must be UPPER_SNAKE and anything
+          that reads as a credential is refused - this is a workflow input, so
+          GitHub neither masks nor hides it.
+        type: string
+        default: '{}'
       e2e-setup-script:
         description: Consumer-relative script run before the suite (empty skips it); a missing file is fatal
         type: string
@@ -152,6 +163,7 @@ jobs:
           native-cache-version: ${{ inputs.native-cache-version }}
           native-extra-globs: ${{ inputs.native-extra-globs }}
           xcode: ${{ inputs.xcode }}
+          build-env: ${{ inputs.build-env }}
       # The built .app plus the generated workspace: ios-pack.sh resolves the
       # scheme from ios/*.xcworkspace, and on a cache hit no prebuild has run.
       - name: Restore iOS app cache
@@ -170,6 +182,12 @@ jobs:
         with:
           working-directory: ${{ inputs.working-directory }}
           ruby: ${{ steps.restore.outputs.cache-hit != 'true' }}
+      # Before the prebuild, because EXPO_PUBLIC_* is inlined when the bundle is
+      # written - anything published later never reaches the .app.
+      - name: Publish build-env
+        env:
+          WORKFLOWS_BUILD_ENV: ${{ inputs.build-env }}
+        run: bash "$WORKFLOWS_DIR/scripts/release/build-env.sh"
       - name: Prebuild (ios)
         if: ${{ steps.restore.outputs.cache-hit != 'true' }}
         run: bash "$WORKFLOWS_DIR/scripts/native/prebuild.sh" ios
@@ -267,7 +285,12 @@ jobs:
         uses: ./.workflows/.github/actions/maestro
         with:
           version: ${{ inputs.maestro-version }}
+      # A Release build embeds its bundle and never asks Metro for one, so
+      # starting it - and prewarming a bundle nothing reads - is pure wall clock.
+      # The setup hook stays unconditional: the mock API it starts is a runtime
+      # dependency of the suite, not a build-time one.
       - name: Start Metro
+        if: ${{ inputs.ios-configuration != 'Release' }}
         run: bash "$WORKFLOWS_DIR/scripts/e2e/metro-start.sh"
       - name: E2E setup script
         if: ${{ inputs.e2e-setup-script != '' }}
@@ -284,6 +307,7 @@ jobs:
       - name: Install app
         run: bash "$WORKFLOWS_DIR/scripts/e2e/ios-simulator.sh" install "$WORKFLOWS_OUT"/*.app.tar
       - name: Wait for Metro
+        if: ${{ inputs.ios-configuration != 'Release' }}
         timeout-minutes: 10
         run: bash "$WORKFLOWS_DIR/scripts/e2e/metro-wait.sh" ios
       - name: Start screen recording

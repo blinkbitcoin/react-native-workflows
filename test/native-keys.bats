@@ -41,3 +41,44 @@ load test_helper
   grep -q '^android-key=android-apk-v1-' "$out"
   grep -q '^pods-key=pods-Linux-' "$out"
 }
+
+# The iOS .app embeds EXPO_PUBLIC_* at bundle time. Without this the E2E job
+# restores an .app built against a different API URL and the change that set it
+# looks like it did nothing.
+@test "build-env folds into the ios key and leaves the other keys alone" {
+  unset GITHUB_OUTPUT
+  RUNNER_OS=macOS RUNNER_ARCH=ARM64 NATIVE_CACHE_VERSION=v1 XCODE='' \
+    BUILD_ENV='{"EXPO_PUBLIC_API_URL":"http://localhost:8082/graphql"}' \
+    run bash "$REPO_ROOT/scripts/ci/native-keys.sh" "$FIXTURES/consumer"
+  [ "$status" -eq 0 ]
+  hash=$(bash "$REPO_ROOT/scripts/ci/native-hash.sh" "$FIXTURES/consumer")
+  [[ "$output" =~ ios-key=ios-app-v1-macOS-ARM64-xcodedefault-$hash-env[0-9a-f]{8} ]] || fail "assertion failed; output: $output"
+  [[ "$output" == *"android-key=android-apk-v1-$hash"* ]] || fail "assertion failed; output: $output"
+  [[ "$output" == *"pods-key=pods-macOS-$hash"* ]] || fail "assertion failed; output: $output"
+}
+
+@test "a different build-env value produces a different ios key" {
+  unset GITHUB_OUTPUT
+  key_for() {
+    RUNNER_OS=macOS RUNNER_ARCH=ARM64 XCODE='' BUILD_ENV="$1" \
+      bash "$REPO_ROOT/scripts/ci/native-keys.sh" "$FIXTURES/consumer" |
+      grep '^ios-key='
+  }
+  a=$(key_for '{"EXPO_PUBLIC_API_URL":"http://localhost:8082/graphql"}')
+  b=$(key_for '{"EXPO_PUBLIC_API_URL":"https://api.example.com/graphql"}')
+  [ "$a" != "$b" ] || fail "both values produced $a"
+}
+
+# Consumers that never pass build-env must keep the keys they already have.
+@test "an empty or {} build-env leaves the ios key byte-identical" {
+  unset GITHUB_OUTPUT
+  key_for() {
+    RUNNER_OS=macOS RUNNER_ARCH=ARM64 XCODE='' BUILD_ENV="$1" \
+      bash "$REPO_ROOT/scripts/ci/native-keys.sh" "$FIXTURES/consumer" |
+      grep '^ios-key='
+  }
+  base=$(RUNNER_OS=macOS RUNNER_ARCH=ARM64 XCODE='' \
+    bash "$REPO_ROOT/scripts/ci/native-keys.sh" "$FIXTURES/consumer" | grep '^ios-key=')
+  [ "$(key_for '')" = "$base" ] || fail "empty build-env changed the key"
+  [ "$(key_for '{}')" = "$base" ] || fail "{} build-env changed the key"
+}
