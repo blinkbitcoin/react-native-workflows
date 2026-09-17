@@ -1,15 +1,15 @@
 <div align="center">
 
-# React Native Workflows
+# Shared Workflows
 
-Shared GitHub Actions workflows for building, testing and releasing<br>
-React Native (Expo) apps.
+The shared engineering baseline: reusable GitHub Actions workflows for<br>
+React Native (Expo) apps, and the developer tooling every repo installs.
 
 [![CI](https://github.com/blinkbitcoin/shared-workflows/actions/workflows/self-ci.yml/badge.svg?branch=main)](https://github.com/blinkbitcoin/shared-workflows/actions/workflows/self-ci.yml?query=branch%3Amain)
 [![Smoke](https://github.com/blinkbitcoin/shared-workflows/actions/workflows/self-smoke.yml/badge.svg?branch=main)](https://github.com/blinkbitcoin/shared-workflows/actions/workflows/self-smoke.yml?query=branch%3Amain)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue)](LICENSE)
 
-<sub>14 reusable workflows · 79 scripts · 435 tests · one pinned tag</sub>
+<sub>14 reusable workflows · 79 scripts · 433 tests · one pinned tag · one npm package</sub>
 
 </div>
 
@@ -24,6 +24,11 @@ prove that the artifact uploaded is the one that was built.
 Kept here rather than copied into each app repo, where they drift apart and the
 same bug gets fixed three times. An app repo carries a forty-line `ci.yml`
 naming the workflows it calls; everything those workflows do lives here.
+
+The same argument applies to the tooling that runs on a laptop — the hooks, the
+linters, the pinned tool versions — so that lives here too, as
+[`@blinkbitcoin/dev-config`](packages/dev-config). The workflows are React
+Native and Expo specific; the package is not, and any repo can install it.
 
 ```mermaid
 flowchart LR

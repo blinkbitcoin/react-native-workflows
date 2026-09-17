@@ -14,7 +14,7 @@ scope enum — see CONTRIBUTING.md.
 
 ## Checklist
 
-- [ ] PR title is a Conventional Commit with a valid scope (`actions checks ci deps docs e2e lib native ota release self test tooling web workflows`)
+- [ ] PR title is a Conventional Commit with a valid scope (`actions checks ci deps dev-config docs e2e lib native ota release self test tooling web workflows`)
 - [ ] `make check` passes locally
 - [ ] bats coverage added or updated for the behaviour that changed (`test/`)
 - [ ] `docs/consumer-guide.md` updated — a new or renamed input, output, secret or env var is a contract change
