@@ -16,12 +16,21 @@ workflows_confirm_ios_open() { # <app id>
   local flow
   command -v maestro >/dev/null 2>&1 || { log "maestro not on PATH - skipping the open-in-app tap"; return 0; }
   flow="$(mktemp -t workflows-open-XXXXXX).yaml"
+  # Wait for the prompt rather than glancing once. An `optional: true` tap is a
+  # race - it reports success when the button is not on screen yet, and the same
+  # script then passed one run and failed the next with no code change between
+  # them. extendedWaitUntil bounds the wait instead; if no prompt ever appears
+  # the flow fails, which the caller ignores, so the cost of being wrong is the
+  # timeout and nothing else.
   cat >"$flow" <<YAML
 appId: $1
 ---
+- extendedWaitUntil:
+    visible:
+      text: '^Open\$'
+    timeout: ${WORKFLOWS_IOS_OPEN_PROMPT_TIMEOUT_MS:-20000}
 - tapOn:
-    text: '^Open$'
-    optional: true
+    text: '^Open\$'
 YAML
   maestro test "$flow" >/dev/null 2>&1 || log "no open-in-app prompt to confirm (or maestro could not reach it)"
   rm -f "$flow"
