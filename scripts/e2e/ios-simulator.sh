@@ -15,6 +15,7 @@ source "$(dirname "$0")/../lib/e2e-env.sh"
 
 require_cmd xcrun jq
 rec_pid_file="$WORKFLOWS_OUT/ios-record.pid"
+log_pid_file="$WORKFLOWS_OUT/ios-unified-log.pid"
 
 case "${1:-}" in
   pick)
@@ -69,6 +70,17 @@ case "${1:-}" in
           > "$WORKFLOWS_OUT/ios-record.log" 2>&1 &
         printf '%s\n' "$!" > "$rec_pid_file"
         log "recording to $WORKFLOWS_OUT/ios.mp4 (pid $(cat "$rec_pid_file"))"
+        # The simulator's unified log alongside the video, so a deep link that
+        # reaches the app late can be traced through SpringBoard's alert and
+        # the scene action (UIOpenURLAction) instead of inferred from Maestro's
+        # screenshots. Bounded by predicate: SpringBoard's alert and scene
+        # deactivation categories, FrontBoard's scene-action delivery in any
+        # process, and any line naming the app id or the URL scheme.
+        xcrun simctl spawn "$(workflows_sim_udid)" log stream --level debug --style compact \
+          --predicate "$(workflows_ios_unified_log_predicate)" \
+          > "$WORKFLOWS_OUT/ios-unified.log" 2>&1 &
+        printf '%s\n' "$!" > "$log_pid_file"
+        log "unified log to $WORKFLOWS_OUT/ios-unified.log (pid $(cat "$log_pid_file"))"
         ;;
       stop)
         [ -f "$rec_pid_file" ] || { log "no recording in progress"; exit 0; }
@@ -79,6 +91,11 @@ case "${1:-}" in
         for _ in $(seq 1 30); do kill -0 "$pid" 2>/dev/null || break; sleep 1; done
         rm -f "$rec_pid_file"
         log "recording stopped ($WORKFLOWS_OUT/ios.mp4)"
+        if [ -f "$log_pid_file" ]; then
+          kill -INT "$(cat "$log_pid_file")" 2>/dev/null || true
+          rm -f "$log_pid_file"
+          log "unified log stopped ($WORKFLOWS_OUT/ios-unified.log, $(wc -l < "$WORKFLOWS_OUT/ios-unified.log" 2>/dev/null || echo 0) lines)"
+        fi
         ;;
       *) die "usage: ios-simulator.sh record start|stop" ;;
     esac

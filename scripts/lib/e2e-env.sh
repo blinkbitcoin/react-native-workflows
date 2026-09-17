@@ -92,6 +92,23 @@ workflows_ios_scheme() {
   printf '%s\n' "$ws_name"
 }
 
+# workflows_ios_unified_log_predicate -> the `log stream --predicate` that
+# ios-simulator.sh records next to the video. The app id (from the Expo config,
+# or WORKFLOWS_APP_ID) and its URL scheme narrow the firehose to the lines that
+# explain a deep link: SpringBoard presenting/dismissing the "Open in <app>?"
+# alert, the app's scene being deactivated behind it, and FrontBoard handing
+# the UIOpenURLAction to the app.
+workflows_ios_unified_log_predicate() {
+  local app_id scheme
+  app_id="$(workflows_app_id ios 2>/dev/null || printf '%s' "${WORKFLOWS_APP_ID:-}")"
+  scheme="$(workflows_scheme 2>/dev/null || true)"
+  printf '%s' "(process == \"SpringBoard\" AND (category == \"AlertItems\" OR category == \"AlertItemStack\" OR category == \"SceneDeactivation\"))"
+  printf '%s' " OR (subsystem == \"com.apple.FrontBoard\" AND category == \"SceneClient\")"
+  [ -n "$app_id" ] && printf '%s' " OR eventMessage CONTAINS \"$app_id\""
+  [ -n "$scheme" ] && printf '%s' " OR eventMessage CONTAINS \"$scheme://\""
+  printf '\n'
+}
+
 # Debug unless a caller asks for Release. Release is what makes an iOS E2E app
 # self-contained: the JS bundle is embedded and expo-dev-client's launcher is
 # not in the build, so the app runs on `simctl launch` alone - no Metro, no
