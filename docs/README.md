@@ -29,5 +29,6 @@ rest explain the parts of it that surprise people.
 | `CONTRIBUTING.md` | Setup, worktrees, commit conventions, and what a change has to carry |
 | `SECURITY.md` | Private reporting, the threat model and the secrets policy |
 | `README.md` | What this repo is, the caller to copy, the workflow table, pinning, and what it needs from you |
+| `packages/dev-config/README.md` | `@blinkbitcoin/dev-config` — the pinned tool table and `check-tool-versions`, for repos on the baseline |
 | `scripts/e2e/README.md` | How the E2E scripts fit together on a runner |
 | `docs/superpowers/` | The specs and plans this repo was built from. History, not a guide |

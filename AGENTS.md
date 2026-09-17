@@ -39,7 +39,9 @@ Every row is a make target; nothing here is run through a package manager.
 | `make shellcheck` | shellcheck every script under `scripts/` (bash strict) |
 | `make actionlint` | Lint the workflows and composite actions |
 | `make test` | The bats suite over the pure scripts |
+| `make test-package` | `node:test` over `packages/dev-config` |
 | `make check-versions` | Fail when a workflow default disagrees with `scripts/lib/versions.sh` |
+| `make tool-versions` | Fail when an installed tool is not the version `packages/dev-config/versions.json` pins |
 | `make spell` | typos over the whole repo |
 | `make help` | Show every target with its description |
 

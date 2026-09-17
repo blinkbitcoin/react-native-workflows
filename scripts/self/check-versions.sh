@@ -21,4 +21,21 @@ grep -q "yq = \"$YQ_VERSION\"" .mise.toml || { echo "::error::.mise.toml yq != $
 # bats is pinned in .mise.toml only (nothing installs it from versions.sh); assert
 # the pin exists and is exact, so a bare `bats = "latest"` cannot creep in.
 grep -qE '^bats = "[0-9]+\.[0-9]+\.[0-9]+"$' .mise.toml || { echo "::error::.mise.toml bats must be pinned to an exact version"; fail=1; }
+grep -q "typos = \"$TYPOS_VERSION\"" .mise.toml || { echo "::error::.mise.toml typos != $TYPOS_VERSION"; fail=1; }
+grep -q "lefthook = \"$LEFTHOOK_VERSION\"" .mise.toml || { echo "::error::.mise.toml lefthook != $LEFTHOOK_VERSION"; fail=1; }
+
+# The package ships versions.json to consumers, who have neither this file nor
+# .mise.toml. Bind the two tables here so a tool version still lives in exactly
+# one place - the bug this whole check exists to prevent, one level up.
+table=packages/dev-config/versions.json
+for pair in "actionlint:$ACTIONLINT_VERSION" "shellcheck:$SHELLCHECK_VERSION" "yq:$YQ_VERSION" "typos:$TYPOS_VERSION" "lefthook:$LEFTHOOK_VERSION"; do
+  tool=${pair%%:*}
+  want=${pair#*:}
+  got=$(yq -r ".tools.\"$tool\".version" "$table")
+  [ "$got" = "$want" ] || { echo "::error::$table $tool ($got) != versions.sh ($want)"; fail=1; }
+done
+for tool in bats node pnpm; do
+  got=$(yq -r ".tools.\"$tool\".version" "$table")
+  grep -q "^$tool = \"$got\"" .mise.toml || { echo "::error::$table $tool ($got) is not what .mise.toml pins"; fail=1; }
+done
 exit $fail

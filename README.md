@@ -157,21 +157,43 @@ same sha, which is how a release refuses to build on a red `main`.
 
 ## Repository layout
 
-| Path                 | Responsibility                                                                                                            |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `.github/workflows/` | The 17 workflows above. Thin: a workflow wires inputs and calls a script                                                  |
-| `.github/actions/`   | Five composite actions — `setup`, `maestro`, `native-key`, `free-disk`, `forensics` — the steps repeated across workflows |
-| `scripts/checks/`    | A gate each: audit, codegen, commitlint, expo-doctor, i18n; plus the scripts that pick the consumer's over this repo's    |
-| `scripts/ci/`        | Runner plumbing: Android SDK, KVM, disk pressure, pnpm store, badges, cancel-runs, tool versions                          |
-| `scripts/e2e/`       | The E2E machine: simulator and emulator boot, Metro start and wait, Maestro run, timeouts, forensics collection           |
-| `scripts/native/`    | Prebuild, pods, and the iOS and Android build and packaging steps                                                         |
-| `scripts/release/`   | Version resolution, fingerprints, build info, store notes, assets, hashes, secret decoding, the green-run gate            |
-| `scripts/ota/`       | Fingerprint baseline and gate, export, publish, smoke                                                                     |
-| `scripts/web/`       | Expo web export, Playwright install, cache keys, run                                                                      |
-| `scripts/lib/`       | Shared bash: common helpers, env building and validation, git cleanliness, the single pinned tool-version table           |
-| `scripts/self/`      | This repo's own upkeep: version agreement, moving the major tag                                                           |
-| `test/`              | 51 bats files, 435 tests, plus `fixtures/consumer-min/` — the caller the docs are held to                                 |
-| `docs/`              | The consumer guide and the three explainers                                                                               |
+| Path                   | Responsibility                                                                                                            |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `.github/workflows/`   | The 17 workflows above. Thin: a workflow wires inputs and calls a script                                                  |
+| `.github/actions/`     | Five composite actions — `setup`, `maestro`, `native-key`, `free-disk`, `forensics` — the steps repeated across workflows |
+| `scripts/checks/`      | A gate each: audit, codegen, commitlint, expo-doctor, i18n; plus the scripts that pick the consumer's over this repo's    |
+| `scripts/ci/`          | Runner plumbing: Android SDK, KVM, disk pressure, pnpm store, badges, cancel-runs, tool versions                          |
+| `scripts/e2e/`         | The E2E machine: simulator and emulator boot, Metro start and wait, Maestro run, timeouts, forensics collection           |
+| `scripts/native/`      | Prebuild, pods, and the iOS and Android build and packaging steps                                                         |
+| `scripts/release/`     | Version resolution, fingerprints, build info, store notes, assets, hashes, secret decoding, the green-run gate            |
+| `scripts/ota/`         | Fingerprint baseline and gate, export, publish, smoke                                                                     |
+| `scripts/web/`         | Expo web export, Playwright install, cache keys, run                                                                      |
+| `scripts/lib/`         | Shared bash: common helpers, env building and validation, git cleanliness, the single pinned tool-version table           |
+| `scripts/self/`        | This repo's own upkeep: version agreement, moving the major tag                                                           |
+| `test/`                | 51 bats files, 435 tests, plus `fixtures/consumer-min/` — the caller the docs are held to                                 |
+| `packages/dev-config/` | `@blinkbitcoin/dev-config` — the pinned tool table and the checks that enforce it, for repos to install                   |
+| `docs/`                | The consumer guide and the three explainers                                                                               |
+
+## The tool table
+
+CI is shared by reference; the tools a developer runs are not. A pre-commit
+hook and a CI gate have to run the *same* `typos` binary or a commit passes
+locally and fails on the runner — so the versions live in one place and every
+other file is checked against it.
+
+`packages/dev-config/versions.json` is that place, published as
+`@blinkbitcoin/dev-config`. `check-tool-versions` asks each tool its own
+version rather than reading a provisioner's config, so it works the same under
+mise here and under a Nix flake elsewhere:
+
+```sh
+npx check-tool-versions                    # every tool in the table
+npx check-tool-versions typos shellcheck   # only the ones this repo uses
+```
+
+`make check-versions` binds the table to `scripts/lib/versions.sh` and
+`.mise.toml`, so a version cannot be changed in one file and forgotten in the
+others.
 
 ## Pinning
 
