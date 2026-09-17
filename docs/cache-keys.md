@@ -35,7 +35,7 @@ waits on a dependency install. It folds together:
 
 | Cache | Key | Produced by | Used in |
 | --- | --- | --- | --- |
-| iOS app (`.app` + `ios/*.xcworkspace`) | `ios-app-{ver}-{os}-{arch}-xcode{x}-{hash}` (exact; `{x}` is the `xcode` input or `default`) | `native-key` action → `scripts/ci/native-keys.sh` (`ios-key` output) | `e2e.yml` job `build-ios`, `actions/cache/restore@v6` + `actions/cache/save@v6` |
+| iOS app (`.app` + `ios/*.xcworkspace`) | `ios-app-{ver}-{os}-{arch}-xcode{x}-{hash}[-env{8hex}]-{configuration}` (exact; `{x}` is the `xcode` input or `default`; `-env{8hex}` is a digest of `build-env` and is absent when that input is empty, because the `.app` embeds `EXPO_PUBLIC_*` at bundle time; `e2e.yml` appends `ios-configuration`) | `native-key` action → `scripts/ci/native-keys.sh` (`ios-key` output) | `e2e.yml` job `build-ios`, `actions/cache/restore@v6` + `actions/cache/save@v6` |
 | Android debug APK | `android-apk-{ver}-{hash}` (exact) | `native-key` action → `scripts/ci/native-keys.sh` (`android-key` output) | `e2e.yml` job `build-android`, restore + save |
 | CocoaPods (`ios/Pods`, `~/Library/Caches/CocoaPods`) | `pods-{os}-{hash}`, restore-keys prefix `pods-{os}-` | `native-key` action → `scripts/ci/native-keys.sh` (`pods-key` output) | `e2e.yml` job `build-ios`, `actions/cache@v6` (a prefix hit is fine: `pod install` reconciles) |
 | pnpm store | `pnpm-{os}-{hashFiles('**/pnpm-lock.yaml')}`, restore-keys prefix `pnpm-{os}-` | `setup` action (path from `scripts/ci/pnpm-store-path.sh`) | every workflow that runs `setup` |
