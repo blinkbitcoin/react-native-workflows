@@ -23,8 +23,19 @@ if [ "$platform" = ios ]; then
   udid="$(workflows_sim_udid)"
   if [ "$WORKFLOWS_DEV_CLIENT" = "true" ]; then
     scheme="$(workflows_scheme)"
-    xcrun simctl openurl "$udid" \
-      "$scheme://expo-development-client/?url=http%3A%2F%2Flocalhost%3A$WORKFLOWS_METRO_PORT"
+    url="$scheme://expo-development-client/?url=http%3A%2F%2Flocalhost%3A$WORKFLOWS_METRO_PORT"
+    # Foreground the app before handing it the URL. iOS asks "Open in <app>?"
+    # when a URL arrives from somewhere else, and on a simulator that has never
+    # been asked - every fresh runner - the prompt sits there unanswered until
+    # the bundle wait below times out. A developer's simulator answered it once,
+    # months ago, and remembers; which is why this only ever failed in CI.
+    # Launching first makes the open a same-app navigation, which is not
+    # prompted. It lands on the dev client's launcher for a moment, and the URL
+    # then takes it to Metro - the launcher is never tapped, which is the part
+    # that does not work headless (it discovers Metro over Bonjour).
+    xcrun simctl launch "$udid" "$app_id" >/dev/null 2>&1 || true
+    log "opening $url"
+    xcrun simctl openurl "$udid" "$url"
   else
     xcrun simctl launch "$udid" "$app_id"
   fi
