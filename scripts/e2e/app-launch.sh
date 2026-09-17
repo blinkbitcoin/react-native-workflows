@@ -33,9 +33,18 @@ log "launching $app_id on $platform (dev-client=$WORKFLOWS_DEV_CLIENT)"
 
 # The bundle request Metro logs is the launch's receipt; anything before it can
 # be an app that started and died on the launcher.
+# A Release iOS build embeds its bundle and never asks Metro for one, so e2e.yml
+# does not start Metro for it - there is no metro.log to read, and demanding one
+# would fail the launch it is supposed to watch.
+needs_metro=true
+[ "$platform" = ios ] && [ "$WORKFLOWS_IOS_CONFIGURATION" = Release ] && needs_metro=false
+
 metro_log="$WORKFLOWS_OUT/metro.log"
-[ -f "$metro_log" ] || die "no $metro_log - run metro-start.sh first"
-before=$(( $(wc -l < "$metro_log") + 1 ))
+before=1
+if [ "$needs_metro" = true ]; then
+  [ -f "$metro_log" ] || die "no $metro_log - run metro-start.sh first"
+  before=$(( $(wc -l < "$metro_log") + 1 ))
+fi
 
 if [ "$platform" = ios ]; then
   udid="$(workflows_sim_udid)"
@@ -80,7 +89,7 @@ fi
 #
 # `simctl launch` already failed the script if the app did not start, and the
 # suite's first flow asserts the app is on screen - a stronger check than this.
-if [ "$platform" = ios ] && [ "$WORKFLOWS_IOS_CONFIGURATION" = Release ]; then
+if [ "$needs_metro" = false ]; then
   log "$app_id launched (Release build - the bundle is embedded, Metro is not asked)"
   exit 0
 fi

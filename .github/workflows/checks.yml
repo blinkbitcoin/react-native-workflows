@@ -389,7 +389,7 @@ jobs:
           SCRIPT_NAME: check-prebuild
         run: bash "$WORKFLOWS_DIR/scripts/checks/run-script.sh" "$SCRIPT_NAME"
   bundle-secrets:
-    name: Bundle secrets
+    name: Secrets
     runs-on: ${{ inputs.linux-runner }}
     timeout-minutes: 25
     steps:

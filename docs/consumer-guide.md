@@ -315,7 +315,7 @@ mental model).
 | `docs-globs` | `''` | Extra `\|`-joined POSIX ERE alternatives **added to** the built-in docs pattern (`^docs/\|\.md$\|(^\|/)LICENSE$\|^\.github/ISSUE_TEMPLATE/\|^\.github/PULL_REQUEST_TEMPLATE`), not a replacement for it |
 
 Jobs: `Changes`, `Code`, `Generated`, `Docs`, `Dependencies`, `Prebuild`,
-`Bundle secrets`, `Release`, `Tooling`, `Commits` — grouped by **who acts on a
+`Secrets`, `Release`, `Tooling`, `Commits` — grouped by **who acts on a
 failure**, not by what is cheapest to run. A red `Dependencies` means a
 vulnerability, a licence problem or an SDK drift and belongs to whoever owns
 operations; a red `Code` is a lint error and belongs to the author. They used to
