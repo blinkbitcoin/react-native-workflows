@@ -1,22 +1,63 @@
-# react-native-workflows
+<div align="center">
 
-Reusable GitHub Actions workflows and bash scripts for building, testing, and
-releasing React Native (Expo) apps: checks (typecheck/lint/format/knip/spell/
-i18n/codegen/expo-doctor/audit/actionlint/shellcheck/commitlint), unit tests
-with coverage, E2E (Maestro on iOS simulators and Android emulators, with
-native-build caching), web export + Playwright + GitHub Pages, PR hygiene
-(cancel-on-close, PR-title linting), and the release path (version/notes
-preparation, signed store builds through fastlane, GitHub releases,
-fingerprint-gated OTA updates). Consumed by
-`blinkbitcoin/react-native-mobile-template` and similar projects — see
-**[docs/consumer-guide.md](docs/consumer-guide.md)** for the full contract.
+# React Native Workflows
 
-## 60-second start
+Shared GitHub Actions workflows for building, testing and releasing<br>
+React Native (Expo) apps.
 
-Add to your app repo's `.github/workflows/ci.yml`:
+[![CI](https://github.com/blinkbitcoin/react-native-workflows/actions/workflows/self-ci.yml/badge.svg?branch=main)](https://github.com/blinkbitcoin/react-native-workflows/actions/workflows/self-ci.yml?query=branch%3Amain)
+[![Smoke](https://github.com/blinkbitcoin/react-native-workflows/actions/workflows/self-smoke.yml/badge.svg?branch=main)](https://github.com/blinkbitcoin/react-native-workflows/actions/workflows/self-smoke.yml?query=branch%3Amain)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue)](LICENSE)
+
+<sub>14 reusable workflows · 79 scripts · 435 tests · one pinned tag</sub>
+
+</div>
+
+---
+
+Continuous integration for a React Native app is not a config file. It is
+seventy shell scripts: install an Android SDK, boot an emulator that does not
+hang, wait for Metro, hash the native inputs so a build cache means something,
+decode signing secrets without leaving them on disk, upload a build and then
+prove that the artifact uploaded is the one that was built.
+
+Kept here rather than copied into each app repo, where they drift apart and the
+same bug gets fixed three times. An app repo carries a forty-line `ci.yml`
+naming the workflows it calls; everything those workflows do lives here.
+
+```mermaid
+flowchart LR
+  subgraph consumer [the app repo]
+    caller["ci.yml — 40 lines"]
+  end
+  subgraph here [react-native-workflows @v0]
+    checks[Checks] --> unit[Unit] --> e2e[E2E]
+    prepare[Prepare] --> build[Build and sign] --> ship[Upload and release]
+  end
+  caller --> checks
+  caller --> prepare
+```
+
+**Where to start.** Three ways through this repository:
+
+- **Adopting it in an app repo** — [Calling it](#calling-it) is the caller to
+  copy, [Pinning](#pinning) explains why `@v0` moves, [What a consumer
+  provides](#what-a-consumer-provides) is the short list of settings.
+- **Debugging a red run** — [Every workflow and its
+  jobs](#every-workflow-and-its-jobs) says which job owns the failure,
+  [forensics.md](docs/forensics.md) is what a failed E2E run left behind,
+  [cache-keys.md](docs/cache-keys.md) is why the cache missed.
+- **Changing this repo** — [Repository layout](#repository-layout) says where a
+  change belongs, [CONTRIBUTING.md](CONTRIBUTING.md) covers worktrees and
+  commits, [consumer-guide.md](docs/consumer-guide.md) is the contract callers
+  rely on.
+
+## Calling it
+
+`.github/workflows/ci.yml` in the app repo:
 
 ```yaml
-name: ci
+name: CI
 on:
   push: { branches: [main] }
   pull_request: { types: [opened, synchronize, reopened] }
@@ -27,105 +68,147 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 jobs:
   checks:
+    name: Checks
     uses: blinkbitcoin/react-native-workflows/.github/workflows/checks.yml@v0
   unit:
+    name: Unit
     needs: checks
     if: ${{ needs.checks.outputs.docs-only != 'true' }}
     uses: blinkbitcoin/react-native-workflows/.github/workflows/unit.yml@v0
   e2e:
-    needs: checks
+    name: E2E
+    needs: [checks, unit]
     if: ${{ needs.checks.outputs.docs-only != 'true' }}
     uses: blinkbitcoin/react-native-workflows/.github/workflows/e2e.yml@v0
 ```
 
 That is the trimmed version. The full one — `workflow_dispatch`, the `labeled`
-PR type together with the `ios:` expression that is the only reason to have it,
-and the E2E mock-API hooks — is [the consumer guide's
-`ci.yml`](docs/consumer-guide.md#consumer-ciyml), which is byte-identical to
-`test/fixtures/consumer-min/`'s caller and is kept that way by
-`test/consumer-contract.bats`. A real consumer adds inputs of its own (the
-template passes `release-checks: true`), so only its **trigger block** is held
-to the fixture — that is the half a second docs rule would creep back into.
+PR type with the `ios:` expression that is the only reason to have it, the
+badge job and the E2E mock-API hooks — is [the consumer guide's
+`ci.yml`](docs/consumer-guide.md#consumer-ciyml). It is byte-identical to
+`test/fixtures/consumer-min/`'s caller and `test/consumer-contract.bats` keeps
+it that way, so the example in the docs cannot drift from the one under test.
 
-Every job checks your app out, then checks *this repo* out into `.workflows/` at
-the exact ref/sha that defines the running job, then runs its scripts through
-`$WORKFLOWS_DIR` — you never reference anything under `scripts/` or
-`.github/actions/` directly. Full caller examples (`web.yml`, `pr-closed.yml`,
-`pr-title.yml`) and every input/output/secret table:
-[docs/consumer-guide.md](docs/consumer-guide.md).
+## How a job works
 
-## Workflows
+Every job checks the *consumer* repo out, then checks *this* repo out into
+`.workflows/` at the exact ref that defines the running job, then runs its
+scripts through `$WORKFLOWS_DIR`. A caller never references anything under
+`scripts/` directly, and a job can never straddle two versions of this repo.
 
-| Workflow | Purpose |
-| --- | --- |
-| `checks.yml` | typecheck/lint/format/knip/spell/i18n/codegen/expo-doctor/audit/actionlint/shellcheck/commitlint toggles + docs-only classification |
-| `unit.yml` | jest with coverage upload |
-| `e2e.yml` | Maestro E2E on cached iOS simulator builds and Android emulator builds |
-| `web.yml` | Expo web export, Playwright suite, GitHub Pages deploy |
-| `badges.yml` | renders (via the consumer) and publishes per-branch CI badges to `gh-pages/badges/<branch>/` |
-| `pr-closed.yml` | cancels in-flight runs for a closed PR's head sha and drops its badge directory |
-| `pr-title.yml` | Conventional Commits lint on the PR title |
-| `codeql.yml` | CodeQL advanced setup: the consumer's query suite and config, gated on the same docs-only classifier; informational, never a required check |
-| `expo-prepare.yml` | resolves version/build number, fingerprints, `build-info.json` + store notes as the `release-meta` artifact (from a release body when given a `release-tag`) |
-| `expo-build-ios.yml` | prebuild, pods, `fastlane ios build`/`verify`, uploads `ios-ipa` + `ios-dsym` |
-| `expo-build-android.yml` | prebuild, `fastlane android build`/`verify`, uploads `android-aab`, `android-apk`, `android-mapping` |
-| `fastlane-lane.yml` | runs one named fastlane lane (store upload, promote, staged rollout, halt) |
-| `github-release.yml` | creates/moves a GitHub release with the fixed asset set + `SHA256SUMS`; `promote` carries a pre-release's assets forward |
-| `expo-ota-publish.yml` | fingerprint-gated OTA export and publish (opt-in via `ota-enabled`) |
-| `self-ci.yml` | this repo's own CI (actionlint, shellcheck, bats, check-versions, spell) |
-| `self-smoke.yml` | runs the family against a real consumer (dispatch + weekly cron) |
-| `self-release.yml` | release-please + moving major/minor tag |
+What runs inside is the consumer's own `package.json` script wherever it has
+one — `pnpm lint` belongs to the app repo — with a script here as the fallback.
+CI runs what a developer runs locally, and logs which of the two it picked.
 
-Cache keys: [docs/cache-keys.md](docs/cache-keys.md). Forensics artifacts:
-[docs/forensics.md](docs/forensics.md). Runner notes (macOS billing,
-self-hosted, KVM, disk): [docs/runners.md](docs/runners.md).
+## Every workflow and its jobs
 
-## After push
+Job names are what the Actions graph shows, so they are listed here next to
+what makes them fail. A consumer's run renders `<caller job name> / <job name
+below>` — `Checks / Dependencies`, `E2E / Build Android`.
 
-Phase 2 is complete locally: the workflows, actions, scripts, bats suite and
-docs are all here, `make check` is green, and `v0.1.0` / `v0.1` / `v0` exist as
-local tags **in the checkout Phase 2 was done in** (tags are not part of any
-commit, so a fresh clone has none — see step 2). What is left is everything
-that needs a real GitHub remote, in order:
+### `checks.yml` — the gates
 
-1. **Create the GitHub repo** `blinkbitcoin/react-native-workflows` (public;
-   consumers pin `@v0` by path, so it must be readable by their tokens) and
-   push this branch as `main`.
-2. **Push the tags.** In the Phase 2 checkout they already exist, so
-   `git push --tags` publishes `v0.1.0` plus the moving `v0` and `v0.1`. From a
-   *fresh clone* `git push --tags` would silently push nothing — create them
-   first: `git tag -a v0.1.0 -m v0.1.0 && TAG=v0.1.0 bash
-   scripts/self/tag-major.sh --local`. From here on `self-release.yml`
-   owns them: release-please cuts the release and its `major-tag` job re-points
-   `v0`/`v0.1` via `scripts/self/tag-major.sh`. Consumers pin `@v0` (see
-   [Versioning](docs/consumer-guide.md#versioning)) until `1.0.0`, when `@v1`
-   becomes available.
-3. **Run `self-smoke.yml`** by `workflow_dispatch`. Its target consumer
-   (`blinkbitcoin/react-native-mobile-template` by default) must exist and
-   ship the `scripts/e2e/ci-mock-api-{up,down}.sh` hooks the smoke `e2e` job
-   wires in — the template does. Confirm all three jobs (`checks`, `unit`,
-   `e2e`) go green before relying on the weekly cron.
-4. **Verify the `.workflows` self-checkout on that first run.** Every job checks
-   this repo out into `.workflows/` via `repository: ${{ job.workflow_repository }}`,
-   `ref: ${{ job.workflow_sha }}` — the job context's fields for the reusable
-   workflow file that defines the running job, not the caller. Open the
-   checkout step's log and confirm it resolved to
-   `blinkbitcoin/react-native-workflows` at the calling ref's sha. Do this
-   again after any change to a file under `.github/workflows/`: a regression
-   here would silently check out the wrong repo (or the consumer's own) into
-   `.workflows` and break every step that references `$WORKFLOWS_DIR`.
-5. **Set the consumer repo variables.** `E2E_IOS=true` on any consumer whose
-   iOS suite should run on every push/PR (macOS runners bill at 10x, so opt in
-   deliberately per consumer); `WORKFLOWS_MACOS_RUNNER` only if iOS should move off
-   `macos-26` onto a different or self-hosted label. Both are read in the
-   template's `ci.yml` as `vars.E2E_IOS` / `vars.WORKFLOWS_MACOS_RUNNER`.
+| Job              | What it checks                                                               |
+| ---------------- | ---------------------------------------------------------------------------- |
+| `Changes`        | Classifies the diff. Its `docs-only` output is what lets the other jobs skip |
+| `Code`           | Typecheck, lint, format, knip, spell — what `make check-code` runs           |
+| `Generated`      | i18n catalogs and GraphQL codegen match the sources they come from           |
+| `Docs`           | Doc freshness, command tables, table widths, mermaid blocks parse            |
+| `Dependencies`   | Expo SDK drift, vulnerability audit, lockfile provenance, licences           |
+| `Prebuild`       | Both platforms prebuild, and the config plugins emit what they claim         |
+| `Bundle secrets` | No non-public key reaches the exported JS bundle                             |
+| `Release`        | Ruby syntax, fastlane lane parse, lane unit tests                            |
+| `Tooling`        | actionlint and shellcheck over the CI itself                                 |
+| `Commits`        | commitlint over the PR's commits                                             |
 
-No secrets are required for any of this — every workflow in this family runs on
-`github.token`, and `consumer-token` is optional (only for a *private* smoke
-target). Two optional ones are worth knowing about: `RELEASE_PLEASE_TOKEN`
-(`self-release.yml` falls back to `github.token`, but a PR opened with
-`github.token` does **not** trigger the repo's own CI, so set a PAT if
-release-please's PRs should be checked before merge), and the smoke target's
-`consumer-token` above. The Phase 3 release secrets (signing, store credentials, EAS) belong
-to the consumer and are listed in the template's own release runbook, not
-here.
+### The rest, on a pull request or a push
+
+| Workflow        | Jobs                                               | What it does                                                             |
+| --------------- | -------------------------------------------------- | ------------------------------------------------------------------------ |
+| `unit.yml`      | `Tests`                                            | Jest with coverage thresholds; uploads the report                        |
+| `e2e.yml`       | `Build iOS` → `iOS`<br>`Build Android` → `Android` | A cached native build per platform, then boot, Metro, Maestro, forensics |
+| `web.yml`       | `Build`<br>`Playwright`<br>`Deploy`                | Expo web export, the browser suite against it, GitHub Pages              |
+| `badges.yml`    | `Publish`                                          | Unit, E2E and coverage badges pushed to `gh-pages/badges/<branch>/`      |
+| `codeql.yml`    | `Changes`<br>`Analyze`                             | CodeQL on the consumer's query suite. Informational, never required      |
+| `pr-title.yml`  | `Title`                                            | Conventional Commits lint on the PR title                                |
+| `pr-closed.yml` | `Cancel runs`<br>`Clean badges`                    | Cancels the closed PR's in-flight runs, deletes its badges               |
+
+### On the way to a store
+
+| Workflow                 | Jobs                 | What it does                                                                                                 |
+| ------------------------ | -------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `expo-prepare.yml`       | `Prepare`            | Version, build number, native fingerprint, `build-info.json` and store notes, as one `release-meta` artifact |
+| `expo-build-ios.yml`     | `Build`              | Prebuild, pods, `fastlane ios build` then `verify`; uploads the IPA and dSYMs                                |
+| `expo-build-android.yml` | `Build`              | Prebuild, `fastlane android build` then `verify`; uploads the AAB, APK and mapping                           |
+| `fastlane-lane.yml`      | named for its inputs | One lane: upload, promote, staged rollout or halt. The job is named for the lane it runs                     |
+| `github-release.yml`     | `Release`            | Creates or moves a release with a fixed asset set and `SHA256SUMS`                                           |
+| `expo-ota-publish.yml`   | `Publish`            | Publishes an OTA update only when the native fingerprint is unchanged                                        |
+
+`expo-prepare.yml` can also block until a named CI workflow is green for the
+same sha, which is how a release refuses to build on a red `main`.
+
+### This repo's own
+
+| Workflow           | Jobs                              | What it does                                                                                   |
+| ------------------ | --------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `self-ci.yml`      | `Check`<br>`Parity`<br>`PR title` | actionlint, shellcheck, bats, version agreement, spell; then this repo against a real consumer |
+| `self-smoke.yml`   | `Checks`<br>`Unit`<br>`E2E`       | Runs the family against a real consumer repo. Weekly, and on dispatch                          |
+| `self-release.yml` | `Release PR`<br>`Major tag`       | release-please maintains the version PR; on release, `v0` and `v0.1` move                      |
+
+## Repository layout
+
+| Path                 | Responsibility                                                                                                            |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `.github/workflows/` | The 17 workflows above. Thin: a workflow wires inputs and calls a script                                                  |
+| `.github/actions/`   | Five composite actions — `setup`, `maestro`, `native-key`, `free-disk`, `forensics` — the steps repeated across workflows |
+| `scripts/checks/`    | A gate each: audit, codegen, commitlint, expo-doctor, i18n; plus the scripts that pick the consumer's over this repo's    |
+| `scripts/ci/`        | Runner plumbing: Android SDK, KVM, disk pressure, pnpm store, badges, cancel-runs, tool versions                          |
+| `scripts/e2e/`       | The E2E machine: simulator and emulator boot, Metro start and wait, Maestro run, timeouts, forensics collection           |
+| `scripts/native/`    | Prebuild, pods, and the iOS and Android build and packaging steps                                                         |
+| `scripts/release/`   | Version resolution, fingerprints, build info, store notes, assets, hashes, secret decoding, the green-run gate            |
+| `scripts/ota/`       | Fingerprint baseline and gate, export, publish, smoke                                                                     |
+| `scripts/web/`       | Expo web export, Playwright install, cache keys, run                                                                      |
+| `scripts/lib/`       | Shared bash: common helpers, env building and validation, git cleanliness, the single pinned tool-version table           |
+| `scripts/self/`      | This repo's own upkeep: version agreement, moving the major tag                                                           |
+| `test/`              | 51 bats files, 435 tests, plus `fixtures/consumer-min/` — the caller the docs are held to                                 |
+| `docs/`              | The consumer guide and the three explainers                                                                               |
+
+## Pinning
+
+Pin `@v0`. It is a moving tag that `self-release.yml` re-points at each
+release, so fixes arrive without editing eleven caller files, and a breaking
+change arrives as `@v1` rather than as a red build on a Monday morning. Pin a
+full version instead when every change should be reviewed before it lands —
+[Versioning](docs/consumer-guide.md#versioning) covers both.
+
+## What a consumer provides
+
+**No secrets.** Every workflow here runs on `github.token`. Store credentials
+only ever enter the release workflows a repo chooses to call, from that repo's
+own secrets.
+
+Two repo variables are worth setting. `E2E_IOS=true` runs the iOS suite on
+every push — macOS runners bill at ten times the Linux rate, so it is opt-in
+per repo, and a single PR can have it with an `e2e:ios` label instead.
+`WORKFLOWS_MACOS_RUNNER` moves iOS off `macos-26` onto another label or a
+self-hosted box.
+
+Two optional secrets. `RELEASE_PLEASE_TOKEN`, because a PR opened with
+`github.token` does not trigger CI, and release PRs should be checked before
+merge. And `consumer-token`, only when the smoke target is private.
+
+## Documentation
+
+[**Consumer guide**](docs/consumer-guide.md) is the contract: every input,
+output and secret, the full caller examples, and the gotchas encoded here so
+they do not have to be rediscovered. The rest explain the parts that surprise
+people — [**cache keys**](docs/cache-keys.md) (what invalidates a cache),
+[**forensics**](docs/forensics.md) (what a failed E2E run leaves behind),
+[**runners**](docs/runners.md) (labels, billing, KVM, disk).
+
+[`blinkbitcoin/react-native-mobile-template`](https://github.com/blinkbitcoin/react-native-mobile-template)
+is the app repo these were built for, and the worked example of every caller.
+
+## Licence
+
+MIT — see [LICENSE](LICENSE).

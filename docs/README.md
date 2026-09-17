@@ -28,6 +28,6 @@ rest explain the parts of it that surprise people.
 | `AGENTS.md` | The canonical rules-of-the-road file for humans and coding agents. `CLAUDE.md` includes it |
 | `CONTRIBUTING.md` | Setup, worktrees, commit conventions, and what a change has to carry |
 | `SECURITY.md` | Private reporting, the threat model and the secrets policy |
-| `README.md` | What this repo is, the 60-second caller, the workflow table, the after-push checklist |
+| `README.md` | What this repo is, the caller to copy, the workflow table, pinning, and what it needs from you |
 | `scripts/e2e/README.md` | How the E2E scripts fit together on a runner |
 | `docs/superpowers/` | The specs and plans this repo was built from. History, not a guide |
