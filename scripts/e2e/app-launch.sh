@@ -70,6 +70,21 @@ else
   fi
 fi
 
+# The bundle request is the receipt that the app really loaded, and it only
+# exists when the JS comes from Metro. A Release iOS build has it embedded and
+# never asks, so waiting would time out on a launch that worked.
+#
+# Keyed on the configuration and not on dev-client: a Debug build with
+# dev-client off still loads from Metro, just without the deep link, so the
+# receipt is real there and worth waiting for.
+#
+# `simctl launch` already failed the script if the app did not start, and the
+# suite's first flow asserts the app is on screen - a stronger check than this.
+if [ "$platform" = ios ] && [ "$WORKFLOWS_IOS_CONFIGURATION" = Release ]; then
+  log "$app_id launched (Release build - the bundle is embedded, Metro is not asked)"
+  exit 0
+fi
+
 for i in $(seq 1 60); do
   # "iOS Bundled 1479ms .../entry.js" is what Expo's Metro logs per request;
   # older RN CLI Metro logs "Bundling"/a raw ".bundle" URL instead.
