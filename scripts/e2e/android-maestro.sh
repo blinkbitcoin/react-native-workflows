@@ -15,8 +15,11 @@ export PATH="$HOME/.maestro/bin:$PATH"
 . "$HERE/maestro-bound.sh"
 require_cmd maestro adb
 
-# Lower than iOS: the Android driver is an APK install, not an Xcode build.
-export MAESTRO_DRIVER_STARTUP_TIMEOUT=300000
+# The driver installs and launches its runner on first use, minutes on a cold
+# device; the value must stay below the suite bound (see the helper) so a
+# runner that fails to launch is retried instead of burning the bound.
+export MAESTRO_DRIVER_STARTUP_TIMEOUT
+MAESTRO_DRIVER_STARTUP_TIMEOUT="$(workflows_driver_startup_timeout 300000)" || exit 1
 
 root="$(consumer_root)"
 cd "$root" || exit 1

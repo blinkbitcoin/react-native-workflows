@@ -86,6 +86,20 @@ you'll find:
   numbered PNGs in flow order shows the UI state right up to the failing
   command without needing to scrub the video.
 
+## A suite with no flow output at all
+
+If the job log shows `Requested 1 shards…` and then nothing until
+`Maestro suite exceeded …s`, no flow ran: open `maestro/xctest_runner_*.log`
+in the artifact and look for `Simulator device failed to launch
+dev.mobile.maestro-driver-iosUITests.xctrunner` / `** TEST EXECUTE FAILED **`.
+That is Maestro's own XCUITest runner failing to start on the simulator (seen
+on a runner where `Setup` alone took 5 minutes), not the app and not a flow.
+Maestro polls the dead driver until `MAESTRO_DRIVER_STARTUP_TIMEOUT`, so that
+value is kept strictly below the suite bound: the failure then surfaces as
+`iOS driver not ready in time`, a real exit status, and the suite is rerun
+once - which reinstalls and relaunches the runner. `ios-unified.log` will be
+quiet for the whole window, which is itself the confirmation.
+
 ## The suite retry and what it means for forensics
 
 Both platform scripts retry the suite exactly once on a **real** failure

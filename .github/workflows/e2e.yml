@@ -328,10 +328,14 @@ jobs:
         run: bash "$WORKFLOWS_DIR/scripts/e2e/ios-simulator.sh" record start
       - name: Launch app
         run: bash "$WORKFLOWS_DIR/scripts/e2e/app-launch.sh" ios
+      # Strictly below suite-timeout-minutes (ios-maestro.sh refuses otherwise):
+      # a driver that fails to launch must fail fast and be retried, not sit
+      # until the bound's exit 124, which is never retried. 600000 was equal to
+      # the bound and cost run 35259139324 ten minutes for zero flows.
       - name: Maestro suite (iOS)
         timeout-minutes: ${{ fromJSON(steps.timeout.outputs.minutes) }}
         env:
-          MAESTRO_DRIVER_STARTUP_TIMEOUT: '600000'
+          MAESTRO_DRIVER_STARTUP_TIMEOUT: '300000'
         run: bash "$WORKFLOWS_DIR/scripts/e2e/ios-maestro.sh"
       - name: Stop screen recording
         if: always()

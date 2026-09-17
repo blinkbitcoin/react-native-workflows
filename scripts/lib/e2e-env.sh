@@ -92,6 +92,25 @@ workflows_ios_scheme() {
   printf '%s\n' "$ws_name"
 }
 
+# workflows_driver_startup_timeout DEFAULT_MS -> the MAESTRO_DRIVER_STARTUP_TIMEOUT
+# to export, honouring an explicit environment value, and refusing one that is
+# not strictly below the suite bound. Maestro throws IOSDriverTimeoutException
+# ("iOS driver not ready in time") when this expires - a real, retryable failure
+# the maestro scripts rerun once. With the value at or above the bound the bound
+# fires first, exits 124, and 124 is never retried: a driver that failed to
+# launch (`TEST EXECUTE FAILED` in xctest_runner_*.log, seen at 77s on a loaded
+# runner) then costs the whole bound and zero flows run. Healthy runner startups
+# measured 86s and 144s; 300000 leaves 2x headroom and half the bound for flows.
+workflows_driver_startup_timeout() {
+  local default_ms="${1:?usage: workflows_driver_startup_timeout DEFAULT_MS}"
+  local ms="${MAESTRO_DRIVER_STARTUP_TIMEOUT:-$default_ms}"
+  local bound_ms=$((WORKFLOWS_SUITE_TIMEOUT_MINUTES * 60 * 1000))
+  case "$ms" in *[!0-9]* | '') die "MAESTRO_DRIVER_STARTUP_TIMEOUT must be milliseconds, got '$ms'" ;; esac
+  [ "$ms" -lt "$bound_ms" ] ||
+    die "MAESTRO_DRIVER_STARTUP_TIMEOUT=$ms is not below the suite bound (${bound_ms}ms): a driver that fails to start would burn the bound (exit 124, never retried) instead of failing fast and being retried"
+  printf '%s\n' "$ms"
+}
+
 # workflows_ios_unified_log_predicate -> the `log stream --predicate` that
 # ios-simulator.sh records next to the video. The app id (from the Expo config,
 # or WORKFLOWS_APP_ID) and its URL scheme narrow the firehose to the lines that
