@@ -77,6 +77,16 @@ on:
         description: Launch through the expo-development-client deep link and start Metro with --dev-client
         type: boolean
         default: true
+      ios-configuration:
+        description: >-
+          Xcode configuration for the iOS E2E app. Debug loads its JS from Metro
+          through the expo-development-client deep link. Release embeds the
+          bundle and leaves the dev launcher out of the build, so the app runs
+          on `simctl launch` alone - no Metro, no deep link, and no iOS
+          "Open in <app>?" prompt to answer. Release forces dev-client off for
+          the iOS jobs whatever `dev-client` says; Android is unaffected.
+        type: string
+        default: Debug
       e2e-setup-script:
         description: Consumer-relative script run before the suite (empty skips it); a missing file is fatal
         type: string
@@ -115,6 +125,7 @@ jobs:
     env:
       WORKING_DIRECTORY: ${{ inputs.working-directory }}
       WORKFLOWS_XCODE: ${{ inputs.xcode }}
+      WORKFLOWS_IOS_CONFIGURATION: ${{ inputs.ios-configuration }}
     steps:
       - name: Checkout consumer
         uses: actions/checkout@v7
@@ -148,9 +159,9 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: |
-            ${{ inputs.working-directory }}/ios/build/Build/Products/Debug-iphonesimulator
+            ${{ inputs.working-directory }}/ios/build/Build/Products/${{ inputs.ios-configuration }}-iphonesimulator
             ${{ inputs.working-directory }}/ios/*.xcworkspace
-          key: ${{ steps.keys.outputs.ios-key }}
+          key: ${{ steps.keys.outputs.ios-key }}-${{ inputs.ios-configuration }}
           lookup-only: false
       # Always: ios-pack.sh needs $WORKFLOWS_DIR, pnpm and the expo config even on a hit.
       # Ruby is only needed by pods.sh, so it is installed on a miss only.
@@ -186,9 +197,9 @@ jobs:
         uses: actions/cache/save@v6
         with:
           path: |
-            ${{ inputs.working-directory }}/ios/build/Build/Products/Debug-iphonesimulator
+            ${{ inputs.working-directory }}/ios/build/Build/Products/${{ inputs.ios-configuration }}-iphonesimulator
             ${{ inputs.working-directory }}/ios/*.xcworkspace
-          key: ${{ steps.keys.outputs.ios-key }}
+          key: ${{ steps.keys.outputs.ios-key }}-${{ inputs.ios-configuration }}
       # Not `always()`: when the build itself failed there is no .app and no
       # workspace, so ios-pack.sh dies and the upload's `if-no-files-found:
       # error` dies after it - two misleading red steps stacked on the real
@@ -213,7 +224,12 @@ jobs:
     timeout-minutes: 60
     env:
       WORKING_DIRECTORY: ${{ inputs.working-directory }}
-      WORKFLOWS_DEV_CLIENT: ${{ inputs.dev-client }}
+      WORKFLOWS_IOS_CONFIGURATION: ${{ inputs.ios-configuration }}
+      # A Release build has no dev launcher to deep-link into, so it launches
+      # directly whatever `dev-client` says. The non-empty value MUST sit in the
+      # `&&` slot: GitHub's `&&` yields the first falsy operand, so putting the
+      # inherited value there would return it on both branches.
+      WORKFLOWS_DEV_CLIENT: ${{ inputs.ios-configuration == 'Release' && 'false' || inputs.dev-client }}
       WORKFLOWS_MAESTRO_FLOWS: ${{ inputs.maestro-flows }}
       WORKFLOWS_MAESTRO_INCLUDE_TAGS: ${{ inputs.maestro-include-tags }}
       WORKFLOWS_MAESTRO_EXCLUDE_TAGS: ${{ inputs.maestro-exclude-tags }}

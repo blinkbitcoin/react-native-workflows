@@ -402,6 +402,7 @@ No outputs. Secrets: `consumer-token` (optional).
 | `maestro-include-tags` / `maestro-exclude-tags` | `''` | Passed to Maestro when non-empty |
 | `suite-timeout-minutes` | `10` | Per-attempt bound; the step's own timeout is this plus 5 |
 | `dev-client` | `true` | Launch via the `expo-development-client` deep link, Metro `--dev-client` |
+| `ios-configuration` | `Debug` | Xcode configuration for the iOS E2E app.<br>`Release` embeds the JS bundle and leaves the dev launcher out, so the app runs on `simctl launch` alone -<br>no Metro, no deep link, no iOS "Open in <app>?" prompt. Forces `dev-client` off for the iOS jobs;<br>Android is unaffected. Changes the cache key, so the two configurations never share a build |
 | `e2e-setup-script` / `e2e-teardown-script` | `''` | Consumer-relative hook scripts (setup: missing file is fatal; teardown: always runs) |
 | `ios-artifact-name` | `ios-app` | Artifact name between `build-ios` and `ios` |
 | `android-artifact-name` | `android-apk` | Artifact name between `build-android` and `android` |

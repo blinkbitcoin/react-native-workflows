@@ -87,9 +87,15 @@ workflows_ios_scheme() {
   printf '%s\n' "$ws_name"
 }
 
-WORKFLOWS_IOS_PRODUCTS_DIR="ios/build/Build/Products/Debug-iphonesimulator"
+# Debug unless a caller asks for Release. Release is what makes an iOS E2E app
+# self-contained: the JS bundle is embedded and expo-dev-client's launcher is
+# not in the build, so the app runs on `simctl launch` alone - no Metro, no
+# deep link, no "Open in <app>?" prompt. Each of those is a step that has to
+# succeed on every run, and each has failed on a runner.
+WORKFLOWS_IOS_CONFIGURATION="${WORKFLOWS_IOS_CONFIGURATION:-Debug}"
+WORKFLOWS_IOS_PRODUCTS_DIR="ios/build/Build/Products/$WORKFLOWS_IOS_CONFIGURATION-iphonesimulator"
 WORKFLOWS_ANDROID_APK="android/app/build/outputs/apk/debug/app-debug.apk"
-export WORKFLOWS_IOS_PRODUCTS_DIR WORKFLOWS_ANDROID_APK
+export WORKFLOWS_IOS_CONFIGURATION WORKFLOWS_IOS_PRODUCTS_DIR WORKFLOWS_ANDROID_APK
 
 # The picked simulator is remembered in $WORKFLOWS_OUT so every later step addresses
 # it explicitly: `booted` is ambiguous on a developer Mac with several
