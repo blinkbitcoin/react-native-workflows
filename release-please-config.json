@@ -1,6 +1,8 @@
 {
   "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
   "release-type": "simple",
+  "$comment": "separate-pull-requests, so each release PR names its own version. With both packages in one PR release-please cannot fit two versions in one title and falls back to `chore: release main` - the repo went from `chore(main): release 0.2.1` to a title saying nothing. They also release on genuinely independent cadences: the moving v0 tag that every consumer pins, and an npm package. One PR each keeps those decisions separate.",
+  "separate-pull-requests": true,
   "packages": {
     ".": {
       "release-type": "simple",

@@ -1355,15 +1355,21 @@ whole tree:
 | tsconfig | `tsconfig.json` → `exclude`, add `.workflows` |
 | knip | `knip.json` → `ignore` (or `project`/`entry` globs that don't reach into it) |
 | typos | `typos.toml` → `[files] extend-exclude`, add `.workflows/**` |
+| Jest | `jest.config.ts` → `testPathIgnorePatterns`, add `/\.workflows/`. This repo ships its own `*.test.mjs` under `packages/`, and a consumer's jest-expo project will collect them and die on `import.meta` - a red Unit job over a file the consumer does not own |
 | git | `.gitignore` — not strictly required (`setup` uses `.git/info/exclude`
   instead, which is local-only and never committed), but recommended so a
   local `.workflows/` checkout is ignored by every clone, not just CI's |
 
-The template carries all six: `biome.json` (`files.includes` → `"!**/.workflows"`),
-`eslint.config.mjs` (`ignores` → `'.workflows/**'`), `tsconfig.json` (`exclude` →
-`".workflows"`), `knip.json` (`ignore` → `".workflows/**"`), `typos.toml`
-(`[files] extend-exclude` → `".workflows/"`) and `.gitignore` (`/.workflows`). Copy that
-set when bootstrapping a new consumer.
+The template carries all seven: `biome.json` (`files.includes` →
+`"!**/.workflows"`), `eslint.config.mjs` (`ignores` → `'.workflows/**'`),
+`tsconfig.json` (`exclude` → `".workflows"`), `knip.json` (`ignore` →
+`".workflows/**"`), `typos.toml` (`[files] extend-exclude` → `".workflows/"`),
+`jest.config.ts` (`testPathIgnorePatterns` → `'/\.workflows/'`) and `.gitignore`
+(`/.workflows`). Copy that set when bootstrapping a new consumer.
+
+Jest joined the list the day this repo grew its first test files. The lesson
+generalises: anything this repo adds under a path a consumer's tooling globs is
+a change to the consumer contract, even though no input or output moved.
 
 ## Gotchas encoded
 
