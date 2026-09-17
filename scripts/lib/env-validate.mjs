@@ -95,7 +95,7 @@ export function validateEnvJson(raw, label, opts = {}) {
     }
     if (RESERVED.test(upper)) {
       throw new Error(
-        `::error::${label} key ${k} is reserved by react-native-workflows or by the runner; use the dedicated workflow input instead`,
+        `::error::${label} key ${k} is reserved by shared-workflows or by the runner; use the dedicated workflow input instead`,
       );
     }
     if (v !== null && typeof v === 'object') {

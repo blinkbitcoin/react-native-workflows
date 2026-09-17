@@ -106,7 +106,7 @@ jobs:
       # whether it was configured. Only the id, never the private key.
       RELEASE_TAGGER_APP_ID: ${{ secrets.RELEASE_TAGGER_APP_ID }}
     steps:
-      - name: Checkout react-native-workflows
+      - name: Checkout shared-workflows
         uses: actions/checkout@v7
         with:
           repository: ${{ job.workflow_repository }}

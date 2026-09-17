@@ -116,7 +116,7 @@ gh_env_keys() {
   for k in WORKFLOWS_FINGERPRINT_IOS WORKFLOWS_ASSETS_DIR GITHUB_REPOSITORY RUNNER_TEMP ACTIONS_STEP_DEBUG PATH HOME LD_PRELOAD DYLD_INSERT_LIBRARIES NODE_OPTIONS; do
     WORKFLOWS_BUILD_ENV="{\"$k\":\"x\"}" publish
     [ "$status" -ne 0 ] || fail "accepted the reserved key $k: $output"
-    contains "$output" "is reserved by react-native-workflows" || fail "unexpected message for $k: $output"
+    contains "$output" "is reserved by shared-workflows" || fail "unexpected message for $k: $output"
     [ ! -s "$GITHUB_ENV" ] || fail "wrote $k to GITHUB_ENV anyway: $(cat "$GITHUB_ENV")"
   done
 }

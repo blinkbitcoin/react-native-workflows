@@ -382,7 +382,7 @@ callee_permissions() {
     while IFS=$'\t' read -r job called; do
       [ -n "$called" ] || continue
       # Only this family's reusable workflows; an action reference is not one.
-      case "$called" in *react-native-workflows/.github/workflows/*) ;; *) continue ;; esac
+      case "$called" in *shared-workflows/.github/workflows/*) ;; *) continue ;; esac
       wf=$(basename "${called%@*}" .yml)
       [ -f "$REPO_ROOT/.github/workflows/$wf.yml" ] || continue
       # Job-level permissions override the workflow's; absent, the workflow's

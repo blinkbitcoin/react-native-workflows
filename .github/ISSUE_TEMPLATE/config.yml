@@ -1,11 +1,11 @@
 blank_issues_enabled: false
 contact_links:
   - name: Report a security vulnerability
-    url: https://github.com/blinkbitcoin/react-native-workflows/security/policy
+    url: https://github.com/blinkbitcoin/shared-workflows/security/policy
     about: Never file a public issue for a vulnerability — use the private channel in SECURITY.md.
   - name: Consumer guide
-    url: https://github.com/blinkbitcoin/react-native-workflows/blob/main/docs/consumer-guide.md
+    url: https://github.com/blinkbitcoin/shared-workflows/blob/main/docs/consumer-guide.md
     about: Every input, output, secret and caller example. Read this before filing a bug.
   - name: Contributing guide
-    url: https://github.com/blinkbitcoin/react-native-workflows/blob/main/CONTRIBUTING.md
+    url: https://github.com/blinkbitcoin/shared-workflows/blob/main/CONTRIBUTING.md
     about: Setup, branching, commit conventions and what has to pass before you push.

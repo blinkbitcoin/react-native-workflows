@@ -62,18 +62,18 @@ concurrency:
 jobs:
   checks:
     name: Checks
-    uses: blinkbitcoin/react-native-workflows/.github/workflows/checks.yml@v0
+    uses: blinkbitcoin/shared-workflows/.github/workflows/checks.yml@v0
   unit:
     name: Unit
     needs: checks
     if: ${{ needs.checks.outputs.docs-only != 'true' }}
-    uses: blinkbitcoin/react-native-workflows/.github/workflows/unit.yml@v0
+    uses: blinkbitcoin/shared-workflows/.github/workflows/unit.yml@v0
   e2e:
     name: E2E
     # `unit` as well as `checks`: a failed unit run then never reaches E2E.
     needs: [checks, unit]
     if: ${{ needs.checks.outputs.docs-only != 'true' }}
-    uses: blinkbitcoin/react-native-workflows/.github/workflows/e2e.yml@v0
+    uses: blinkbitcoin/shared-workflows/.github/workflows/e2e.yml@v0
     with:
       # iOS is opt-in (macOS runners bill at 10x): set the repo variable
       # E2E_IOS=true for every run, or label a single PR `e2e:ios` (the
@@ -98,7 +98,7 @@ jobs:
       needs.checks.outputs.docs-only != 'true'
     permissions:
       contents: write # publish-badges.sh pushes the gh-pages branch
-    uses: blinkbitcoin/react-native-workflows/.github/workflows/badges.yml@v0
+    uses: blinkbitcoin/shared-workflows/.github/workflows/badges.yml@v0
     with:
       unit-result: ${{ needs.unit.result }}
       e2e-result: ${{ needs.e2e.result }}
@@ -168,7 +168,7 @@ concurrency:
 jobs:
   web:
     name: Export
-    uses: blinkbitcoin/react-native-workflows/.github/workflows/web.yml@v0
+    uses: blinkbitcoin/shared-workflows/.github/workflows/web.yml@v0
     permissions:
       contents: read
       # The called workflow's `deploy` job needs these; a called job can only
@@ -217,7 +217,7 @@ permissions:
 jobs:
   pr-closed:
     name: Cleanup
-    uses: blinkbitcoin/react-native-workflows/.github/workflows/pr-closed.yml@v0
+    uses: blinkbitcoin/shared-workflows/.github/workflows/pr-closed.yml@v0
 ```
 
 ```yaml
@@ -235,7 +235,7 @@ jobs:
     # itself changed (`opened`/`synchronize` are already covered by ci.yml's
     # checks.yml `commitlint` toggle, which lints the same PR title).
     if: github.event.changes.title != null
-    uses: blinkbitcoin/react-native-workflows/.github/workflows/pr-title.yml@v0
+    uses: blinkbitcoin/shared-workflows/.github/workflows/pr-title.yml@v0
 ```
 
 `pr-closed.yml` is the one workflow in this family with no `inputs:` at all
@@ -578,7 +578,7 @@ jobs:
       contents: read
       actions: read # workflow metadata for the SARIF upload
       security-events: write # upload the SARIF results
-    uses: blinkbitcoin/react-native-workflows/.github/workflows/codeql.yml@v0
+    uses: blinkbitcoin/shared-workflows/.github/workflows/codeql.yml@v0
 ```
 
 The calling job needs no `permissions:` block of its own: a reusable workflow's
@@ -693,7 +693,7 @@ base URL are non-secret and belong in `build-env`).
 >
 > ```yaml
 >   prepare:
->     uses: blinkbitcoin/react-native-workflows/.github/workflows/expo-prepare.yml@v0
+>     uses: blinkbitcoin/shared-workflows/.github/workflows/expo-prepare.yml@v0
 >     permissions:
 >       contents: read
 >       actions: read

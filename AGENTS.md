@@ -46,7 +46,7 @@ Every row is a make target; nothing here is run through a package manager.
 ## Rules of the road
 
 - **Do all branch work in a git worktree**
-  (`git worktree add ../react-native-workflows-<topic> -b <branch> origin/main`),
+  (`git worktree add ../shared-workflows-<topic> -b <branch> origin/main`),
   never by switching branches in the shared clone: several agent sessions share
   that checkout, and a commit made there lands on whatever branch another
   session left checked out. **`make hooks` is the one thing that is not

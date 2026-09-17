@@ -127,7 +127,7 @@ jobs:
           # v* tags and counts first-parent commits, and both are empty on the
           # default shallow clone.
           fetch-depth: 0
-      - name: Checkout react-native-workflows
+      - name: Checkout shared-workflows
         uses: actions/checkout@v7
         with:
           repository: ${{ job.workflow_repository }}

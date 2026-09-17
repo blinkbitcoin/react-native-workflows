@@ -5,8 +5,8 @@
 Shared GitHub Actions workflows for building, testing and releasing<br>
 React Native (Expo) apps.
 
-[![CI](https://github.com/blinkbitcoin/react-native-workflows/actions/workflows/self-ci.yml/badge.svg?branch=main)](https://github.com/blinkbitcoin/react-native-workflows/actions/workflows/self-ci.yml?query=branch%3Amain)
-[![Smoke](https://github.com/blinkbitcoin/react-native-workflows/actions/workflows/self-smoke.yml/badge.svg?branch=main)](https://github.com/blinkbitcoin/react-native-workflows/actions/workflows/self-smoke.yml?query=branch%3Amain)
+[![CI](https://github.com/blinkbitcoin/shared-workflows/actions/workflows/self-ci.yml/badge.svg?branch=main)](https://github.com/blinkbitcoin/shared-workflows/actions/workflows/self-ci.yml?query=branch%3Amain)
+[![Smoke](https://github.com/blinkbitcoin/shared-workflows/actions/workflows/self-smoke.yml/badge.svg?branch=main)](https://github.com/blinkbitcoin/shared-workflows/actions/workflows/self-smoke.yml?query=branch%3Amain)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue)](LICENSE)
 
 <sub>14 reusable workflows · 79 scripts · 435 tests · one pinned tag</sub>
@@ -30,7 +30,7 @@ flowchart LR
   subgraph consumer [the app repo]
     caller["ci.yml — 40 lines"]
   end
-  subgraph here [react-native-workflows @v0]
+  subgraph here [shared-workflows @v0]
     checks[Checks] --> unit[Unit] --> e2e[E2E]
     prepare[Prepare] --> build[Build and sign] --> ship[Upload and release]
   end
@@ -69,17 +69,17 @@ concurrency:
 jobs:
   checks:
     name: Checks
-    uses: blinkbitcoin/react-native-workflows/.github/workflows/checks.yml@v0
+    uses: blinkbitcoin/shared-workflows/.github/workflows/checks.yml@v0
   unit:
     name: Unit
     needs: checks
     if: ${{ needs.checks.outputs.docs-only != 'true' }}
-    uses: blinkbitcoin/react-native-workflows/.github/workflows/unit.yml@v0
+    uses: blinkbitcoin/shared-workflows/.github/workflows/unit.yml@v0
   e2e:
     name: E2E
     needs: [checks, unit]
     if: ${{ needs.checks.outputs.docs-only != 'true' }}
-    uses: blinkbitcoin/react-native-workflows/.github/workflows/e2e.yml@v0
+    uses: blinkbitcoin/shared-workflows/.github/workflows/e2e.yml@v0
 ```
 
 That is the trimmed version. The full one — `workflow_dispatch`, the `labeled`
