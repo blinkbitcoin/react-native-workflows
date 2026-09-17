@@ -151,9 +151,15 @@ jobs:
           ref: ${{ job.workflow_sha }}
           path: .workflows
           persist-credentials: false
+      # $WORKFLOWS_DIR first, and unconditionally: every later `run:` in this job
+      # is `bash "$WORKFLOWS_DIR/..."`, and the Setup action that also publishes
+      # it is skipped on a cache hit - which left the pack step running
+      # `bash "/scripts/native/ios-pack.sh"` and dying with exit 127.
+      - name: Publish WORKFLOWS_DIR
+        run: bash ".workflows/scripts/ci/workflows-env.sh"
       # Puts WORKFLOWS_OUT in $GITHUB_ENV up front so the upload step's `path:` below
       # resolves even when an earlier step failed before any other script ran.
-      - name: Publish WORKFLOWS_DIR environment
+      - name: Publish WORKFLOWS_OUT environment
         run: bash ".workflows/scripts/e2e/env-publish.sh"
       - name: Native cache keys
         id: keys
@@ -179,8 +185,8 @@ jobs:
       # ios-pack.sh takes the scheme from the workspace filename, and its
       # cross-check against the Expo config is best-effort precisely so a warm
       # run does not install a dependency tree to produce a warning. That was
-      # ~80s of every warm build. $WORKFLOWS_DIR comes from env-publish.sh
-      # above, not from here.
+      # ~80s of every warm build. $WORKFLOWS_DIR is published by the dedicated
+      # step above, so nothing on the hit path depends on this one.
       - name: Setup
         if: ${{ steps.restore.outputs.cache-hit != 'true' }}
         uses: ./.workflows/.github/actions/setup
