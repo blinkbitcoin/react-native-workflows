@@ -73,7 +73,7 @@ jobs:
       # No setup here, exactly as in checks.yml: changed-class.sh is pure git,
       # so this job reaches it through the plain .workflows checkout ($WORKFLOWS_DIR is
       # published by the setup action, which never runs in this job).
-      - name: Checkout react-native-workflows
+      - name: Checkout shared-workflows
         uses: actions/checkout@v7
         with:
           repository: ${{ job.workflow_repository }}

@@ -149,7 +149,7 @@ jobs:
       # No setup here: changed-class.sh is pure git and doesn't need node/pnpm,
       # so this job skips it and reaches the script via the plain checkout path
       # (there's no $WORKFLOWS_DIR yet -- that's exported by setup, which never runs).
-      - name: Checkout react-native-workflows
+      - name: Checkout shared-workflows
         uses: actions/checkout@v7
         with:
           repository: ${{ job.workflow_repository }}
@@ -183,7 +183,7 @@ jobs:
           repository: ${{ inputs.repository || github.repository }}
           ref: ${{ inputs.ref }}
           token: ${{ secrets.consumer-token || github.token }}
-      - name: Checkout react-native-workflows
+      - name: Checkout shared-workflows
         uses: actions/checkout@v7
         with:
           repository: ${{ job.workflow_repository }}
@@ -235,7 +235,7 @@ jobs:
           repository: ${{ inputs.repository || github.repository }}
           ref: ${{ inputs.ref }}
           token: ${{ secrets.consumer-token || github.token }}
-      - name: Checkout react-native-workflows
+      - name: Checkout shared-workflows
         uses: actions/checkout@v7
         with:
           repository: ${{ job.workflow_repository }}
@@ -267,7 +267,7 @@ jobs:
           repository: ${{ inputs.repository || github.repository }}
           ref: ${{ inputs.ref }}
           token: ${{ secrets.consumer-token || github.token }}
-      - name: Checkout react-native-workflows
+      - name: Checkout shared-workflows
         uses: actions/checkout@v7
         with:
           repository: ${{ job.workflow_repository }}
@@ -301,7 +301,7 @@ jobs:
           repository: ${{ inputs.repository || github.repository }}
           ref: ${{ inputs.ref }}
           token: ${{ secrets.consumer-token || github.token }}
-      - name: Checkout react-native-workflows
+      - name: Checkout shared-workflows
         uses: actions/checkout@v7
         with:
           repository: ${{ job.workflow_repository }}
@@ -371,7 +371,7 @@ jobs:
           repository: ${{ inputs.repository || github.repository }}
           ref: ${{ inputs.ref }}
           token: ${{ secrets.consumer-token || github.token }}
-      - name: Checkout react-native-workflows
+      - name: Checkout shared-workflows
         uses: actions/checkout@v7
         with:
           repository: ${{ job.workflow_repository }}
@@ -399,7 +399,7 @@ jobs:
           repository: ${{ inputs.repository || github.repository }}
           ref: ${{ inputs.ref }}
           token: ${{ secrets.consumer-token || github.token }}
-      - name: Checkout react-native-workflows
+      - name: Checkout shared-workflows
         uses: actions/checkout@v7
         with:
           repository: ${{ job.workflow_repository }}
@@ -430,7 +430,7 @@ jobs:
           repository: ${{ inputs.repository || github.repository }}
           ref: ${{ inputs.ref }}
           token: ${{ secrets.consumer-token || github.token }}
-      - name: Checkout react-native-workflows
+      - name: Checkout shared-workflows
         uses: actions/checkout@v7
         with:
           repository: ${{ job.workflow_repository }}
@@ -470,7 +470,7 @@ jobs:
           repository: ${{ inputs.repository || github.repository }}
           ref: ${{ inputs.ref }}
           token: ${{ secrets.consumer-token || github.token }}
-      - name: Checkout react-native-workflows
+      - name: Checkout shared-workflows
         uses: actions/checkout@v7
         with:
           repository: ${{ job.workflow_repository }}
@@ -502,7 +502,7 @@ jobs:
           # fetch-depth: 0 so PR_COMMITS_RANGE below (base sha..head sha) can
           # resolve both endpoints when commitlint-commits is enabled.
           fetch-depth: 0
-      - name: Checkout react-native-workflows
+      - name: Checkout shared-workflows
         uses: actions/checkout@v7
         with:
           repository: ${{ job.workflow_repository }}

@@ -44,7 +44,7 @@ jobs:
           repository: ${{ inputs.repository || github.repository }}
           ref: ${{ inputs.ref }}
           token: ${{ secrets.consumer-token || github.token }}
-      - name: Checkout react-native-workflows
+      - name: Checkout shared-workflows
         uses: actions/checkout@v7
         with:
           repository: ${{ job.workflow_repository }}

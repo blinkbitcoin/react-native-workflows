@@ -27,7 +27,7 @@ on demand with the same invocation `scripts/checks/commitlint.sh` uses in CI.
 - Branch off `main`, one logical change per branch. `main` is protected;
   nothing lands except by pull request.
 - **Work in a worktree**, not by switching branches in the shared clone:
-  `git worktree add ../react-native-workflows-<topic> -b <branch> origin/main`.
+  `git worktree add ../shared-workflows-<topic> -b <branch> origin/main`.
   Several sessions share the main checkout, and a commit made there lands on
   whatever branch someone else left checked out.
 - Name the branch for the change (`ci/hooks-and-hygiene`, `fix/metro-prewarm`).

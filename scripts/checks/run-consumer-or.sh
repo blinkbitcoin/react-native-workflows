@@ -53,6 +53,6 @@ if (cd "$root" && has_script); then
   log "$name: running the consumer's own script"
   exec bash "$(dirname "$0")/run-script.sh" "$name"
 else
-  log "$name: the consumer ships no \"$name\" script - running $fallback from react-native-workflows"
+  log "$name: the consumer ships no \"$name\" script - running $fallback from shared-workflows"
   exec bash "$fallback_path"
 fi
