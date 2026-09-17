@@ -30,9 +30,11 @@ jobs:
     if: ${{ needs.checks.outputs.docs-only != 'true' }}
     uses: blinkbitcoin/shared-workflows/.github/workflows/e2e.yml@v0
     with:
-      # iOS is opt-in (macOS runners bill at 10x): set the repo variable
-      # E2E_IOS=true for every run, or label a single PR `e2e:ios` (the
-      # `labeled` trigger above is what makes the label alone start a run).
+      # iOS is opt-in because macOS bills at 10x on a private repo. On a
+      # public repo standard runners are free, macOS included, so set the repo
+      # variable E2E_IOS=true and take the coverage. Either way a single PR can
+      # opt in with the `e2e:ios` label (the `labeled` trigger above is what
+      # makes the label alone start a run). See docs/runners.md.
       ios: ${{ vars.E2E_IOS == 'true' || contains(github.event.pull_request.labels.*.name, 'e2e:ios') }}
       macos-runner: ${{ vars.WORKFLOWS_MACOS_RUNNER || 'macos-26' }}
       dev-client: true
