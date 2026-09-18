@@ -15,6 +15,10 @@ React Native (Expo) apps, and the developer tooling every repo installs.
 
 ---
 
+<p align="center">
+  <img src="docs/assets/readme-hero.svg" alt="App repos carry a forty-line ci.yml that calls the reusable GitHub Actions workflows here at the pinned tag @v0: Checks, Unit and E2E on every pull request; Prepare, Build and sign, and Release on the way to a store. Any repo, React Native or not, can install the @blinkbitcoin/dev-config npm package for git hooks, linters and pinned tool versions. Every app gets green gates, device E2E on iOS and Android, signed and verified builds, and store releases." width="960">
+</p>
+
 Continuous integration for a React Native app is not a config file. It is
 seventy shell scripts: install an Android SDK, boot an emulator that does not
 hang, wait for Metro, hash the native inputs so a build cache means something,
