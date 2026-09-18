@@ -48,9 +48,8 @@ commit-msg:
 pre-push:
   commands:
     check:
-      # Wrapped like every other hook: make's recipes call bats, shellcheck,
-      # actionlint and typos by bare name, and none of them is on PATH in a
-      # shell mise has not activated. git exports GIT_DIR into this hook;
-      # test/test_helper.bash is what keeps that out of the tests' scratch
-      # repos (test/git-env.bats).
-      run: mise exec -- make check
+      # Bare on purpose: the Makefile puts the pinned tools on PATH itself, so
+      # this is the same command CI and a developer run. git exports GIT_DIR
+      # into this hook; test/test_helper.bash is what keeps that out of the
+      # tests' scratch repos (test/git-env.bats).
+      run: make check
