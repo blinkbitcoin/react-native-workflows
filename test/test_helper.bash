@@ -64,3 +64,19 @@ parity_skip() {
 # A test that wants one of them set assigns it itself, and that assignment
 # still wins - several files rely on exactly that.
 unset GITHUB_STEP_SUMMARY GITHUB_OUTPUT GITHUB_ENV
+
+# What git exports into a hook, cleared for every test in every file.
+#
+# git runs a hook with GIT_DIR (and, from a linked worktree, GIT_WORK_TREE and
+# GIT_INDEX_FILE) pointing at the repository being pushed, and those outrank
+# both `-C` and the working directory. The pre-push hook runs this suite, so
+# every `git init "$tmp"` / `git -C "$tmp" commit` in a test landed in the real
+# clone instead: core.bare flipped to true, user.name became `t`, local `main`
+# grew a hundred test commits, and `pr`, `side`, `feature` and a row of `v*`
+# tags appeared beside the real ones. Run by hand the suite was fine, which is
+# why it survived - only a push reproduced it.
+#
+# `--local-env-vars` is git's own list of the repository-scoped variables, so a
+# variable a later git adds is covered without touching this line.
+# shellcheck disable=SC2046  # word splitting is the point: one name per word
+unset $(git rev-parse --local-env-vars)
