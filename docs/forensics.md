@@ -30,6 +30,18 @@ failure must never fail the job) and writes into `$WORKFLOWS_OUT/forensics`:
   sources `scripts/lib/e2e-env.sh` first) so a stale crash from a previous job
   on the same runner never shows up. If that stamp is missing for some reason
   the fallback is "modified in the last 60 minutes".
+- iOS only: `ios-unified.log` — the simulator's unified log for the same
+  window as the video (`ios-simulator.sh record start` spawns
+  `simctl log stream`, `record stop` ends it), filtered by
+  `scripts/lib/e2e-env.sh`'s `workflows_ios_unified_log_predicate` to
+  SpringBoard's alert lifecycle (`AlertItems`, `AlertItemStack`,
+  `SceneDeactivation`), FrontBoard's scene-action delivery (`SceneClient`) and
+  any line naming the app id or its URL scheme. It exists for the deep link
+  that "did nothing": `Presenting <SBUserNotificationAlert` is the
+  "Open in <app>?" prompt, `Will deactivate alertItem` is the tap on it, and
+  the `url = <scheme>://…` block is the `UIOpenURLAction` reaching the app.
+  On a runner the gap between that block and the next navigation is where
+  the time went; locally the same binary does it in 40 ms.
 - `maestro/` — the whole Maestro debug directory (`junit.xml` plus the
   per-command screenshots and device logs), copied in from its sibling
   `$WORKFLOWS_OUT/maestro`. Only `forensics/` is uploaded, so this copy is what puts
@@ -73,6 +85,20 @@ you'll find:
 - Maestro writes a screenshot per command it executes, so scanning the
   numbered PNGs in flow order shows the UI state right up to the failing
   command without needing to scrub the video.
+
+## A suite with no flow output at all
+
+If the job log shows `Requested 1 shards…` and then nothing until
+`Maestro suite exceeded …s`, no flow ran: open `maestro/xctest_runner_*.log`
+in the artifact and look for `Simulator device failed to launch
+dev.mobile.maestro-driver-iosUITests.xctrunner` / `** TEST EXECUTE FAILED **`.
+That is Maestro's own XCUITest runner failing to start on the simulator (seen
+on a runner where `Setup` alone took 5 minutes), not the app and not a flow.
+Maestro polls the dead driver until `MAESTRO_DRIVER_STARTUP_TIMEOUT`, so that
+value is kept strictly below the suite bound: the failure then surfaces as
+`iOS driver not ready in time`, a real exit status, and the suite is rerun
+once - which reinstalls and relaunches the runner. `ios-unified.log` will be
+quiet for the whole window, which is itself the confirmation.
 
 ## The suite retry and what it means for forensics
 

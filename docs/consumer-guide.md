@@ -315,7 +315,7 @@ mental model).
 | `docs-globs` | `''` | Extra `\|`-joined POSIX ERE alternatives **added to** the built-in docs pattern (`^docs/\|\.md$\|(^\|/)LICENSE$\|^\.github/ISSUE_TEMPLATE/\|^\.github/PULL_REQUEST_TEMPLATE`), not a replacement for it |
 
 Jobs: `Changes`, `Code`, `Generated`, `Docs`, `Dependencies`, `Prebuild`,
-`Bundle secrets`, `Release`, `Tooling`, `Commits` — grouped by **who acts on a
+`Secrets`, `Release`, `Tooling`, `Commits` — grouped by **who acts on a
 failure**, not by what is cheapest to run. A red `Dependencies` means a
 vulnerability, a licence problem or an SDK drift and belongs to whoever owns
 operations; a red `Code` is a lint error and belongs to the author. They used to
@@ -402,6 +402,8 @@ No outputs. Secrets: `consumer-token` (optional).
 | `maestro-include-tags` / `maestro-exclude-tags` | `''` | Passed to Maestro when non-empty |
 | `suite-timeout-minutes` | `10` | Per-attempt bound; the step's own timeout is this plus 5 |
 | `dev-client` | `true` | Launch via the `expo-development-client` deep link, Metro `--dev-client` |
+| `ios-configuration` | `Debug` | Xcode configuration for the iOS E2E app.<br>`Release` embeds the JS bundle and leaves the dev launcher out, so the app runs on `simctl launch` alone -<br>no Metro, no deep link, no iOS "Open in <app>?" prompt. Forces `dev-client` off for the iOS jobs;<br>Android is unaffected. Changes the cache key, so the two configurations never share a build |
+| `build-env` | `{}` | Flat JSON object of non-secret variables exported before the iOS prebuild, so the bundle embeds them.<br>A `Release` build resolves `.env.production` at build time and an exported variable wins over the dotenv file -<br>this is how you point an E2E build at a mock API. Folded into the iOS cache key, so two values never share a build |
 | `e2e-setup-script` / `e2e-teardown-script` | `''` | Consumer-relative hook scripts (setup: missing file is fatal; teardown: always runs) |
 | `ios-artifact-name` | `ios-app` | Artifact name between `build-ios` and `ios` |
 | `android-artifact-name` | `android-apk` | Artifact name between `build-android` and `android` |
@@ -1415,3 +1417,11 @@ each one lives so a future edit doesn't quietly regress it.
 | A non-secret value passed as a workflow input is public, so a credential smuggled through one leaks quietly | `scripts/lib/build-env.sh` refuses keys ending in `_KEY`/`_TOKEN`/`_PASSWORD`/`_SECRET`/… and logs key names only; `test/build-env.bats` |
 | An unset repo variable is `''`, which a `type: number` input rejects outright | The guide's `fromJSON(vars.X \|\| '1000')` idiom for `build-number-offset` and `rollout` |
 | No runner image ships bundletool, and the `android build` lane needs it to derive the universal APK | `expo-build-android.yml` installs the pinned jar via `scripts/ci/bundletool-install.sh` before the lane runs (version kept equal to `scripts/lib/versions.sh` by `check-versions.sh`) |
+| A Release E2E build resolves `.env.production` at bundle time, so `EXPO_PUBLIC_*` from a dotenv file never reaches it; an exported variable beats the dotenv file, `NODE_ENV` does not (`@expo/env` assigns it from `--dev`) | `e2e.yml`'s `build-env` input, published before `Prebuild (ios)`; the template passes its mock API URL there |
+| A `.app` built against one `build-env` must not be restored for another, or the fix looks like it did nothing | `scripts/ci/native-keys.sh` folds a digest of `BUILD_ENV` into `ios-key` (`-env{8hex}`; empty leaves the key byte-identical); `test/native-keys.bats` |
+| A Release iOS app never asks Metro for a bundle, so starting Metro for it is pure wall clock — and a launch script must not demand `metro.log` on that path | `e2e.yml` `ios` job gates `Start Metro`/`Wait for Metro` on `ios-configuration != 'Release'`; `scripts/e2e/app-launch.sh` requires `metro.log` only when it will read it; `test/app-launch.bats` |
+| On an iOS cache hit the job must not install a dependency tree to produce a warning: the warm build was 1m57s against 13s for the same job in esign | `scripts/lib/e2e-env.sh` `workflows_ios_scheme` returns the workspace filename and cross-checks the Expo config only when it is already at hand; `e2e.yml` `build-ios` skips `Setup` and `Publish build-env` on a hit; `test/e2e-env.bats` |
+| Skipping `Setup` skips the only step that published `$WORKFLOWS_DIR`, and every later `run:` is `bash "$WORKFLOWS_DIR/…"` — exit 127 on the first warm run | `e2e.yml` `build-ios` runs `scripts/ci/workflows-env.sh` as its own unconditional first step |
+| The first `simctl openurl` of a simulator session puts up "Open in <app>?", and on a loaded runner the app acted on that first link ~40 s late — during the *next* flow; iOS remembers the choice, so every later open is alert-free and immediate | Consumer side: the template's `00-launch.yaml` opens a Home no-op link first (ADR 0010 there). Here: `ios-simulator.sh record start` streams the unified log so the alert and the `UIOpenURLAction` hand-off are in `forensics-ios` as `ios-unified.log` |
+| A suite that only passes on the retry is a failure signal GitHub paints green: the artifact carries the retry's files | `ios-maestro.sh`/`android-maestro.sh` log `rerunning the suite once`; read the job log for it before trusting a green run (see `docs/forensics.md`) |
+| The Maestro driver-startup timeout must be strictly below the suite bound, or a runner that fails to launch (`TEST EXECUTE FAILED`) burns the whole bound as exit 124 - which is never retried - and zero flows run | `scripts/lib/e2e-env.sh` `workflows_driver_startup_timeout` (validates, exports; 300000 default on both platforms), called by both maestro scripts; `e2e.yml` passes 300000; `test/driver-startup-timeout.bats` |

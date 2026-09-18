@@ -77,6 +77,27 @@ on:
         description: Launch through the expo-development-client deep link and start Metro with --dev-client
         type: boolean
         default: true
+      ios-configuration:
+        description: >-
+          Xcode configuration for the iOS E2E app. Debug loads its JS from Metro
+          through the expo-development-client deep link. Release embeds the
+          bundle and leaves the dev launcher out of the build, so the app runs
+          on `simctl launch` alone - no Metro, no deep link, and no iOS
+          "Open in <app>?" prompt to answer. Release forces dev-client off for
+          the iOS jobs whatever `dev-client` says; Android is unaffected.
+        type: string
+        default: Debug
+      build-env:
+        description: >-
+          Flat JSON object of non-secret build environment variables published
+          before the iOS prebuild, so the bundle embeds them. A Release build
+          resolves .env.production at build time; an exported variable wins over
+          the dotenv file, which is how an E2E build is pointed at a mock API.
+          Folded into the iOS cache key. Keys must be UPPER_SNAKE and anything
+          that reads as a credential is refused - this is a workflow input, so
+          GitHub neither masks nor hides it.
+        type: string
+        default: '{}'
       e2e-setup-script:
         description: Consumer-relative script run before the suite (empty skips it); a missing file is fatal
         type: string
@@ -115,6 +136,7 @@ jobs:
     env:
       WORKING_DIRECTORY: ${{ inputs.working-directory }}
       WORKFLOWS_XCODE: ${{ inputs.xcode }}
+      WORKFLOWS_IOS_CONFIGURATION: ${{ inputs.ios-configuration }}
     steps:
       - name: Checkout consumer
         uses: actions/checkout@v7
@@ -129,9 +151,15 @@ jobs:
           ref: ${{ job.workflow_sha }}
           path: .workflows
           persist-credentials: false
+      # $WORKFLOWS_DIR first, and unconditionally: every later `run:` in this job
+      # is `bash "$WORKFLOWS_DIR/..."`, and the Setup action that also publishes
+      # it is skipped on a cache hit - which left the pack step running
+      # `bash "/scripts/native/ios-pack.sh"` and dying with exit 127.
+      - name: Publish WORKFLOWS_DIR
+        run: bash ".workflows/scripts/ci/workflows-env.sh"
       # Puts WORKFLOWS_OUT in $GITHUB_ENV up front so the upload step's `path:` below
       # resolves even when an earlier step failed before any other script ran.
-      - name: Publish WORKFLOWS_DIR environment
+      - name: Publish WORKFLOWS_OUT environment
         run: bash ".workflows/scripts/e2e/env-publish.sh"
       - name: Native cache keys
         id: keys
@@ -141,6 +169,7 @@ jobs:
           native-cache-version: ${{ inputs.native-cache-version }}
           native-extra-globs: ${{ inputs.native-extra-globs }}
           xcode: ${{ inputs.xcode }}
+          build-env: ${{ inputs.build-env }}
       # The built .app plus the generated workspace: ios-pack.sh resolves the
       # scheme from ios/*.xcworkspace, and on a cache hit no prebuild has run.
       - name: Restore iOS app cache
@@ -148,17 +177,31 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: |
-            ${{ inputs.working-directory }}/ios/build/Build/Products/Debug-iphonesimulator
+            ${{ inputs.working-directory }}/ios/build/Build/Products/${{ inputs.ios-configuration }}-iphonesimulator
             ${{ inputs.working-directory }}/ios/*.xcworkspace
-          key: ${{ steps.keys.outputs.ios-key }}
+          key: ${{ steps.keys.outputs.ios-key }}-${{ inputs.ios-configuration }}
           lookup-only: false
-      # Always: ios-pack.sh needs $WORKFLOWS_DIR, pnpm and the expo config even on a hit.
-      # Ruby is only needed by pods.sh, so it is installed on a miss only.
+      # Miss only. On a hit the remaining steps pack a tar and upload it:
+      # ios-pack.sh takes the scheme from the workspace filename, and its
+      # cross-check against the Expo config is best-effort precisely so a warm
+      # run does not install a dependency tree to produce a warning. That was
+      # ~80s of every warm build. $WORKFLOWS_DIR is published by the dedicated
+      # step above, so nothing on the hit path depends on this one.
       - name: Setup
+        if: ${{ steps.restore.outputs.cache-hit != 'true' }}
         uses: ./.workflows/.github/actions/setup
         with:
           working-directory: ${{ inputs.working-directory }}
-          ruby: ${{ steps.restore.outputs.cache-hit != 'true' }}
+          ruby: 'true'
+      # Before the prebuild, because EXPO_PUBLIC_* is inlined when the bundle is
+      # written - anything published later never reaches the .app. Miss only:
+      # on a hit there is no bundle to write, and the variables are already
+      # baked into the .app being restored (which is why they are in its key).
+      - name: Publish build-env
+        if: ${{ steps.restore.outputs.cache-hit != 'true' }}
+        env:
+          WORKFLOWS_BUILD_ENV: ${{ inputs.build-env }}
+        run: bash "$WORKFLOWS_DIR/scripts/release/build-env.sh"
       - name: Prebuild (ios)
         if: ${{ steps.restore.outputs.cache-hit != 'true' }}
         run: bash "$WORKFLOWS_DIR/scripts/native/prebuild.sh" ios
@@ -186,9 +229,9 @@ jobs:
         uses: actions/cache/save@v6
         with:
           path: |
-            ${{ inputs.working-directory }}/ios/build/Build/Products/Debug-iphonesimulator
+            ${{ inputs.working-directory }}/ios/build/Build/Products/${{ inputs.ios-configuration }}-iphonesimulator
             ${{ inputs.working-directory }}/ios/*.xcworkspace
-          key: ${{ steps.keys.outputs.ios-key }}
+          key: ${{ steps.keys.outputs.ios-key }}-${{ inputs.ios-configuration }}
       # Not `always()`: when the build itself failed there is no .app and no
       # workspace, so ios-pack.sh dies and the upload's `if-no-files-found:
       # error` dies after it - two misleading red steps stacked on the real
@@ -213,7 +256,12 @@ jobs:
     timeout-minutes: 60
     env:
       WORKING_DIRECTORY: ${{ inputs.working-directory }}
-      WORKFLOWS_DEV_CLIENT: ${{ inputs.dev-client }}
+      WORKFLOWS_IOS_CONFIGURATION: ${{ inputs.ios-configuration }}
+      # A Release build has no dev launcher to deep-link into, so it launches
+      # directly whatever `dev-client` says. The non-empty value MUST sit in the
+      # `&&` slot: GitHub's `&&` yields the first falsy operand, so putting the
+      # inherited value there would return it on both branches.
+      WORKFLOWS_DEV_CLIENT: ${{ inputs.ios-configuration == 'Release' && 'false' || inputs.dev-client }}
       WORKFLOWS_MAESTRO_FLOWS: ${{ inputs.maestro-flows }}
       WORKFLOWS_MAESTRO_INCLUDE_TAGS: ${{ inputs.maestro-include-tags }}
       WORKFLOWS_MAESTRO_EXCLUDE_TAGS: ${{ inputs.maestro-exclude-tags }}
@@ -251,7 +299,12 @@ jobs:
         uses: ./.workflows/.github/actions/maestro
         with:
           version: ${{ inputs.maestro-version }}
+      # A Release build embeds its bundle and never asks Metro for one, so
+      # starting it - and prewarming a bundle nothing reads - is pure wall clock.
+      # The setup hook stays unconditional: the mock API it starts is a runtime
+      # dependency of the suite, not a build-time one.
       - name: Start Metro
+        if: ${{ inputs.ios-configuration != 'Release' }}
         run: bash "$WORKFLOWS_DIR/scripts/e2e/metro-start.sh"
       - name: E2E setup script
         if: ${{ inputs.e2e-setup-script != '' }}
@@ -268,16 +321,21 @@ jobs:
       - name: Install app
         run: bash "$WORKFLOWS_DIR/scripts/e2e/ios-simulator.sh" install "$WORKFLOWS_OUT"/*.app.tar
       - name: Wait for Metro
+        if: ${{ inputs.ios-configuration != 'Release' }}
         timeout-minutes: 10
         run: bash "$WORKFLOWS_DIR/scripts/e2e/metro-wait.sh" ios
       - name: Start screen recording
         run: bash "$WORKFLOWS_DIR/scripts/e2e/ios-simulator.sh" record start
       - name: Launch app
         run: bash "$WORKFLOWS_DIR/scripts/e2e/app-launch.sh" ios
+      # Strictly below suite-timeout-minutes (ios-maestro.sh refuses otherwise):
+      # a driver that fails to launch must fail fast and be retried, not sit
+      # until the bound's exit 124, which is never retried. 600000 was equal to
+      # the bound and cost run 35259139324 ten minutes for zero flows.
       - name: Maestro suite (iOS)
         timeout-minutes: ${{ fromJSON(steps.timeout.outputs.minutes) }}
         env:
-          MAESTRO_DRIVER_STARTUP_TIMEOUT: '600000'
+          MAESTRO_DRIVER_STARTUP_TIMEOUT: '300000'
         run: bash "$WORKFLOWS_DIR/scripts/e2e/ios-maestro.sh"
       - name: Stop screen recording
         if: always()

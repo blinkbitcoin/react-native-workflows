@@ -79,17 +79,64 @@ workflows_ios_scheme() {
   ws="$(find "$root/ios" -maxdepth 1 -name '*.xcworkspace' 2>/dev/null | head -1)"
   [ -n "$ws" ] || die "no ios/*.xcworkspace in $root - run prebuild.sh ios and pods.sh first"
   ws_name="$(basename "$ws" .xcworkspace)"
-  cfg_name="$(workflows_expo_config ios.scheme-name)"
-  if [ "$ws_name" != "$cfg_name" ]; then
+  # The workspace name is what we return, always. The Expo config is only a
+  # cross-check, and asking for it runs `pnpm exec expo config` - which on a
+  # cache hit means installing the whole dependency tree (~80s) to produce a
+  # warning that changes nothing. Best-effort: when the config is not already
+  # available, skip the comparison rather than make every caller pay for it.
+  if cfg_name="$(workflows_expo_config ios.scheme-name 2>/dev/null)" &&
+    [ -n "$cfg_name" ] && [ "$ws_name" != "$cfg_name" ]; then
     printf '::warning::expo-config scheme-name (%s) disagrees with the generated workspace (%s); using the workspace name\n' \
       "$cfg_name" "$ws_name" >&2
   fi
   printf '%s\n' "$ws_name"
 }
 
-WORKFLOWS_IOS_PRODUCTS_DIR="ios/build/Build/Products/Debug-iphonesimulator"
+# workflows_driver_startup_timeout DEFAULT_MS -> the MAESTRO_DRIVER_STARTUP_TIMEOUT
+# to export, honouring an explicit environment value, and refusing one that is
+# not strictly below the suite bound. Maestro throws IOSDriverTimeoutException
+# ("iOS driver not ready in time") when this expires - a real, retryable failure
+# the maestro scripts rerun once. With the value at or above the bound the bound
+# fires first, exits 124, and 124 is never retried: a driver that failed to
+# launch (`TEST EXECUTE FAILED` in xctest_runner_*.log, seen at 77s on a loaded
+# runner) then costs the whole bound and zero flows run. Healthy runner startups
+# measured 86s and 144s; 300000 leaves 2x headroom and half the bound for flows.
+workflows_driver_startup_timeout() {
+  local default_ms="${1:?usage: workflows_driver_startup_timeout DEFAULT_MS}"
+  local ms="${MAESTRO_DRIVER_STARTUP_TIMEOUT:-$default_ms}"
+  local bound_ms=$((WORKFLOWS_SUITE_TIMEOUT_MINUTES * 60 * 1000))
+  case "$ms" in *[!0-9]* | '') die "MAESTRO_DRIVER_STARTUP_TIMEOUT must be milliseconds, got '$ms'" ;; esac
+  [ "$ms" -lt "$bound_ms" ] ||
+    die "MAESTRO_DRIVER_STARTUP_TIMEOUT=$ms is not below the suite bound (${bound_ms}ms): a driver that fails to start would burn the bound (exit 124, never retried) instead of failing fast and being retried"
+  printf '%s\n' "$ms"
+}
+
+# workflows_ios_unified_log_predicate -> the `log stream --predicate` that
+# ios-simulator.sh records next to the video. The app id (from the Expo config,
+# or WORKFLOWS_APP_ID) and its URL scheme narrow the firehose to the lines that
+# explain a deep link: SpringBoard presenting/dismissing the "Open in <app>?"
+# alert, the app's scene being deactivated behind it, and FrontBoard handing
+# the UIOpenURLAction to the app.
+workflows_ios_unified_log_predicate() {
+  local app_id scheme
+  app_id="$(workflows_app_id ios 2>/dev/null || printf '%s' "${WORKFLOWS_APP_ID:-}")"
+  scheme="$(workflows_scheme 2>/dev/null || true)"
+  printf '%s' "(process == \"SpringBoard\" AND (category == \"AlertItems\" OR category == \"AlertItemStack\" OR category == \"SceneDeactivation\"))"
+  printf '%s' " OR (subsystem == \"com.apple.FrontBoard\" AND category == \"SceneClient\")"
+  [ -n "$app_id" ] && printf '%s' " OR eventMessage CONTAINS \"$app_id\""
+  [ -n "$scheme" ] && printf '%s' " OR eventMessage CONTAINS \"$scheme://\""
+  printf '\n'
+}
+
+# Debug unless a caller asks for Release. Release is what makes an iOS E2E app
+# self-contained: the JS bundle is embedded and expo-dev-client's launcher is
+# not in the build, so the app runs on `simctl launch` alone - no Metro, no
+# deep link, no "Open in <app>?" prompt. Each of those is a step that has to
+# succeed on every run, and each has failed on a runner.
+WORKFLOWS_IOS_CONFIGURATION="${WORKFLOWS_IOS_CONFIGURATION:-Debug}"
+WORKFLOWS_IOS_PRODUCTS_DIR="ios/build/Build/Products/$WORKFLOWS_IOS_CONFIGURATION-iphonesimulator"
 WORKFLOWS_ANDROID_APK="android/app/build/outputs/apk/debug/app-debug.apk"
-export WORKFLOWS_IOS_PRODUCTS_DIR WORKFLOWS_ANDROID_APK
+export WORKFLOWS_IOS_CONFIGURATION WORKFLOWS_IOS_PRODUCTS_DIR WORKFLOWS_ANDROID_APK
 
 # The picked simulator is remembered in $WORKFLOWS_OUT so every later step addresses
 # it explicitly: `booted` is ambiguous on a developer Mac with several

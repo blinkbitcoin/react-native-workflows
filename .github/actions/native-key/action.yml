@@ -13,6 +13,9 @@ inputs:
   native-extra-globs:
     description: Extra glob patterns folded into the native dependency hash
     default: ''
+  build-env:
+    description: Build environment JSON folded into the iOS cache key; the .app embeds EXPO_PUBLIC_* at bundle time, so two values must not share an entry (empty leaves the key unchanged)
+    default: ''
 outputs:
   hash:
     description: 16-hex native dependency hash
@@ -48,4 +51,5 @@ runs:
         NATIVE_CACHE_VERSION: ${{ inputs.native-cache-version }}
         XCODE: ${{ inputs.xcode }}
         NATIVE_EXTRA_GLOBS: ${{ inputs.native-extra-globs }}
+        BUILD_ENV: ${{ inputs.build-env }}
       run: bash "${{ github.action_path }}/../../../scripts/ci/native-keys.sh"

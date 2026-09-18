@@ -113,18 +113,18 @@ below>` — `Checks / Dependencies`, `E2E / Build Android`.
 
 ### `checks.yml` — the gates
 
-| Job              | What it checks                                                               |
-| ---------------- | ---------------------------------------------------------------------------- |
-| `Changes`        | Classifies the diff. Its `docs-only` output is what lets the other jobs skip |
-| `Code`           | Typecheck, lint, format, knip, spell — what `make check-code` runs           |
-| `Generated`      | i18n catalogs and GraphQL codegen match the sources they come from           |
-| `Docs`           | Doc freshness, command tables, table widths, mermaid blocks parse            |
-| `Dependencies`   | Expo SDK drift, vulnerability audit, lockfile provenance, licences           |
-| `Prebuild`       | Both platforms prebuild, and the config plugins emit what they claim         |
-| `Bundle secrets` | No non-public key reaches the exported JS bundle                             |
-| `Release`        | Ruby syntax, fastlane lane parse, lane unit tests                            |
-| `Tooling`        | actionlint and shellcheck over the CI itself                                 |
-| `Commits`        | commitlint over the PR's commits                                             |
+| Job            | What it checks                                                               |
+| -------------- | ---------------------------------------------------------------------------- |
+| `Changes`      | Classifies the diff. Its `docs-only` output is what lets the other jobs skip |
+| `Code`         | Typecheck, lint, format, knip, spell — what `make check-code` runs           |
+| `Generated`    | i18n catalogs and GraphQL codegen match the sources they come from           |
+| `Docs`         | Doc freshness, command tables, table widths, mermaid blocks parse            |
+| `Dependencies` | Expo SDK drift, vulnerability audit, lockfile provenance, licences           |
+| `Prebuild`     | Both platforms prebuild, and the config plugins emit what they claim         |
+| `Secrets`      | No non-public key reaches the exported JS bundle                             |
+| `Release`      | Ruby syntax, fastlane lane parse, lane unit tests                            |
+| `Tooling`      | actionlint and shellcheck over the CI itself                                 |
+| `Commits`      | commitlint over the PR's commits                                             |
 
 ### The rest, on a pull request or a push
 

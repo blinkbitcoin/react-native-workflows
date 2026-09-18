@@ -14,6 +14,7 @@ mkdir -p "$dest" || exit 0
 
 cp "$WORKFLOWS_OUT/metro.log" "$dest/" 2>/dev/null || true
 cp "$WORKFLOWS_OUT"/*.mp4 "$dest/" 2>/dev/null || true
+cp "$WORKFLOWS_OUT/ios-unified.log" "$dest/" 2>/dev/null || true
 # Maestro writes junit.xml and the per-command debug output (screenshots, device
 # logs, command hierarchy) to $WORKFLOWS_OUT/maestro, a *sibling* of forensics/. The
 # forensics action only uploads forensics/, so without this copy the artifact

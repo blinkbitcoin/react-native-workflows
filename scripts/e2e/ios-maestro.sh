@@ -14,9 +14,11 @@ export PATH="$HOME/.maestro/bin:$PATH"
 . "$HERE/maestro-bound.sh"
 require_cmd maestro
 
-# The iOS driver builds and installs its XCUITest runner on first use; on a
-# cold simulator that regularly takes minutes.
-export MAESTRO_DRIVER_STARTUP_TIMEOUT=600000
+# The driver installs and launches its runner on first use, minutes on a cold
+# device; the value must stay below the suite bound (see the helper) so a
+# runner that fails to launch is retried instead of burning the bound.
+export MAESTRO_DRIVER_STARTUP_TIMEOUT
+MAESTRO_DRIVER_STARTUP_TIMEOUT="$(workflows_driver_startup_timeout 300000)" || exit 1
 
 root="$(consumer_root)"
 cd "$root" || exit 1
