@@ -2,6 +2,14 @@ name: CI
 on:
   push: { branches: [main] }
   pull_request:
+    # The release PR is opened by release-please with GITHUB_TOKEN. GitHub
+    # creates a pull_request run for it but never schedules its jobs, and marks
+    # the run failed the moment the PR merges - a red run that never executed
+    # anything (every release since 0.3.1 carried one). Nothing gates on it:
+    # the release branch is exempt from the approval ruleset and there are no
+    # required status checks. The push to main after the squash merge runs
+    # this same workflow on the merged result, and that is the run that counts.
+    branches-ignore: ['release-please--**']
 permissions: { contents: read }
 concurrency:
   group: self-ci-${{ github.ref }}
