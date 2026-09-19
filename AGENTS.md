@@ -90,7 +90,20 @@ Every row is a make target; nothing here is run through a package manager.
 - **Permissions start at `contents: read`** at the top of a workflow; a job
   that needs more declares the extra scope *and* re-declares `contents: read`,
   because a job-level `permissions:` block replaces the top-level one rather
-  than extending it.
+  than extending it. The one exception is `expo-prepare.yml`, which has no
+  block at any level: a `permissions` block anywhere in a called workflow
+  replaces the *caller's* grant too, and that job must take the caller's
+  `contents: write` / `actions: read|write` as given (v0.6.2; the shape test
+  holds both halves).
+- **A change to `expo-prepare.yml`, `expo-build-android.yml` or the scripts
+  they run gets `make smoke-local` before the PR.** No gate in this repo
+  executes a reusable workflow - they only run inside a consumer - and v0.6.0
+  broke every consumer's internal release with `make check` green. The smoke
+  runs the Linux jobs for real with act, against the template, from the
+  pushed branch. It cannot see the token a called workflow really receives,
+  tag rules, or macOS; for those, push a throwaway caller on a `scratch/*`
+  branch and read the job's "Set up job" log before merging
+  (CONTRIBUTING.md, "Running the release pipeline locally").
 - **Conventional commits with a closed scope enum**
   (`commitlint.config.mjs`): `actions checks ci deps dev-config docs e2e lib native ota
   release self test tooling web workflows`. Squash merges take the PR title as

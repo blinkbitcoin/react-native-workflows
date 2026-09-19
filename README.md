@@ -162,6 +162,7 @@ same sha, which is how a release refuses to build on a red `main`.
 | ------------------ | --------------------------------- | ---------------------------------------------------------------------------------------------- |
 | `self-ci.yml`      | `Check`<br>`Parity`<br>`PR title` | actionlint, shellcheck, bats, version agreement, spell; then this repo against a real consumer |
 | `self-smoke.yml`   | `Checks`<br>`Unit`<br>`E2E`       | Runs the family against a real consumer repo. Weekly, and on dispatch                          |
+| `self-act-smoke.yml` | `Prepare`<br>`Build Android` | The Linux release jobs against the template, run on a laptop with act (`make smoke-local`). Dispatch-only, never run on GitHub |
 | `self-release.yml` | `Release PR`<br>`Major tag`       | release-please maintains the version PR; on release, `v0` and `v0.1` move                      |
 
 ## Repository layout
