@@ -786,10 +786,18 @@ $(names "$real")"
   done
 }
 
-# One workflow serves upload, promote, rollout and halt. A fixed name would make
-# four different store operations indistinguishable in a caller's run graph.
-@test "the fastlane lane job names itself from its inputs" {
+# One workflow serves upload, promote, rollout and halt, and the *caller's* job
+# name says which ("Upload iOS", "Halt Android"). This job's name is therefore
+# fixed, and fastlane's own vocabulary stays out of every display name: a
+# reader of a run graph should not need to know what a lane is.
+@test "the store job has a fixed name and no display name says lane" {
   command -v yq >/dev/null || skip "yq not installed"
   n=$(yq -r '.jobs.lane.name' "$REPO_ROOT/.github/workflows/fastlane-lane.yml")
-  contains "$n" 'inputs.lane' || fail "fastlane-lane's job name does not vary with the lane: $n"
+  [ "$n" = "Store" ] || fail "fastlane-lane's job is named '$n', expected 'Store'"
+  for w in "$REPO_ROOT"/.github/workflows/*.yml; do
+    names=$(yq -r '[.name] + [.jobs[].name] | .[] | select(. != null)' "$w")
+    if grep -qi 'lane' <<<"$names"; then
+      fail "$(basename "$w") puts fastlane vocabulary in a display name: $(grep -i lane <<<"$names" | tr '\n' ' ')"
+    fi
+  done
 }

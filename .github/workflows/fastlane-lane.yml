@@ -1,4 +1,8 @@
-name: Fastlane Lane
+# "Store", not "Fastlane Lane": a reader of a consumer's run graph sees
+# "<caller job> / <this job>", e.g. "Upload iOS / Store", and should not need
+# to know fastlane's word for a named task to read it. The file keeps its name
+# because consumers pin it by path.
+name: Store
 on:
   workflow_call:
     inputs:
@@ -151,7 +155,10 @@ permissions:
   contents: read
 jobs:
   lane:
-    name: ${{ inputs.platform }} ${{ inputs.lane }}
+    # Fixed on purpose: the caller's job already says which operation this is
+    # ("Upload iOS", "Promote Android", "Halt Android"); repeating the lane id
+    # here only put fastlane vocabulary in front of the reader.
+    name: Store
     runs-on: ${{ inputs.runner }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
     environment: ${{ inputs.environment }}
