@@ -282,10 +282,22 @@ $(names "$real")"
   done
 }
 
-@test "every workflow has top-level permissions.contents == read" {
+# expo-prepare is the one exception: its prepare job must take the caller's
+# grant as-is (contents: write for reserve-tag, actions: read or write for the
+# green gate), and any `permissions` block in a called workflow - top-level
+# included - replaces the caller's grant with its own. v0.6.0 shipped with
+# `contents: read` here and the job's token was `Contents: read, Metadata:
+# read` whatever the caller granted (react-native-mobile-template run
+# 35429556846, attempt 2). See the comment in the workflow.
+@test "every workflow has top-level permissions.contents == read, except expo-prepare which has no block at all" {
   for w in "${WORKFLOWS[@]}"; do
+    if [ "$(basename "$w")" = "expo-prepare.yml" ]; then
+      [ "$(yq -r '.permissions // "absent"' "$w")" = "absent" ] \
+        || fail "expo-prepare.yml has a top-level permissions block; it would replace the caller's grant: $(yq -r '.permissions' "$w")"
+      continue
+    fi
     perms=$(yq -r '.permissions.contents' "$w")
-    [ "$perms" = "read" ]
+    [ "$perms" = "read" ] || fail "$(basename "$w") top-level permissions.contents is '$perms', not read"
   done
 }
 
@@ -411,6 +423,10 @@ $(names "$real")"
   f="$REPO_ROOT/.github/workflows/expo-prepare.yml"
   [ "$(yq -r '.jobs.prepare.permissions // "inherit"' "$f")" = "inherit" ] \
     || fail "expo-prepare's prepare job declares permissions, so it cannot take actions: write from a caller that grants it: $(yq -r '.jobs.prepare.permissions' "$f")"
+  # A top-level block is the same defect one level up: it applies to every job
+  # without its own, and replaced the caller's grant in v0.6.0.
+  [ "$(yq -r '.permissions // "absent"' "$f")" = "absent" ] \
+    || fail "expo-prepare has a top-level permissions block, which replaces the caller's grant: $(yq -r '.permissions' "$f")"
   grep -q 'REQUIRE_GREEN_DISPATCH_REF' "$f" \
     || fail "expo-prepare does not wire require-green-dispatch into the gate"
   # The consumer guide is where a caller learns what to grant.
