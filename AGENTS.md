@@ -46,6 +46,8 @@ Every row is a make target; nothing here is run through a package manager.
 | `make check-versions` | Fail when a workflow default disagrees with `scripts/lib/versions.sh` |
 | `make tool-versions` | Fail when an installed tool is not the version `packages/dev-config/versions.json` pins |
 | `make spell` | typos over the whole repo |
+| `make smoke-local` | Prepare against the template with nektos/act — Docker and a pushed branch required; not part of `check` (CONTRIBUTING.md, "Running the release pipeline locally") |
+| `make smoke-local-android` | `smoke-local`, then the unsigned Android build |
 | `make help` | Show every target with its description |
 
 ## Rules of the road
@@ -88,7 +90,20 @@ Every row is a make target; nothing here is run through a package manager.
 - **Permissions start at `contents: read`** at the top of a workflow; a job
   that needs more declares the extra scope *and* re-declares `contents: read`,
   because a job-level `permissions:` block replaces the top-level one rather
-  than extending it.
+  than extending it. The one exception is `expo-prepare.yml`, which has no
+  block at any level: a `permissions` block anywhere in a called workflow
+  replaces the *caller's* grant too, and that job must take the caller's
+  `contents: write` / `actions: read|write` as given (v0.6.2; the shape test
+  holds both halves).
+- **A change to `expo-prepare.yml`, `expo-build-android.yml` or the scripts
+  they run gets `make smoke-local` before the PR.** No gate in this repo
+  executes a reusable workflow - they only run inside a consumer - and v0.6.0
+  broke every consumer's internal release with `make check` green. The smoke
+  runs the Linux jobs for real with act, against the template, from the
+  pushed branch. It cannot see the token a called workflow really receives,
+  tag rules, or macOS; for those, push a throwaway caller on a `scratch/*`
+  branch and read the job's "Set up job" log before merging
+  (CONTRIBUTING.md, "Running the release pipeline locally").
 - **Conventional commits with a closed scope enum**
   (`commitlint.config.mjs`): `actions checks ci deps dev-config docs e2e lib native ota
   release self test tooling web workflows`. Squash merges take the PR title as
@@ -105,6 +120,7 @@ Every row is a make target; nothing here is run through a package manager.
 |---|---|---|
 | Pure bash scripts | `test/*.bats` | `make test` |
 | Workflow and action shape (inputs, permissions, step names) | `test/workflow-shape.bats`, `test/actions-shape.bats` | `make test` |
+| The Linux release jobs, executed for real (Prepare, Android) | `.github/workflows/self-act-smoke.yml` via act | `make smoke-local` |
 | The consumer contract (guide ↔ fixtures ↔ real caller) | `test/consumer-contract.bats` | `make test` |
 | Hooks, the hook environment and the docs command table | `test/hooks.bats`, `test/git-env.bats`, `test/docs-contract.bats` | `make test` |
 | Parity with the consumer's own copy of a shared script | `test/resolve-version.bats`, `test/build-info.bats`, `test/workflow-shape.bats` | `make test` **with `WORKFLOWS_TEMPLATE_DIR` set** |

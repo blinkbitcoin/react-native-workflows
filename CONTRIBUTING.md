@@ -89,6 +89,34 @@ Add `WORKFLOWS_PARITY_REQUIRED=1` to turn a would-be skip into a failure. `self-
 and reports green is the exact failure the whole mechanism exists to prevent.
 Do not add it to a plain local run unless you have supplied a checkout.
 
+### Running the release pipeline locally
+
+`make check` cannot execute a reusable workflow, and neither can the PR's CI:
+the workflows only ever run inside a consumer. v0.6.0 shipped a Prepare job
+that exited 127 on every consumer's next push with every gate green. Before a
+change to `expo-prepare.yml` or `expo-build-android.yml` goes out, run the
+Linux half of a consumer's internal release here with [nektos/act]:
+
+```sh
+make smoke-local           # Prepare, against the template at main (~2 min)
+make smoke-local-android   # Prepare, then the unsigned Android build (much longer)
+```
+
+It needs Docker running and the current branch **pushed**: expo-prepare checks
+this repository out into `.workflows` from GitHub at the local HEAD, so the
+working tree itself is not what runs, the pushed commit is. The script refuses
+an unpushed or detached HEAD rather than letting the job fail inside act.
+`WORKFLOWS_SMOKE_REPOSITORY` and `WORKFLOWS_SMOKE_REF` pick another consumer.
+
+What it shows: the steps of the Linux jobs, in order, with the real scripts.
+What it cannot show: the token a called workflow really receives (act hands
+every job a full-scope token, so a `permissions` mistake looks fine - v0.6.1's
+did), GitHub's tag and ref rules, and anything on a macOS runner. For those,
+push a throwaway caller on a `scratch/*` branch and read the job's "Set up
+job" log on GitHub before merging.
+
+[nektos/act]: https://github.com/nektos/act
+
 ## What a change usually needs
 
 - **A script change** needs a `test/*.bats` case, with every assertion ending

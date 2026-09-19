@@ -1,0 +1,79 @@
+name: Smoke (local, act)
+# The Linux half of a consumer's internal release, runnable on a laptop with
+# nektos/act: `make smoke-local` (Prepare) or `make smoke-local-android`
+# (Prepare, then the Android build). It exists so a change to expo-prepare or
+# expo-build-android can be seen failing here before it is merged, released
+# and picked up by every consumer on @v0 - which is how v0.6.0 shipped a
+# Prepare that exited 127 on every consumer's next push.
+#
+# `workflow_dispatch` only, and never dispatched on GitHub: act is the caller.
+# What act cannot show: the token a called workflow really gets (act hands
+# every job a full-scope token, so a `permissions` mistake looks fine here),
+# tag and ref rules, and anything on a macOS runner. scripts/self/act-smoke.sh
+# is the entry point and says the same; it also runs upload-artifact@v7 and
+# download-artifact@v8 as their last v4, which is what act's artifact server
+# understands - the workflows themselves keep the versions GitHub runs.
+#
+# `./`, not `@v0`: act resolves a local path to the checkout it runs in, so the
+# workflow under test is this tree's. The `.workflows` checkout inside
+# expo-prepare still clones this repository from GitHub at the local HEAD, so
+# the branch has to be pushed first - act-smoke.sh refuses otherwise.
+on:
+  workflow_dispatch:
+    inputs:
+      repository:
+        description: Consumer repository to prepare
+        type: string
+        default: 'blinkbitcoin/react-native-mobile-template'
+      ref:
+        description: Consumer ref to prepare
+        type: string
+        default: 'main'
+      android:
+        description: Also run the Android build (unsigned)
+        type: boolean
+        default: false
+permissions:
+  contents: read
+jobs:
+  prepare:
+    name: Prepare
+    uses: ./.github/workflows/expo-prepare.yml
+    with:
+      repository: ${{ inputs.repository }}
+      ref: ${{ inputs.ref }}
+      stage: internal
+      # Never a real tag from a laptop: the token act runs with is the
+      # developer's own, and reserve-tag.sh would create `v<version>-build.<n>`
+      # on the consumer for real. test/act-smoke.bats holds this at false.
+      reserve-tag: false
+      # No green gate: nothing has run for this commit anywhere.
+      require-green-workflow: ''
+      build-number-offset: 1000
+      build-env: >-
+        {"APP_VARIANT":"production",
+        "EXPO_PUBLIC_API_URL":"https://api.example.com/graphql",
+        "EXPO_PUBLIC_APP_NAME":"RN Mobile Template",
+        "EXPO_PUBLIC_ALLOW_INSECURE_WEB_STORAGE":"false"}
+  build-android:
+    name: Build Android
+    needs: prepare
+    if: ${{ inputs.android }}
+    uses: ./.github/workflows/expo-build-android.yml
+    with:
+      repository: ${{ inputs.repository }}
+      ref: ${{ inputs.ref }}
+      stage: internal
+      version: ${{ needs.prepare.outputs.version }}
+      build-number: ${{ needs.prepare.outputs.build-number }}
+      # The template's fixed identifiers (its IOS_SCHEME, IOS_BUNDLE_ID and
+      # ANDROID_PACKAGE repository variables).
+      android-package: com.example.rnmt
+      ios-bundle-id: com.example.rnmt
+      ios-scheme: RNMobileTemplate
+      android-signing: false
+      build-env: >-
+        {"APP_VARIANT":"production",
+        "EXPO_PUBLIC_API_URL":"https://api.example.com/graphql",
+        "EXPO_PUBLIC_APP_NAME":"RN Mobile Template",
+        "EXPO_PUBLIC_ALLOW_INSECURE_WEB_STORAGE":"false"}
