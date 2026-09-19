@@ -7,9 +7,20 @@
 # "no run of that workflow exists for this sha at all" - a silently-skipped gate
 # is the failure mode this script exists to prevent.
 #
+# Self-healing, when asked: with REQUIRE_GREEN_DISPATCH_REF set, a missing,
+# cancelled or failed run is dispatched once (`gh workflow run WORKFLOW --ref
+# REF`) and the gate then waits for *that* run. The ref is a tag, so the
+# dispatched run builds exactly the gated commit. This is what makes "merge
+# whenever" safe: a release PR merged behind another push used to lose its
+# internal build to concurrency-group eviction and the beta then failed here,
+# waiting for a human to dispatch by hand. A dispatched run that also fails is
+# fatal - nothing is retried forever. `skipped` is never dispatched: that is a
+# path filter saying the commit needs no build, and a dispatch would not change
+# it. Dispatching needs `actions: write` on the calling job.
+#
 # Usage: require-green-run.sh WORKFLOW_FILE SHA
 # Env: WORKFLOWS_GREEN_TIMEOUT_MINUTES (45), WORKFLOWS_GREEN_DISCOVERY_MINUTES (5),
-#      WORKFLOWS_GREEN_POLL_SECONDS (30), GH_TOKEN.
+#      WORKFLOWS_GREEN_POLL_SECONDS (30), REQUIRE_GREEN_DISPATCH_REF (''), GH_TOKEN.
 set -euo pipefail
 source "$(dirname "$0")/../lib/common.sh"
 require_cmd gh yq
@@ -20,13 +31,39 @@ sha="${2:?usage: require-green-run.sh WORKFLOW_FILE SHA}"
 timeout_minutes="${WORKFLOWS_GREEN_TIMEOUT_MINUTES:-45}"
 discovery_minutes="${WORKFLOWS_GREEN_DISCOVERY_MINUTES:-5}"
 poll_seconds="${WORKFLOWS_GREEN_POLL_SECONDS:-30}"
+dispatch_ref="${REQUIRE_GREEN_DISPATCH_REF:-}"
+dispatched=false
+superseded_run_id=""
 
 now() { date +%s; }
 start="$(now)"
 deadline="$((start + timeout_minutes * 60))"
 discovery_deadline="$((start + discovery_minutes * 60))"
 
-log "waiting for $workflow on $sha (timeout ${timeout_minutes}m, discovery ${discovery_minutes}m)"
+log "waiting for $workflow on $sha (timeout ${timeout_minutes}m, discovery ${discovery_minutes}m${dispatch_ref:+, will dispatch at $dispatch_ref if missing or red})"
+
+# Dispatch the gated workflow at the ref, once, and start the clock again for
+# the run that dispatch creates. The run being replaced (if any) is remembered
+# so the poll does not keep reading it as the newest run for the sha.
+dispatch_once() {
+  local why="$1" old_id="$2"
+  if [ -z "$dispatch_ref" ]; then
+    return 1
+  fi
+  if [ "$dispatched" = "true" ]; then
+    log "$workflow was already dispatched once for $sha and $why - not dispatching again"
+    return 1
+  fi
+  log "$why - dispatching $workflow at $dispatch_ref"
+  gh workflow run "$workflow" --ref "$dispatch_ref" \
+    || die "could not dispatch $workflow at $dispatch_ref (does the calling job grant actions: write?)"
+  dispatched=true
+  superseded_run_id="$old_id"
+  start="$(now)"
+  deadline="$((start + timeout_minutes * 60))"
+  discovery_deadline="$((start + discovery_minutes * 60))"
+  return 0
+}
 
 while :; do
   # `|| true`: a transient API error must not fail the gate on the first blip;
@@ -46,10 +83,17 @@ while :; do
     count="$(printf '%s' "$runs" | yq -r 'length // 0' 2>/dev/null || echo 0)"
   fi
 
+  run_id=""
+  if [ "$count" -gt 0 ]; then
+    run_id="$(printf '%s' "$runs" | yq -r '.[0].databaseId // ""')"
+  fi
+  if [ -n "$run_id" ] && [ "$run_id" = "$superseded_run_id" ]; then
+    # The newest run for the sha is still the one the dispatch replaced.
+    count=0
+  fi
   if [ "$count" -gt 0 ]; then
     status="$(printf '%s' "$runs" | yq -r '.[0].status // ""')"
     conclusion="$(printf '%s' "$runs" | yq -r '.[0].conclusion // ""')"
-    run_id="$(printf '%s' "$runs" | yq -r '.[0].databaseId // ""')"
     if [ "$status" = "completed" ]; then
       case "$conclusion" in
         success)
@@ -61,19 +105,23 @@ while :; do
           die "$workflow run $run_id for $sha was skipped - nothing verified this commit"
           ;;
         *)
-          die "$workflow run $run_id for $sha concluded '$conclusion' - refusing to continue"
+          dispatch_once "$workflow run $run_id for $sha concluded '$conclusion'" "$run_id" \
+            || die "$workflow run $run_id for $sha concluded '$conclusion' - refusing to continue"
           ;;
       esac
+    else
+      log "$workflow run $run_id is $status; polling again in ${poll_seconds}s"
     fi
-    log "$workflow run $run_id is $status; polling again in ${poll_seconds}s"
   else
     if [ "$(now)" -ge "$discovery_deadline" ]; then
       if [ "$gh_failed" = "true" ]; then
         die "could not query runs of $workflow for $sha within ${discovery_minutes}m - every 'gh run list' failed, the last with: ${gh_error:-unknown error}. This is an API/permissions problem (does the calling job grant actions: read?), not a missing run"
       fi
-      die "no $workflow run found for $sha within ${discovery_minutes}m - it was never started"
+      dispatch_once "no $workflow run found for $sha within ${discovery_minutes}m" "" \
+        || die "no $workflow run found for $sha within ${discovery_minutes}m - it was never started"
+    else
+      log "no $workflow run for $sha yet; polling again in ${poll_seconds}s"
     fi
-    log "no $workflow run for $sha yet; polling again in ${poll_seconds}s"
   fi
 
   [ "$(now)" -lt "$deadline" ] || die "$workflow did not complete for $sha within ${timeout_minutes}m"

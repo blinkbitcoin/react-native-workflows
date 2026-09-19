@@ -50,6 +50,10 @@ on:
         description: Workflow file name (e.g. release-internal.yml) that must have concluded successfully for this sha before preparing; empty disables the gate
         type: string
         default: ''
+      require-green-dispatch:
+        description: 'When the gated workflow has no run for the target sha, or its run was cancelled or failed, dispatch it once at `release-tag` and wait for that run instead of failing. Needs `release-tag` and `actions: write` on the calling job'
+        type: boolean
+        default: false
       release-meta-artifact:
         description: Artifact name carrying build-info.json, store-notes.json, notes-store.txt and notes.md to the later jobs
         type: string
@@ -90,20 +94,18 @@ jobs:
   prepare:
     name: Prepare
     runs-on: ${{ inputs.linux-runner }}
-    timeout-minutes: 60
-    permissions:
-      contents: read
-      # `gh run list` in require-green-run.sh reads other workflows' runs.
-      #
-      # Static on purpose, and unconditional: job-level `permissions:` cannot be
-      # conditional, so this request is made on *every* call, whether or not
-      # require-green-workflow is set. A called workflow's job can only use what
-      # the caller granted, so EVERY caller of this workflow must grant
-      # `actions: read` on the calling job - a caller granting only
-      # `contents: read` is rejected at validation ("is requesting 'actions:
-      # read', but is only allowed 'actions: none'") before any step runs.
-      # docs/consumer-guide.md says so next to this workflow's inputs.
-      actions: read
+    # Long enough for the green gate to dispatch the gated workflow and wait
+    # for it (require-green-dispatch): two gate budgets plus the rest.
+    timeout-minutes: 120
+    # No job-level `permissions:` on purpose - this job inherits the caller's.
+    # The green gate needs `actions: read` (`gh run list`), and `actions:
+    # write` when `require-green-dispatch` is on (`gh workflow run`). A static
+    # block cannot express "read, or write when asked", and a called job may
+    # never request more than the caller granted, so a static `write` would
+    # reject every caller that grants `read`. Inheriting lets each caller
+    # grant exactly what it uses; a caller that grants too little fails in the
+    # gate step with a message naming the missing scope. docs/consumer-guide.md
+    # says so next to this workflow's inputs.
     env:
       WORKING_DIRECTORY: ${{ inputs.working-directory }}
       WORKFLOWS_STAGE: ${{ inputs.stage }}
@@ -149,6 +151,11 @@ jobs:
           REQUIRE_GREEN_WORKFLOW: ${{ inputs.require-green-workflow }}
           # The resolved target sha, not github.sha - see target-sha.sh.
           REQUIRE_GREEN_SHA: ${{ steps.sha.outputs.sha }}
+          # The ref to dispatch the gated workflow at when its run is missing or
+          # red: the release tag, so the dispatched run builds exactly the gated
+          # commit. Empty keeps the gate fail-only. The non-empty value sits in
+          # the `&&` slot on purpose (GitHub's `&&` yields its first falsy operand).
+          REQUIRE_GREEN_DISPATCH_REF: ${{ inputs.require-green-dispatch && inputs.release-tag || '' }}
         run: bash ".workflows/scripts/release/require-green-run.sh" "$REQUIRE_GREEN_WORKFLOW" "$REQUIRE_GREEN_SHA"
       - name: Setup
         uses: ./.workflows/.github/actions/setup

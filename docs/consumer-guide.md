@@ -684,6 +684,7 @@ writes `build-info.json` and the store notes, and uploads them as the
 | `release-tag` | `''` | Existing release tag whose **body** becomes the store notes, fetched with `gh release view`. It also becomes the checked-out ref and the gated/stamped commit — see [Preparing from a release tag](#preparing-from-a-release-tag) |
 | `build-env` | `{}` | Non-secret build environment — see [`build-env`](#build-env) |
 | `require-green-workflow` | `''` | Workflow file name (e.g. `release-internal.yml`) that must have concluded `success` for the **resolved target sha** (the `release-tag` commit when `release-tag` is set, else `github.sha`) before preparing. Empty disables the gate. The gate step runs **before** `Setup` (so a red upstream fails before anything is installed), which means it uses the `gh` and `yq` from the runner image — true of GitHub-hosted `ubuntu-latest`, not necessarily of a self-hosted `linux-runner` |
+| `require-green-dispatch` | `false` | With `require-green-workflow`: when the gated workflow has **no** run for the target sha, or its newest run was **cancelled** or **failed**, dispatch it once at `release-tag` and wait for that run instead of failing. Self-healing for a release whose internal build was lost (concurrency-group eviction, a flaky runner): the beta no longer waits for a human to dispatch by hand. A dispatched run that also fails is fatal; `skipped` is never dispatched. Needs `release-tag` and **`actions: write`** on the calling job
 | `release-meta-artifact` | `release-meta` | Artifact name for `build-info.json`, `store-notes.json`, `notes-store.txt`, `notes.md` |
 
 Outputs: `version`, `build-number`, `fp-ios`, `fp-android`, `sha` (the commit
@@ -703,12 +704,14 @@ base URL are non-secret and belong in `build-env`).
 >       actions: read
 > ```
 >
-> The `prepare` job declares `actions: read` (for `gh run list` in the
-> `require-green-workflow` gate) and job-level `permissions:` **cannot be
-> conditional** — the request is made on every call, whether or not
-> `require-green-workflow` is set. A caller that grants only `contents: read`
-> fails validation with *"is requesting 'actions: read', but is only allowed
-> 'actions: none'"* before a single step runs.
+> The `prepare` job declares **no** job-level `permissions:` and inherits the
+> caller's. Every caller of `expo-prepare.yml` must grant `actions: read` (for
+> `gh run list` in the `require-green-workflow` gate), and `actions: write`
+> when it sets `require-green-dispatch` (for `gh workflow run`). A static block
+> cannot say "read, or write when asked", and a called job may never request
+> more than the caller granted, so inheriting is what lets each caller grant
+> exactly what it uses. A caller that grants too little fails in the gate step
+> with a message naming the missing scope.
 
 ### `expo-build-ios.yml`
 
