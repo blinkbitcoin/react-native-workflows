@@ -149,8 +149,8 @@ below>` — `Checks / Dependencies`, `E2E / Build Android`.
 | `expo-prepare.yml`       | `Prepare`            | Version, build number, native fingerprint, `build-info.json` and store notes, as one `release-meta` artifact |
 | `expo-build-ios.yml`     | `Build`              | Prebuild, pods, `fastlane ios build` then `verify`; uploads the IPA and dSYMs                                |
 | `expo-build-android.yml` | `Build`              | Prebuild, `fastlane android build` then `verify`; uploads the AAB, APK and mapping                           |
-| `fastlane-lane.yml`      | named for its inputs | One lane: upload, promote, staged rollout or halt. The job is named for the lane it runs                     |
-| `github-release.yml`     | `Release`            | Creates or moves a release with a fixed asset set and `SHA256SUMS`                                           |
+| `fastlane-lane.yml`      | `Store`              | One store operation: upload, promote, staged rollout or halt (a fastlane *lane*)                               |
+| `github-release.yml`     | `Publish`            | Creates or moves a release with a fixed asset set and `SHA256SUMS`                                           |
 | `expo-ota-publish.yml`   | `Publish`            | Publishes an OTA update only when the native fingerprint is unchanged                                        |
 
 `expo-prepare.yml` can also block until a named CI workflow is green for the
