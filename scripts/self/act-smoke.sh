@@ -8,6 +8,7 @@
 # Env:   WORKFLOWS_SMOKE_REPOSITORY / WORKFLOWS_SMOKE_REF - the consumer
 #        (default: the template at main)
 #        WORKFLOWS_ACT_IMAGE - runner image for ubuntu-latest
+#        WORKFLOWS_ACT_CACHE - where the substitute artifact actions are kept
 #        WORKFLOWS_ACT_ARGS  - extra arguments appended to act (e.g. -v)
 set -euo pipefail
 source "$(dirname "$0")/../lib/common.sh"
@@ -49,6 +50,25 @@ image="${WORKFLOWS_ACT_IMAGE:-catthehacker/ubuntu:act-latest}"
 artifacts="$(mktemp -d "${TMPDIR:-/tmp}/act-smoke-artifacts.XXXXXX")"
 trap 'rm -rf "$artifacts"' EXIT
 
+# act's artifact server speaks the v4 artifact protocol and rejects the
+# `mime_type` field upload-artifact@v7 sends (nektos/act #6022, #6114; no
+# release carries a fix). The workflows keep v7/v8 - that is what runs on
+# GitHub - and act is told to run the last v4 of each in their place, from a
+# pinned checkout made on first use.
+cache="${WORKFLOWS_ACT_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/act-smoke}"
+substitute() {
+  local action="$1" tag="$2" dir
+  dir="$cache/$action-$tag"
+  if [ ! -d "$dir" ]; then
+    log "act smoke: fetching actions/$action@$tag into $dir (once)"
+    git -c advice.detachedHead=false clone -q --depth 1 --branch "$tag" \
+      "https://github.com/actions/$action" "$dir"
+  fi
+  printf '%s\n' "$dir"
+}
+upload_v4="$(substitute upload-artifact v4.6.2)"
+download_v4="$(substitute download-artifact v4.3.0)"
+
 # The token is only read by the two checkouts (both public repositories) and,
 # with `reserve-tag: false`, never writes anything.
 token="$(gh auth token)"
@@ -60,6 +80,8 @@ act workflow_dispatch \
   -P "ubuntu-latest=$image" \
   "${arch_args[@]}" \
   --artifact-server-path "$artifacts" \
+  --local-repository "actions/upload-artifact@v7=$upload_v4" \
+  --local-repository "actions/download-artifact@v8=$download_v4" \
   -s GITHUB_TOKEN="$token" \
   --input "repository=${WORKFLOWS_SMOKE_REPOSITORY:-blinkbitcoin/react-native-mobile-template}" \
   --input "ref=${WORKFLOWS_SMOKE_REF:-main}" \

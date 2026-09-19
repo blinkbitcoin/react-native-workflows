@@ -10,7 +10,9 @@ name: Smoke (local, act)
 # What act cannot show: the token a called workflow really gets (act hands
 # every job a full-scope token, so a `permissions` mistake looks fine here),
 # tag and ref rules, and anything on a macOS runner. scripts/self/act-smoke.sh
-# is the entry point and says the same.
+# is the entry point and says the same; it also runs upload-artifact@v7 and
+# download-artifact@v8 as their last v4, which is what act's artifact server
+# understands - the workflows themselves keep the versions GitHub runs.
 #
 # `./`, not `@v0`: act resolves a local path to the checkout it runs in, so the
 # workflow under test is this tree's. The `.workflows` checkout inside

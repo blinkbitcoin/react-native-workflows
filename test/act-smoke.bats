@@ -60,6 +60,9 @@ setup() {
   printf '#!/usr/bin/env bash\necho fake-token\n' > "$bin/gh"
   chmod +x "$bin/act" "$bin/docker" "$bin/gh"
   export PATH="$bin:$PATH"
+  # The substitute artifact actions are "already fetched", so no clone runs.
+  export WORKFLOWS_ACT_CACHE="$BATS_TEST_TMPDIR/cache"
+  mkdir -p "$WORKFLOWS_ACT_CACHE/upload-artifact-v4.6.2" "$WORKFLOWS_ACT_CACHE/download-artifact-v4.3.0"
 }
 
 @test "refuses a branch that is not on origin, and says to push" {
@@ -100,6 +103,10 @@ setup() {
   contains "$args" "--artifact-server-path" || fail "args: $args"
   contains "$args" "GITHUB_TOKEN=fake-token" || fail "args: $args"
   contains "$args" "android=false" || fail "args: $args"
+  # act's artifact server cannot take upload-artifact@v7 / download-artifact@v8
+  # (nektos/act #6022): both are run as their last v4 from the cache.
+  contains "$args" "actions/upload-artifact@v7=$WORKFLOWS_ACT_CACHE/upload-artifact-v4.6.2" || fail "args: $args"
+  contains "$args" "actions/download-artifact@v8=$WORKFLOWS_ACT_CACHE/download-artifact-v4.3.0" || fail "args: $args"
   contains "$args" "repository=blinkbitcoin/react-native-mobile-template" || fail "args: $args"
 }
 
