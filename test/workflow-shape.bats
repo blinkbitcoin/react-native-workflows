@@ -312,19 +312,30 @@ $(names "$real")"
   [ "$n" -eq 1 ] || fail "expo-build-android does not run artifact-hashes.sh exactly once"
 }
 
-# $WORKFLOWS_DIR is published by the setup composite action. A job that never runs setup
-# expands `$WORKFLOWS_DIR/scripts/…` to `/scripts/…` and exits 127 on every call - a
-# workflow that cannot work at all, and one no unit test would ever reach.
-@test "no run: step uses \$WORKFLOWS_DIR in a job that never runs the setup action" {
+# $WORKFLOWS_DIR is published by the setup composite action, so it exists only
+# in the steps after Setup. A step before it - or in a job that never runs
+# setup - expands `$WORKFLOWS_DIR/scripts/…` to `/scripts/…` and exits 127 on
+# every call, a workflow that cannot work at all, and one no unit test would
+# ever reach. v0.6.0 shipped exactly that: four steps moved ahead of Setup kept
+# the `$WORKFLOWS_DIR` form and broke every consumer's internal release on its
+# next push. Steps before Setup use the literal `.workflows/` prefix.
+@test "no run: step uses \$WORKFLOWS_DIR before the setup action has published it" {
   for w in "${WORKFLOWS[@]}"; do
     while read -r j; do
       [ -n "$j" ] || continue
-      # This family's own composite action specifically - not actions/setup-node
-      # or gradle/actions/setup-gradle, neither of which publishes $WORKFLOWS_DIR.
-      setup=$(yq -r "[.jobs.\"$j\".steps[]? | select((.uses // \"\") | test(\"workflows/.github/actions/setup\"))] | length" "$w")
-      [ "$setup" -eq 0 ] || continue
-      bad=$(yq -r "[.jobs.\"$j\".steps[]? | select((.run // \"\") | test(\"WORKFLOWS_DIR/\")) | .name] | join(\", \")" "$w")
-      [ -z "$bad" ] || fail "$(basename "$w") job '$j' never runs the setup action but uses \$WORKFLOWS_DIR in: $bad"
+      seen_setup=0
+      # One line per step, in order: is-setup|uses-dir|name. This family's own
+      # composite action specifically - not actions/setup-node or
+      # gradle/actions/setup-gradle, neither of which publishes $WORKFLOWS_DIR.
+      while IFS='|' read -r is_setup uses_dir name; do
+        [ -n "$is_setup" ] || continue
+        # `if`, not `[ ] && …`: a false test as the loop body's last command
+        # would make the loop itself fail under bats.
+        if [ "$is_setup" = "true" ]; then seen_setup=1; fi
+        if [ "$uses_dir" = "true" ] && [ "$seen_setup" -eq 0 ]; then
+          fail "$(basename "$w") job '$j' uses \$WORKFLOWS_DIR before the setup action publishes it, in: $name"
+        fi
+      done <<<"$(yq -r ".jobs.\"$j\".steps[]? | [((.uses // \"\") | test(\"workflows/.github/actions/setup\")), ((.run // \"\") | test(\"WORKFLOWS_DIR/\")), (.name // .uses // \"\")] | join(\"|\")" "$w")"
     done <<<"$(yq -r '.jobs | keys | .[]' "$w")"
   done
 }

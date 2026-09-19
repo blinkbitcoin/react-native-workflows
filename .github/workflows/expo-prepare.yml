@@ -149,18 +149,21 @@ jobs:
         run: bash ".workflows/scripts/release/target-sha.sh" "$RELEASE_TAG"
       # build-env and the version come before the green gate and before Setup:
       # both need only git and gh, and the build tag below must be reserved
-      # seconds after the push, not after a 35-minute wait for CI.
+      # seconds after the push, not after a 35-minute wait for CI. Literal
+      # `.workflows/` paths, like every step above: $WORKFLOWS_DIR is published
+      # by Setup and is empty here (v0.6.0 used it and exited 127 on every
+      # consumer's next push).
       - name: Publish build-env
         env:
           WORKFLOWS_BUILD_ENV: ${{ inputs.build-env }}
-        run: bash "$WORKFLOWS_DIR/scripts/release/build-env.sh"
+        run: bash ".workflows/scripts/release/build-env.sh"
       - name: Resolve version
         id: version
         env:
           BUILD_NUMBER_OFFSET: ${{ inputs.build-number-offset }}
           RELEASE_PR_TITLE: ${{ github.event.pull_request.title }}
           GH_TOKEN: ${{ github.token }}
-        run: bash "$WORKFLOWS_DIR/scripts/release/resolve-version.sh"
+        run: bash ".workflows/scripts/release/resolve-version.sh"
       # See reserve-tag.sh for the GitHub rule this sidesteps. Before the gate
       # on purpose: the gate can wait most of an hour, and every minute is a
       # chance for a later merge to touch a workflow file.
@@ -172,7 +175,7 @@ jobs:
           GH_REPO: ${{ inputs.repository || github.repository }}
           TAG: v${{ steps.version.outputs.version }}-build.${{ steps.version.outputs.build-number }}
           SHA: ${{ steps.sha.outputs.sha }}
-        run: bash "$WORKFLOWS_DIR/scripts/release/reserve-tag.sh" "$TAG" "$SHA"
+        run: bash ".workflows/scripts/release/reserve-tag.sh" "$TAG" "$SHA"
       - name: Require a green upstream run
         if: ${{ inputs.require-green-workflow != '' }}
         env:
@@ -196,7 +199,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ inputs.repository || github.repository }}
           TAG: v${{ steps.version.outputs.version }}-build.${{ steps.version.outputs.build-number }}
-        run: bash "$WORKFLOWS_DIR/scripts/release/unreserve-tag.sh" "$TAG"
+        run: bash ".workflows/scripts/release/unreserve-tag.sh" "$TAG"
       - name: Setup
         uses: ./.workflows/.github/actions/setup
         with:
