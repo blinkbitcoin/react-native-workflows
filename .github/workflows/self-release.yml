@@ -13,6 +13,9 @@ jobs:
     name: Release PR
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    env:
+      # Job-level on purpose: a step's `if` cannot read that step's own env.
+      HAVE_RELEASE_TAGGER_APP: ${{ secrets.RELEASE_TAGGER_APP_ID != '' && secrets.RELEASE_TAGGER_APP_PRIVATE_KEY != '' }}
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
@@ -21,13 +24,33 @@ jobs:
       # this one is the npm package, which releases on its own cadence.
       dev_config_released: ${{ steps.release.outputs['packages/dev-config--release_created'] }}
     steps:
+      # A release PR opened with GITHUB_TOKEN gets a pull_request CI run that
+      # GitHub creates but never gives a job, and marks failed the moment the
+      # PR merges - a red run on every release since 0.3.1, executing nothing.
+      # Nothing gates on it (the release branch is exempt from the approval
+      # ruleset, no status check is required, and main's push run is the one
+      # that counts), but it is noise on every release. A PR opened by a
+      # GitHub App triggers CI like any other. The App is the one
+      # github-release.yml already uses on the consumer side; with its two
+      # secrets absent this step is skipped and release-please falls back to
+      # GITHUB_TOKEN, exactly as before. Secrets cannot be read in `if`, so the
+      # presence check goes through the job's env.
+      - name: Mint an App token, so the release PR triggers CI
+        id: app-token
+        if: ${{ env.HAVE_RELEASE_TAGGER_APP == 'true' }}
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.RELEASE_TAGGER_APP_ID }}
+          private-key: ${{ secrets.RELEASE_TAGGER_APP_PRIVATE_KEY }}
       - name: Release please
         id: release
         uses: googleapis/release-please-action@v5
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
-          token: ${{ secrets.RELEASE_PLEASE_TOKEN || github.token }}
+          # App token when the App is configured, else the explicit PAT, else
+          # GITHUB_TOKEN. GitHub's `||` yields the first non-empty operand.
+          token: ${{ steps.app-token.outputs.token || secrets.RELEASE_PLEASE_TOKEN || github.token }}
 
       # The publish job keys off a path-namespaced output, and a typo there
       # would make it skip silently rather than fail. Print what release-please
