@@ -217,8 +217,19 @@ if [ -n "${BODY_NOTE:-}" ]; then
     } >> "$GITHUB_STEP_SUMMARY"
   fi
 fi
+# `--target` creates the tag; a tag that already exists (reserved in Prepare,
+# see reserve-tag.sh) is used as it is, which creates no ref and so cannot be
+# refused by GitHub's rule about tags on commits whose workflow files differ
+# from the default branch tip.
+tag_exists() { gh api "repos/${GH_REPO:?GH_REPO not set}/git/ref/tags/$tag" >/dev/null 2>&1; }
 target_args=()
-[ -z "${TARGET_SHA:-}" ] || target_args=(--target "$TARGET_SHA")
+if [ -n "${TARGET_SHA:-}" ]; then
+  if tag_exists; then
+    log "tag $tag already exists - creating the release on it, no --target"
+  else
+    target_args=(--target "$TARGET_SHA")
+  fi
+fi
 
 case "$mode" in
   create-prerelease)

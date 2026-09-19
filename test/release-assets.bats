@@ -19,6 +19,9 @@ setup() {
   # Touched by a test to make every `gh release view` fail the way a 403, a 429
   # or a dropped connection does: non-zero, but not a 404.
   export WORKFLOWS_TEST_LOOKUP_FAILS="$BATS_TEST_TMPDIR/lookup-fails"
+  # Touched by a test to say the tag was reserved in Prepare.
+  export WORKFLOWS_TEST_TAG_EXISTS="$BATS_TEST_TMPDIR/tag-exists"
+  export GH_REPO=acme/app
   mkdir -p "$WORKFLOWS_TEST_SOURCE_ASSETS"
   : > "$WORKFLOWS_TEST_LOG"
   printf 'Initial release notes.\n' > "$WORKFLOWS_TEST_BODY"
@@ -46,6 +49,13 @@ case "$1 $2" in
     exit 0
     ;;
   "release create") : > "$WORKFLOWS_TEST_EXISTS"; exit 0 ;;
+  "api "*)
+    # `gh api repos/<r>/git/ref/tags/<tag>`: the tag exists when the marker does.
+    case "$*" in
+      *"/git/ref/tags/"*) [ -f "$WORKFLOWS_TEST_TAG_EXISTS" ] && exit 0; echo "Not Found" >&2; exit 1 ;;
+    esac
+    exit 0
+    ;;
   "release download")
     # Serves the source pre-release's assets out of $WORKFLOWS_TEST_SOURCE_ASSETS.
     [ -f "$WORKFLOWS_TEST_SOURCE_EXISTS" ] || exit 1
@@ -107,6 +117,16 @@ release() { run bash "$REPO_ROOT/scripts/release/release-assets.sh" "$@"; }
   contains "$upload" "SHA256SUMS" || fail "SHA256SUMS was not uploaded: $upload"
   not_contains "$upload" "unrelated.txt" || fail "a file outside the fixed set was uploaded: $upload"
   contains "$upload" "--clobber" || fail "upload is not idempotent (no --clobber): $upload"
+}
+
+@test "create-prerelease on a tag reserved in Prepare passes no --target" {
+  assets
+  : > "$WORKFLOWS_TEST_TAG_EXISTS"
+  TAG=v1.2.3 TITLE='Release 1.2.3' TARGET_SHA=deadbeef release create-prerelease
+  [ "$status" -eq 0 ] || fail "exited $status: $output"
+  grep -q -- "release create v1.2.3 --prerelease" "$WORKFLOWS_TEST_LOG" || fail "no create: $(cat "$WORKFLOWS_TEST_LOG")"
+  ! grep -q -- "--target" "$WORKFLOWS_TEST_LOG" || fail "--target passed for an existing tag, which would try to create it again: $(cat "$WORKFLOWS_TEST_LOG")"
+  contains "$output" "already exists - creating the release on it" || fail "did not say why: $output"
 }
 
 @test "SHA256SUMS lists basenames and real digests" {
