@@ -371,21 +371,24 @@ $(names "$real")"
   done
 }
 
-# Job-level `permissions:` cannot be conditional, so expo-prepare asks for
-# `actions: read` on every call and every caller has to grant it. Both scopes
-# are asserted here because naming `permissions:` at all resets the unnamed
-# ones to none: dropping `contents: read` would break the checkout instead.
-@test "expo-prepare's job permissions are static contents+actions read" {
+# expo-prepare's green gate needs `actions: read`, and `actions: write` when
+# `require-green-dispatch` is on. A static job-level block cannot express
+# "read, or write when asked", and a called job may never request more than
+# the caller granted - so the job declares no permissions and inherits the
+# caller's. A block reappearing here would either reject every caller that
+# grants `read` (if it said `write`) or make the self-heal impossible (if it
+# said `read`).
+@test "expo-prepare's prepare job inherits the caller's permissions" {
   f="$REPO_ROOT/.github/workflows/expo-prepare.yml"
-  [ "$(yq -r '.jobs.prepare.permissions.contents' "$f")" = "read" ] \
-    || fail "expo-prepare's prepare job does not declare contents: read"
-  [ "$(yq -r '.jobs.prepare.permissions.actions' "$f")" = "read" ] \
-    || fail "expo-prepare's prepare job does not declare actions: read"
-  [ "$(yq -r '.jobs.prepare.permissions | keys | length' "$f")" -eq 2 ] \
-    || fail "expo-prepare's prepare job asks for more than contents+actions: $(yq -r '.jobs.prepare.permissions' "$f")"
-  # The consumer guide is where a caller learns it has to grant this.
+  [ "$(yq -r '.jobs.prepare.permissions // "inherit"' "$f")" = "inherit" ] \
+    || fail "expo-prepare's prepare job declares permissions, so it cannot take actions: write from a caller that grants it: $(yq -r '.jobs.prepare.permissions' "$f")"
+  grep -q 'REQUIRE_GREEN_DISPATCH_REF' "$f" \
+    || fail "expo-prepare does not wire require-green-dispatch into the gate"
+  # The consumer guide is where a caller learns what to grant.
   grep -q 'Every caller of `expo-prepare.yml` must grant `actions: read`' "$REPO_ROOT/docs/consumer-guide.md" \
     || fail "the consumer guide does not tell callers to grant actions: read"
+  grep -q 'actions: write' "$REPO_ROOT/docs/consumer-guide.md" \
+    || fail "the consumer guide does not tell callers dispatch needs actions: write"
 }
 
 @test "no workflow sets a top-level concurrency" {
