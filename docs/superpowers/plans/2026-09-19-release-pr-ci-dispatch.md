@@ -20,6 +20,14 @@
 - `make check` must pass before every push (shellcheck, actionlint, bats, check-versions, tool-versions, typos).
 - Run every make target from the repo root; `mise exec --` is applied by the Makefile.
 
+**Deviation recorded during execution:** the script reads release-please's
+`prs` output (env `PRS_JSON`, a JSON array) and dispatches once per PR,
+because the action's singular `pr` output is only `prs[0]`
+(release-please-action v5 `src/index.ts`, `outputPRs()`) and this repo's
+`release-please-config.json` sets `separate-pull-requests: true` over two
+packages; Tasks 2 and 3 below show the original single-PR form, and the code
+on the branch is the plural form.
+
 ---
 
 ### Task 1: `self-ci.yml` accepts `workflow_dispatch`
@@ -361,7 +369,7 @@ gh pr create --title "fix(self): start self-ci on the release PR by name, so the
 The release PR is opened with GITHUB_TOKEN, so its pull_request CI run never gets a job and is marked failed at merge (every release since 0.3.1). #39 makes that run real once the RELEASE_TAGGER App is configured; until then, and as the template already does, this starts self-ci.yml on the PR's branch with workflow_dispatch, the one event GITHUB_TOKEN still fires. The red run stays beside the green one until the App exists.
 
 - self-ci.yml gains a workflow_dispatch trigger (pr-title is gated on pull_request and skips).
-- scripts/self/dispatch-release-pr-ci.sh reads headBranchName from release-please's pr output and runs `gh workflow run self-ci.yml --ref <branch>`; empty or malformed input is an error, not a skip. bats-covered against a fake gh.
+- scripts/self/dispatch-release-pr-ci.sh reads release-please's `prs` output (the array; the singular `pr` is only the first PR, and with separate-pull-requests the dev-config PR would otherwise never get its CI) and runs `gh workflow run self-ci.yml --ref <branch>` once per PR; empty, malformed, non-array, empty-array or missing-headBranchName input is an error before any dispatch, never a skip. bats-covered against a fake gh.
 - self-release.yml grants actions: write at the top (its job has no block by design) and runs the script when prs_created == 'true'.
 
 Verification: the release PR this change produces should show a green `CI` run with event `workflow_dispatch` on its branch, next to the usual red pull_request one. Recorded below once it exists.
@@ -390,13 +398,15 @@ gh api repos/blinkbitcoin/shared-workflows/actions/runs/<workflow_dispatch run i
 
 Expected: `Check: success`, `Parity: success` (`PR title` absent — it is skipped on dispatch, and skipped jobs still appear; either `skipped` or absent is fine).
 
+When both packages release in one push there are two release branches; check that **each** got exactly one `workflow_dispatch` run. A second push that updates the same release PR dispatches again and, with `cancel-in-progress` on non-main refs, cancels the previous dispatched run for that branch: a `cancelled` run in the list is expected there, not a regression.
+
 - [ ] **Step 3: Record the evidence on the PR**
 
 ```bash
 gh pr comment <PR number> --body "Verified on the release PR after merge: workflow_dispatch run <id> on the release branch, Check and Parity green; the pull_request run <id> is the known job-less one and stays until the RELEASE_TAGGER App is set up (#39)."
 ```
 
-If the dispatched run is missing: open the `Release` run for the merge on main, job `Release PR`, step `Run CI on the release PR`. A `skipped` step means `prs_created` was not `'true'` (no PR was created or updated by that push; wait for the next push that changes the release PR). A failed step prints the script's `::error::` line; the two likely causes are a missing `actions: write` (Task 3 Step 3) and an unexpected `pr` output shape (paste `PR_JSON` from the step log into `test/dispatch-release-pr-ci.bats` as a new case and fix the `jq` path).
+If the dispatched run is missing: open the `Release` run for the merge on main, job `Release PR`, step `Run CI on the release PR`. A `skipped` step means `prs_created` was not `'true'` (no PR was created or updated by that push; wait for the next push that changes the release PR). A failed step prints the script's `::error::` line; the two likely causes are a missing `actions: write` (Task 3 Step 3) and an unexpected `prs` output shape (paste `PRS_JSON` from the step log into `test/dispatch-release-pr-ci.bats` as a new case and fix the `jq` path).
 
 ---
 

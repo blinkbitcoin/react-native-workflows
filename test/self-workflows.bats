@@ -44,3 +44,12 @@ RELEASE="$REPO_ROOT/.github/workflows/self-release.yml"
   [ "$(yq -r '.env.GH_REPO' <<<"$step")" = '${{ github.repository }}' ] \
     || fail "the dispatch step does not set GH_REPO"
 }
+
+# The script dispatches self-ci.yml by name. A rename of the workflow file
+# would leave it dispatching a name that no longer exists, failing only on a
+# real release - so the name is held to the file here.
+@test "the dispatch script names a workflow file that exists" {
+  grep -q 'gh workflow run self-ci.yml' "$REPO_ROOT/scripts/self/dispatch-release-pr-ci.sh" \
+    || fail "dispatch-release-pr-ci.sh no longer dispatches self-ci.yml by that name"
+  [ -f "$CI" ] || fail "self-ci.yml is gone; the dispatch script still names it"
+}

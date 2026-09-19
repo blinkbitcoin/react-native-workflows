@@ -81,6 +81,34 @@ setup() {
   [ ! -f "$BATS_TEST_TMPDIR/gh.args" ] || fail "gh was called anyway (validation must happen before any dispatch)"
 }
 
+@test "a failed dispatch on one PR does not stop the remaining PRs from being dispatched" {
+  # A fake gh that fails when --ref names the first branch, and otherwise
+  # behaves like the standard fake (records its args and exits 0).
+  cat > "$bin/gh" <<EOF
+#!/usr/bin/env bash
+printf '%s\n' "\$@" >> "$BATS_TEST_TMPDIR/gh.args"
+prev=""
+for a in "\$@"; do
+  if [ "\$prev" = "--ref" ] && [ "\$a" = "release-please--branches--main--components--shared-workflows" ]; then
+    exit 1
+  fi
+  prev="\$a"
+done
+exit 0
+EOF
+  chmod +x "$bin/gh"
+
+  PRS_JSON='[{"headBranchName":"release-please--branches--main--components--shared-workflows","number":40},{"headBranchName":"release-please--branches--main--components--dev-config","number":41}]' \
+    run bash "$SCRIPT"
+  [ "$status" -ne 0 ] || fail "exited 0 despite a failed dispatch"
+  contains "$output" "::error::" || fail "output: $output"
+  contains "$output" "could not dispatch self-ci.yml on release-please--branches--main--components--shared-workflows" \
+    || fail "output: $output"
+  args="$(tr '\n' ' ' < "$BATS_TEST_TMPDIR/gh.args")"
+  contains "$args" "--ref release-please--branches--main--components--shared-workflows" || fail "args: $args"
+  contains "$args" "--ref release-please--branches--main--components--dev-config" || fail "args: $args"
+}
+
 @test "fails without GH_REPO" {
   unset GH_REPO
   PRS_JSON='[{"headBranchName":"x"}]' run bash "$SCRIPT"

@@ -34,7 +34,10 @@ jq -e 'type == "array"' >/dev/null 2>&1 <<<"$PRS_JSON" \
 jq -e 'all(.[]; (.headBranchName // "") != "")' >/dev/null 2>&1 <<<"$PRS_JSON" \
   || die "an element of PRS_JSON has no headBranchName: $(jq -c '.[] | select((.headBranchName // "") == "")' <<<"$PRS_JSON")"
 
+rc=0
 while IFS= read -r branch; do
   log "dispatching self-ci.yml on $branch"
-  gh workflow run self-ci.yml --repo "$GH_REPO" --ref "$branch"
+  gh workflow run self-ci.yml --repo "$GH_REPO" --ref "$branch" \
+    || { rc=1; log "could not dispatch self-ci.yml on $branch (does the job grant actions: write?)"; }
 done < <(jq -r '.[].headBranchName // empty' <<<"$PRS_JSON")
+[ "$rc" -eq 0 ] || die "one or more release PRs got no CI dispatch"
