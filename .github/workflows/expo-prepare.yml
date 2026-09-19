@@ -50,6 +50,10 @@ on:
         description: Workflow file name (e.g. release-internal.yml) that must have concluded successfully for this sha before preparing; empty disables the gate
         type: string
         default: ''
+      reserve-tag:
+        description: 'Create the `v<version>-build.<n>` tag at the target sha in Prepare, before the green gate, while the commit is still the default branch tip; the release is later created on the existing tag. GitHub refuses GITHUB_TOKEN a new tag on a commit whose workflow files differ from the tip. Needs `contents: write` on the calling job'
+        type: boolean
+        default: false
       require-green-dispatch:
         description: 'When the gated workflow has no run for the target sha, or its run was cancelled or failed, dispatch it once at `release-tag` and wait for that run instead of failing. Needs `release-tag` and `actions: write` on the calling job'
         type: boolean
@@ -143,6 +147,32 @@ jobs:
         env:
           RELEASE_TAG: ${{ inputs.release-tag }}
         run: bash ".workflows/scripts/release/target-sha.sh" "$RELEASE_TAG"
+      # build-env and the version come before the green gate and before Setup:
+      # both need only git and gh, and the build tag below must be reserved
+      # seconds after the push, not after a 35-minute wait for CI.
+      - name: Publish build-env
+        env:
+          WORKFLOWS_BUILD_ENV: ${{ inputs.build-env }}
+        run: bash "$WORKFLOWS_DIR/scripts/release/build-env.sh"
+      - name: Resolve version
+        id: version
+        env:
+          BUILD_NUMBER_OFFSET: ${{ inputs.build-number-offset }}
+          RELEASE_PR_TITLE: ${{ github.event.pull_request.title }}
+          GH_TOKEN: ${{ github.token }}
+        run: bash "$WORKFLOWS_DIR/scripts/release/resolve-version.sh"
+      # See reserve-tag.sh for the GitHub rule this sidesteps. Before the gate
+      # on purpose: the gate can wait most of an hour, and every minute is a
+      # chance for a later merge to touch a workflow file.
+      - name: Reserve build tag
+        id: reserve
+        if: ${{ inputs.reserve-tag }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ inputs.repository || github.repository }}
+          TAG: v${{ steps.version.outputs.version }}-build.${{ steps.version.outputs.build-number }}
+          SHA: ${{ steps.sha.outputs.sha }}
+        run: bash "$WORKFLOWS_DIR/scripts/release/reserve-tag.sh" "$TAG" "$SHA"
       - name: Require a green upstream run
         if: ${{ inputs.require-green-workflow != '' }}
         env:
@@ -157,21 +187,20 @@ jobs:
           # the `&&` slot on purpose (GitHub's `&&` yields its first falsy operand).
           REQUIRE_GREEN_DISPATCH_REF: ${{ inputs.require-green-dispatch && inputs.release-tag || '' }}
         run: bash ".workflows/scripts/release/require-green-run.sh" "$REQUIRE_GREEN_WORKFLOW" "$REQUIRE_GREEN_SHA"
+      # A tag this run reserved and cannot fill (red gate, or anything else
+      # failing below) would name a commit with no release. Only the tag this
+      # run created; a re-run that found its tag in place leaves it alone.
+      - name: Release the reserved tag
+        if: ${{ failure() && steps.reserve.outputs.reserved == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ inputs.repository || github.repository }}
+          TAG: v${{ steps.version.outputs.version }}-build.${{ steps.version.outputs.build-number }}
+        run: bash "$WORKFLOWS_DIR/scripts/release/unreserve-tag.sh" "$TAG"
       - name: Setup
         uses: ./.workflows/.github/actions/setup
         with:
           working-directory: ${{ inputs.working-directory }}
-      - name: Publish build-env
-        env:
-          WORKFLOWS_BUILD_ENV: ${{ inputs.build-env }}
-        run: bash "$WORKFLOWS_DIR/scripts/release/build-env.sh"
-      - name: Resolve version
-        id: version
-        env:
-          BUILD_NUMBER_OFFSET: ${{ inputs.build-number-offset }}
-          RELEASE_PR_TITLE: ${{ github.event.pull_request.title }}
-          GH_TOKEN: ${{ github.token }}
-        run: bash "$WORKFLOWS_DIR/scripts/release/resolve-version.sh"
       - name: Fingerprint
         id: fingerprint
         run: bash "$WORKFLOWS_DIR/scripts/release/fingerprint.sh"

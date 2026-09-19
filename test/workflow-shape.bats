@@ -378,6 +378,24 @@ $(names "$real")"
 # caller's. A block reappearing here would either reject every caller that
 # grants `read` (if it said `write`) or make the self-heal impossible (if it
 # said `read`).
+# The build tag is reserved seconds after the push, while the commit is still
+# the default branch tip, because GitHub refuses GITHUB_TOKEN a new tag on a
+# commit whose workflow files differ from the tip (scripts/release/reserve-tag.sh).
+# After a 35-minute green gate the tip has often moved. So the reservation, and
+# the version it needs, come before the gate - and before Setup, which they do
+# not need.
+@test "expo-prepare reserves the build tag before the green gate and before Setup" {
+  command -v yq >/dev/null || skip "yq not installed"
+  f="$REPO_ROOT/.github/workflows/expo-prepare.yml"
+  names="$(yq -r '.jobs.prepare.steps[].name' "$f")"
+  order() { printf '%s\n' "$names" | grep -n -x "$1" | cut -d: -f1; }
+  v=$(order "Resolve version"); r=$(order "Reserve build tag"); g=$(order "Require a green upstream run"); s=$(order "Setup")
+  [ -n "$v" ] && [ -n "$r" ] && [ -n "$g" ] && [ -n "$s" ] || fail "a step is missing: version=$v reserve=$r gate=$g setup=$s"
+  [ "$v" -lt "$r" ] || fail "the tag is reserved before the version is known"
+  [ "$r" -lt "$g" ] || fail "the tag is reserved after the green gate: order $r vs $g"
+  [ "$g" -lt "$s" ] || fail "the green gate runs after Setup"
+}
+
 @test "expo-prepare's prepare job inherits the caller's permissions" {
   f="$REPO_ROOT/.github/workflows/expo-prepare.yml"
   [ "$(yq -r '.jobs.prepare.permissions // "inherit"' "$f")" = "inherit" ] \
