@@ -39,8 +39,8 @@ RELEASE="$REPO_ROOT/.github/workflows/self-release.yml"
   cond="$(yq -r '.if' <<<"$step")"
   [[ "$cond" == *"steps.release.outputs.prs_created == 'true'"* ]] \
     || fail "the dispatch step is not gated on prs_created == 'true': $cond"
-  [ "$(yq -r '.env.PR_JSON' <<<"$step")" = '${{ steps.release.outputs.pr }}' ] \
-    || fail "the dispatch step does not pass release-please's pr output as PR_JSON"
+  [ "$(yq -r '.env.PRS_JSON' <<<"$step")" = '${{ steps.release.outputs.prs }}' ] \
+    || fail "the dispatch step does not pass release-please's prs output as PRS_JSON"
   [ "$(yq -r '.env.GH_REPO' <<<"$step")" = '${{ github.repository }}' ] \
     || fail "the dispatch step does not set GH_REPO"
 }

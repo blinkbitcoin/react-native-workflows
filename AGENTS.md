@@ -114,7 +114,7 @@ Every row is a make target; nothing here is run through a package manager.
   The release PR it opens carries two CI runs: a red `pull_request` run that
   GitHub creates for a `GITHUB_TOKEN`-opened PR and never gives a job, and a
   green `workflow_dispatch` run that `scripts/self/dispatch-release-pr-ci.sh`
-  starts on the PR's branch. The green one is the signal. The red one goes
+  starts on each release PR's branch. The green one is the signal. The red one goes
   away only when the PR is opened by the RELEASE_TAGGER App (the guarded
   step in `self-release.yml`; needs the App's two secrets on this repo).
 - **Docs ship with the code.** Adding or removing a `##`-documented make target

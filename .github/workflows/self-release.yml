@@ -72,15 +72,16 @@ jobs:
       # run never gets a job (see the App step above for the full story and
       # the way to make that run real). workflow_dispatch is the one event
       # that token still fires: start self-ci.yml on the PR's branch by name,
-      # once per push that creates or updates the PR. The branch is read in
-      # the script, not with fromJSON() in `env:` - the runner validates a
-      # step's env even when its `if` is false, and fromJSON('') is an error.
+      # once per release PR the push created or updated (separate-pull-requests:
+      # one per package). The branch is read in the script, not with
+      # fromJSON() in `env:` - the runner validates a step's env even when
+      # its `if` is false, and fromJSON('') is an error.
       - name: Run CI on the release PR
         if: ${{ steps.release.outputs.prs_created == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          PR_JSON: ${{ steps.release.outputs.pr }}
+          PRS_JSON: ${{ steps.release.outputs.prs }}
         run: bash scripts/self/dispatch-release-pr-ci.sh
   major-tag:
     name: Major tag
