@@ -28,10 +28,16 @@ test-package: ## node:test for packages/dev-config
 spell: ## typos over the whole repo
 	$(MISE) typos
 check: shellcheck actionlint test test-package check-versions tool-versions spell ## Everything self-ci runs
+# Not part of `check`: needs Docker, a pushed branch and a few minutes. See
+# CONTRIBUTING.md, "Running the release pipeline locally".
+smoke-local: ## Run Prepare against the template with act (Linux only, needs Docker)
+	$(MISE) bash scripts/self/act-smoke.sh
+smoke-local-android: ## smoke-local, then the unsigned Android build
+	$(MISE) bash scripts/self/act-smoke.sh --android
 # Clone-wide, not worktree-scoped: a git worktree shares .git/hooks with the
 # main checkout, so this installs the hooks for every worktree of this clone.
 hooks: ## Install the git hooks (lefthook) - affects the whole clone, not just this worktree
 	$(MISE) lefthook install
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-16s\033[0m %s\n", $$1, $$2}'
-.PHONY: shellcheck actionlint test test-package check-versions tool-versions spell check hooks help
+.PHONY: shellcheck actionlint test test-package check-versions tool-versions spell check smoke-local smoke-local-android hooks help

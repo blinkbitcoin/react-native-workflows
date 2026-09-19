@@ -46,6 +46,8 @@ Every row is a make target; nothing here is run through a package manager.
 | `make check-versions` | Fail when a workflow default disagrees with `scripts/lib/versions.sh` |
 | `make tool-versions` | Fail when an installed tool is not the version `packages/dev-config/versions.json` pins |
 | `make spell` | typos over the whole repo |
+| `make smoke-local` | Prepare against the template with nektos/act — Docker and a pushed branch required; not part of `check` (CONTRIBUTING.md, "Running the release pipeline locally") |
+| `make smoke-local-android` | `smoke-local`, then the unsigned Android build |
 | `make help` | Show every target with its description |
 
 ## Rules of the road
@@ -105,6 +107,7 @@ Every row is a make target; nothing here is run through a package manager.
 |---|---|---|
 | Pure bash scripts | `test/*.bats` | `make test` |
 | Workflow and action shape (inputs, permissions, step names) | `test/workflow-shape.bats`, `test/actions-shape.bats` | `make test` |
+| The Linux release jobs, executed for real (Prepare, Android) | `.github/workflows/self-act-smoke.yml` via act | `make smoke-local` |
 | The consumer contract (guide ↔ fixtures ↔ real caller) | `test/consumer-contract.bats` | `make test` |
 | Hooks, the hook environment and the docs command table | `test/hooks.bats`, `test/git-env.bats`, `test/docs-contract.bats` | `make test` |
 | Parity with the consumer's own copy of a shared script | `test/resolve-version.bats`, `test/build-info.bats`, `test/workflow-shape.bats` | `make test` **with `WORKFLOWS_TEMPLATE_DIR` set** |
