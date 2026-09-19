@@ -162,6 +162,10 @@ jobs:
         env:
           E2E_SCRIPT: ${{ inputs.e2e-script }}
           PLAYWRIGHT_SKIP_EXPORT: '1'
+          # The suite tests the export the build job made, and that export has
+          # `base-url` baked into every path. Without it the preview server
+          # serves at `/` and the page shell renders with a bundle that 404s.
+          EXPO_PUBLIC_BASE_URL: ${{ inputs.base-url }}
         run: bash "$WORKFLOWS_DIR/scripts/web/playwright.sh"
       - name: Upload forensics
         if: always()

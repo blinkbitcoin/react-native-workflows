@@ -420,7 +420,7 @@ Secrets: `consumer-token` (optional).
 | `macos-runner`, `native-cache-version` | (unused) | — |
 | `playwright` | `true` | Run the Playwright suite against the export |
 | `deploy` | `false` | Publish to GitHub Pages (pass `github.event_name == 'release'` from a `release: published` caller; the calling job must grant `pages: write` + `id-token: write`) |
-| `base-url` | `''` | Baked into the export via `EXPO_PUBLIC_BASE_URL` |
+| `base-url` | `''` | Baked into the export via `EXPO_PUBLIC_BASE_URL`, and exported under the same name to the Playwright suite so the consumer's preview server can serve the export under that path |
 | `export-script` | `build:web` | Script that exports the web build |
 | `export-args` | `''` | Extra flags appended to the export script |
 | `output-dir` | `dist` | Consumer-relative export output directory |
