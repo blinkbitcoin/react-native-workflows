@@ -141,3 +141,20 @@ $sorted"
   grep -qxF 'lefthook-local.yml' "$REPO_ROOT/.gitignore" ||
     fail "the documented escape hatch lefthook-local.yml is not in .gitignore"
 }
+
+@test "make runs the pinned tools from a shell that activated nothing" {
+  command -v mise >/dev/null 2>&1 || skip "mise not installed"
+  # A hook started by an IDE or an agent gets this: mise installed, nothing
+  # activated. mise alone is linked into an empty bin dir so a tool that also
+  # happens to be installed system-wide cannot make this pass. Real targets,
+  # not a `command -v` probe: make 3.81 resolves a recipe's command differently
+  # from the shell it would hand a probe to.
+  bin="$BATS_TEST_TMPDIR/bin"
+  mkdir -p "$bin"
+  ln -s "$(command -v mise)" "$bin/mise"
+  for target in spell actionlint tool-versions; do
+    run env -i HOME="$HOME" PATH="$bin:/usr/bin:/bin" make -s -C "$REPO_ROOT" "$target"
+    [ "$status" -eq 0 ] || fail "'make $target' failed without an activated shell: $output"
+  done
+}
+
