@@ -70,7 +70,10 @@ permissions:
   contents: read
 jobs:
   build:
-    name: Build
+    # Job names say what the step is for, not which tool does it - they show
+    # in a consumer's PR as "<caller job> / <this>", read by people who have
+    # never heard of Playwright.
+    name: Export
     runs-on: ${{ inputs.linux-runner }}
     timeout-minutes: 15
     steps:
@@ -114,7 +117,7 @@ jobs:
         with:
           path: ${{ inputs.working-directory }}/${{ inputs.output-dir }}
   playwright:
-    name: Playwright
+    name: Browser tests
     needs: build
     if: ${{ inputs.playwright }}
     runs-on: ${{ inputs.linux-runner }}
@@ -166,7 +169,7 @@ jobs:
           name: playwright-report
           path: ${{ inputs.working-directory }}/playwright-report
   deploy:
-    name: Deploy
+    name: Deploy to Pages
     needs: [build, playwright]
     if: ${{ always() && inputs.deploy && needs.build.result == 'success' && (needs.playwright.result == 'success' || needs.playwright.result == 'skipped') }}
     runs-on: ${{ inputs.linux-runner }}
