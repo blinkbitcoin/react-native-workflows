@@ -92,8 +92,16 @@ on:
       sha:
         description: 'Commit the release was prepared from (the release-tag commit when release-tag is set, else github.sha)'
         value: ${{ jobs.prepare.outputs.sha }}
-permissions:
-  contents: read
+# No top-level `permissions:` on purpose - this is the one workflow in the
+# family without it. A `permissions` block anywhere in a called workflow
+# replaces the caller's grant with its own (it can only narrow, never widen),
+# and a top-level block applies to every job that has none of its own. With
+# `contents: read` here, the prepare job's token was `Contents: read,
+# Metadata: read` whatever the caller granted (react-native-mobile-template
+# run 35429556846, attempt 2): the caller's `contents: write` for reserve-tag
+# and `actions: read` for the green gate never arrived, and the tag creation
+# got 403. With no block at all the job inherits exactly what the caller
+# granted, which is the contract docs/consumer-guide.md documents.
 jobs:
   prepare:
     name: Prepare

@@ -705,8 +705,9 @@ base URL are non-secret and belong in `build-env`).
 >       actions: read
 > ```
 >
-> The `prepare` job declares **no** job-level `permissions:` and inherits the
-> caller's. Every caller of `expo-prepare.yml` must grant `actions: read` (for
+> The `prepare` job declares **no** job-level `permissions:`, and the workflow
+> has no top-level block either (a block at either level replaces the caller's
+> grant), so the job inherits the caller's. Every caller of `expo-prepare.yml` must grant `actions: read` (for
 > `gh run list` in the `require-green-workflow` gate), and `actions: write`
 > when it sets `require-green-dispatch` (for `gh workflow run`). A static block
 > cannot say "read, or write when asked", and a called job may never request
