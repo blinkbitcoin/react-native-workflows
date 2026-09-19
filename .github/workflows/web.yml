@@ -70,6 +70,10 @@ permissions:
   contents: read
 jobs:
   build:
+    # Job names say what a step is for, not which tool does it - they show in
+    # a consumer's PR as "<caller job> / <this>", read by people who have never
+    # heard of Playwright. "Deploy" is also deliberately not "Deploy to Pages":
+    # Pages is the target implemented today, not the interface.
     name: Build
     runs-on: ${{ inputs.linux-runner }}
     timeout-minutes: 15
@@ -114,7 +118,7 @@ jobs:
         with:
           path: ${{ inputs.working-directory }}/${{ inputs.output-dir }}
   playwright:
-    name: Playwright
+    name: E2E
     needs: build
     if: ${{ inputs.playwright }}
     runs-on: ${{ inputs.linux-runner }}

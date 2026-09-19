@@ -136,7 +136,7 @@ below>` — `Checks / Dependencies`, `E2E / Build Android`.
 | --------------- | -------------------------------------------------- | ------------------------------------------------------------------------ |
 | `unit.yml`      | `Tests`                                            | Jest with coverage thresholds; uploads the report                        |
 | `e2e.yml`       | `Build iOS` → `iOS`<br>`Build Android` → `Android` | A cached native build per platform, then boot, Metro, Maestro, forensics |
-| `web.yml`       | `Build`<br>`Playwright`<br>`Deploy`                | Expo web export, the browser suite against it, GitHub Pages              |
+| `web.yml`       | `Build`<br>`E2E`<br>`Deploy`                       | Expo web export, the browser suite against it, GitHub Pages              |
 | `badges.yml`    | `Publish`                                          | Unit, E2E and coverage badges pushed to `gh-pages/badges/<branch>/`      |
 | `codeql.yml`    | `Changes`<br>`Analyze`                             | CodeQL on the consumer's query suite. Informational, never required      |
 | `pr-title.yml`  | `Title`                                            | Conventional Commits lint on the PR title                                |
