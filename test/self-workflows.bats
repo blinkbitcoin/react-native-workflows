@@ -22,3 +22,25 @@ RELEASE="$REPO_ROOT/.github/workflows/self-release.yml"
   [ "$(yq -r '.on | has("pull_request")' "$CI")" = "true" ] \
     || fail "self-ci.yml lost its pull_request trigger"
 }
+
+# The dispatch needs `actions: write`; the release-please job has no
+# job-level block by design (a job-level block would replace the top-level
+# one), so the scope has to be granted at the top of the file.
+@test "self-release.yml grants actions: write at the top, for the dispatch" {
+  [ "$(yq -r '.permissions.actions' "$RELEASE")" = "write" ] \
+    || fail "self-release.yml top-level permissions.actions is '$(yq -r '.permissions.actions' "$RELEASE")', not write"
+  [ "$(yq -r '.jobs."release-please" | has("permissions")' "$RELEASE")" = "false" ] \
+    || fail "the release-please job declares its own permissions block, which replaces the top-level grant"
+}
+
+@test "self-release.yml starts self-ci on the release PR only when a PR was created" {
+  step="$(yq -r '.jobs."release-please".steps[] | select(.run != null and (.run | test("dispatch-release-pr-ci.sh")))' "$RELEASE")"
+  [ -n "$step" ] || fail "no step in self-release.yml runs scripts/self/dispatch-release-pr-ci.sh"
+  cond="$(yq -r '.if' <<<"$step")"
+  [[ "$cond" == *"steps.release.outputs.prs_created == 'true'"* ]] \
+    || fail "the dispatch step is not gated on prs_created == 'true': $cond"
+  [ "$(yq -r '.env.PR_JSON' <<<"$step")" = '${{ steps.release.outputs.pr }}' ] \
+    || fail "the dispatch step does not pass release-please's pr output as PR_JSON"
+  [ "$(yq -r '.env.GH_REPO' <<<"$step")" = '${{ github.repository }}' ] \
+    || fail "the dispatch step does not set GH_REPO"
+}
